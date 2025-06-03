@@ -8,6 +8,7 @@ from typing import Callable
 from sqlalchemy import create_engine
 from supabase import create_client, Client
 load_dotenv()
+MOCK_MODE = True  # Zet op False voor live API-verzoeken
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
@@ -19,6 +20,35 @@ def upload_uren_to_supabase(data: list[dict]):
         print("⚠️ Upload mislukt:", res.json())
     else:
         print(f"✅ {len(data)} urenrecords geüpload naar Supabase")
+
+# Nieuwe functies voor uploaden naar Supabase
+def upload_projects_to_supabase(data: list[dict]):
+    res = supabase.table("projects").insert(data).execute()
+    if res.status_code != 201:
+        print("⚠️ Upload projecten mislukt:", res.json())
+    else:
+        print(f"✅ {len(data)} projectrecords geüpload naar Supabase")
+
+def upload_employees_to_supabase(data: list[dict]):
+    res = supabase.table("employees").insert(data).execute()
+    if res.status_code != 201:
+        print("⚠️ Upload medewerkers mislukt:", res.json())
+    else:
+        print(f"✅ {len(data)} medewerkers geüpload naar Supabase")
+
+def upload_companies_to_supabase(data: list[dict]):
+    res = supabase.table("companies").insert(data).execute()
+    if res.status_code != 201:
+        print("⚠️ Upload bedrijven mislukt:", res.json())
+    else:
+        print(f"✅ {len(data)} bedrijven geüpload naar Supabase")
+
+def upload_invoices_to_supabase(data: list[dict]):
+    res = supabase.table("invoices").insert(data).execute()
+    if res.status_code != 201:
+        print("⚠️ Upload facturen mislukt:", res.json())
+    else:
+        print(f"✅ {len(data)} facturen geüpload naar Supabase")
 
 POSTGRES_URL = os.getenv("POSTGRES_URL")
 engine = create_engine(POSTGRES_URL)
@@ -32,6 +62,9 @@ CACHE_DIR = "data"
 os.makedirs(CACHE_DIR, exist_ok=True)
 
 def fetch_gripp_invoices():
+    if MOCK_MODE:
+        print("📦 MOCK: invoices geladen uit dummy bestand.")
+        return pd.read_csv("mock_data/invoices.csv")
     # Stap 1: Bedrijf ophalen
     payload_company = [{
         "id": 1,
@@ -130,6 +163,9 @@ def cached_fetch(name: str, fetch_fn: Callable[[], pd.DataFrame]) -> pd.DataFram
 
 def fetch_gripp_projects():
     def fetch():
+        if MOCK_MODE:
+            print("📦 MOCK: projects geladen uit dummy bestand.")
+            return pd.read_csv("mock_data/projects.csv")
         all_rows = []
         start = 0
         max_results = 100
@@ -158,6 +194,9 @@ def fetch_gripp_projects():
 
 def fetch_gripp_employees():
     def fetch():
+        if MOCK_MODE:
+            print("📦 MOCK: employees geladen uit dummy bestand.")
+            return pd.read_csv("mock_data/employees.csv")
         payload = [{
             "id": 1,
             "method": "employee.get",
@@ -171,6 +210,9 @@ def fetch_gripp_employees():
 
 def fetch_gripp_companies():
     def fetch():
+        if MOCK_MODE:
+            print("📦 MOCK: companies geladen uit dummy bestand.")
+            return pd.read_csv("mock_data/companies.csv")
         all_rows = []
         start = 0
         max_results = 100
@@ -199,6 +241,9 @@ def fetch_gripp_companies():
 
 def fetch_gripp_hours_data():
     def fetch():
+        if MOCK_MODE:
+            print("📦 MOCK: hours data geladen uit dummy bestand.")
+            return pd.read_csv("mock_data/hours.csv")
         all_rows = []
         start = 0
         max_results = 100
@@ -239,6 +284,18 @@ if __name__ == "__main__":
     # Upload urenregistratie naar Supabase
     if not datasets["gripp_hours_data"].empty:
         upload_uren_to_supabase(datasets["gripp_hours_data"].to_dict("records"))
+
+    if not datasets["gripp_projects"].empty:
+        upload_projects_to_supabase(datasets["gripp_projects"].to_dict("records"))
+
+    if not datasets["gripp_employees"].empty:
+        upload_employees_to_supabase(datasets["gripp_employees"].to_dict("records"))
+
+    if not datasets["gripp_companies"].empty:
+        upload_companies_to_supabase(datasets["gripp_companies"].to_dict("records"))
+
+    if not datasets["gripp_invoices"].empty:
+        upload_invoices_to_supabase(datasets["gripp_invoices"].to_dict("records"))
 
     for name, df in datasets.items():
         print(f"\n📊 Dataset: {name}")

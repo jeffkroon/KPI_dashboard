@@ -2,6 +2,7 @@ import pandas as pd
 from typing import Callable
 import os
 from pathlib import Path
+import time
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data_cache"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -29,12 +30,25 @@ def cache_exists(name: str) -> bool:
     """Check of een Parquet-cachebestand bestaat."""
     return (DATA_DIR / f"{name}.parquet").exists()
 
+MAX_CACHE_AGE_MINUTES = 30
 
-# Nieuw: laadt uit cache of haalt op met opgegeven functie
+def is_cache_valid(name: str) -> bool:
+    path = DATA_DIR / f"{name}.parquet"
+    if not path.exists():
+        return False
+    modified_time = path.stat().st_mtime
+    age_minutes = (time.time() - modified_time) / 60
+    return age_minutes < MAX_CACHE_AGE_MINUTES
+
 def load_or_fetch(name: str, fetch_func: Callable[[], pd.DataFrame]) -> pd.DataFrame:
-    """Laad een DataFrame uit de cache of haal hem op met een opgegeven functie."""
-    if cache_exists(name):
+    if cache_exists(name) and is_cache_valid(name):
         return load_from_parquet(name)
     df = fetch_func()
+    if df.empty:
+        print(f"⚠️ Waarschuwing: Ophalen van '{name}' faalde of gaf lege data terug.")
+        if cache_exists(name):
+            print(f"📂 Gebruik oudere cache van '{name}' als fallback.")
+            return load_from_parquet(name)
+        return pd.DataFrame()
     save_to_parquet(df, name)
     return df
