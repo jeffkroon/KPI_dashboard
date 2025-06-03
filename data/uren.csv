@@ -1,0 +1,6 @@
+datum,medewerker,klant,dienst,uren,factureerbaar
+2025-05-01,Jan,Klant A,Advies,3.5,True
+2025-05-01,Lisa,Klant A,Advies,4.0,True
+2025-05-02,Jan,Klant B,Development,5.0,True
+2025-05-02,Lisa,Klant A,Advies,2.0,False
+2025-05-03,Tom,Klant C,Design,7.5,True

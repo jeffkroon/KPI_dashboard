@@ -1,0 +1,7 @@
+[theme]
+base = "light"
+primaryColor = "#ff9933"  # Dunion-oranje
+backgroundColor = "#FFFFFF"  # helder wit
+secondaryBackgroundColor = "#F5F5F5"  # lichtgrijs voor contrast
+textColor = "#111111"  # bijna zwart voor goede leesbaarheid
+font = "sans serif"
