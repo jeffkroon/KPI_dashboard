@@ -270,6 +270,7 @@ def fetch_gripp_hours_data():
         return pd.DataFrame(all_rows)
     return cached_fetch("gripp_hours_data", fetch)
 
+
 if __name__ == "__main__":
     datasets = {
         "gripp_invoices": fetch_gripp_invoices(),
