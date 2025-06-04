@@ -8,11 +8,13 @@ from typing import Callable
 from sqlalchemy import create_engine
 from supabase import create_client, Client
 load_dotenv()
-MOCK_MODE = True  # Zet op False voor live API-verzoeken
+MOCK_MODE = False  # Zet op False voor live API-verzoeken
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+INVOICE_CACHE_PATH = "data/gripp_invoices.parquet"
 
 def upload_uren_to_supabase(data: list[dict]):
     res = supabase.table("urenregistratie").insert(data).execute()
@@ -80,7 +82,10 @@ def fetch_gripp_invoices():
         ]
     }]
     response_company = requests.post(BASE_URL, headers=HEADERS, json=payload_company)
-    print(f"🕒 Remaining requests this hour: {response_company.headers.get('X-RateLimit-Remaining', 'Onbekend')}")
+    remaining = response_company.headers.get("X-RateLimit-Remaining")
+    if remaining is not None:
+        print(f"📉 Remaining requests: {remaining}")
+    print(f"🕒 Remaining requests this hour: {remaining if remaining else 'Onbekend'}")
     print(f"🔢 Hourly rate limit: {response_company.headers.get('X-RateLimit-Limit', 'Onbekend')}")
     response_company.raise_for_status()
     data_company = response_company.json()
@@ -112,9 +117,11 @@ def fetch_gripp_invoices():
                 }
             ]
         }]
+        time.sleep(0.5)
         response = requests.post(BASE_URL, headers=HEADERS, json=payload_invoice)
         remaining = response.headers.get("X-RateLimit-Remaining")
-        print(f"🕒 Remaining requests this hour: {remaining}")
+        if remaining is not None:
+            print(f"📉 Remaining requests: {remaining}")
         if remaining and remaining.isdigit() and int(remaining) <= 1:
             print("🚨 Bijna aan je limiet, wachten 60 seconden...")
             time.sleep(60)
@@ -129,12 +136,13 @@ def fetch_gripp_invoices():
             break
         start = data[0]["result"].get("next_start", start + max_results)
         watchdog -= 1
-        time.sleep(1)
 
     if not all_rows:
         print("⚠️ Geen facturen gevonden.")
         return pd.DataFrame()
-    return pd.DataFrame(all_rows)
+    df = pd.DataFrame(all_rows)
+    df.to_parquet("data/gripp_invoices.parquet", index=False)
+    return df
 
 def is_cache_fresh():
     if not os.path.exists(CACHE_PATH):
@@ -179,7 +187,11 @@ def fetch_gripp_projects():
                     {"paging": {"firstresult": start, "maxresults": max_results}}
                 ]
             }]
+            time.sleep(0.5)
             response = requests.post(BASE_URL, headers=HEADERS, json=payload)
+            remaining = response.headers.get("X-RateLimit-Remaining")
+            if remaining is not None:
+                print(f"📉 Remaining requests: {remaining}")
             response.raise_for_status()
             data = response.json()
             rows = data[0].get("result", {}).get("rows", [])
@@ -188,7 +200,6 @@ def fetch_gripp_projects():
                 break
             start = data[0]["result"].get("next_start", start + max_results)
             watchdog -= 1
-            time.sleep(1)
         return pd.DataFrame(all_rows)
     return cached_fetch("gripp_projects", fetch)
 
@@ -197,15 +208,33 @@ def fetch_gripp_employees():
         if MOCK_MODE:
             print("📦 MOCK: employees geladen uit dummy bestand.")
             return pd.read_csv("mock_data/employees.csv")
-        payload = [{
-            "id": 1,
-            "method": "employee.get",
-            "params": [[], {"paging": {"firstresult": 0, "maxresults": 250}}]
-        }]
-        response = requests.post(BASE_URL, headers=HEADERS, json=payload)
-        response.raise_for_status()
-        data = response.json()
-        return pd.DataFrame(data[0].get("result", {}).get("rows", []))
+        all_rows = []
+        start = 0
+        max_results = 250
+        watchdog = 50
+        while watchdog > 0:
+            payload = [{
+                "id": 1,
+                "method": "employee.get",
+                "params": [
+                    [],
+                    {"paging": {"firstresult": start, "maxresults": max_results}}
+                ]
+            }]
+            time.sleep(0.5)
+            response = requests.post(BASE_URL, headers=HEADERS, json=payload)
+            remaining = response.headers.get("X-RateLimit-Remaining")
+            if remaining is not None:
+                print(f"📉 Remaining requests: {remaining}")
+            response.raise_for_status()
+            data = response.json()
+            rows = data[0].get("result", {}).get("rows", [])
+            all_rows.extend(rows)
+            if not data[0]["result"].get("more_items_in_collection", False):
+                break
+            start = data[0]["result"].get("next_start", start + max_results)
+            watchdog -= 1
+        return pd.DataFrame(all_rows)
     return cached_fetch("gripp_employees", fetch)
 
 def fetch_gripp_companies():
@@ -226,7 +255,11 @@ def fetch_gripp_companies():
                     {"paging": {"firstresult": start, "maxresults": max_results}}
                 ]
             }]
+            time.sleep(0.5)
             response = requests.post(BASE_URL, headers=HEADERS, json=payload)
+            remaining = response.headers.get("X-RateLimit-Remaining")
+            if remaining is not None:
+                print(f"📉 Remaining requests: {remaining}")
             response.raise_for_status()
             data = response.json()
             rows = data[0].get("result", {}).get("rows", [])
@@ -235,7 +268,6 @@ def fetch_gripp_companies():
                 break
             start = data[0]["result"].get("next_start", start + max_results)
             watchdog -= 1
-            time.sleep(1)
         return pd.DataFrame(all_rows)
     return cached_fetch("gripp_companies", fetch)
 
@@ -257,7 +289,11 @@ def fetch_gripp_hours_data():
                     {"paging": {"firstresult": start, "maxresults": max_results}}
                 ]
             }]
+            time.sleep(0.5)
             response = requests.post(BASE_URL, headers=HEADERS, json=payload)
+            remaining = response.headers.get("X-RateLimit-Remaining")
+            if remaining is not None:
+                print(f"📉 Remaining requests: {remaining}")
             response.raise_for_status()
             data = response.json()
             rows = data[0].get("result", {}).get("rows", [])
@@ -266,19 +302,39 @@ def fetch_gripp_hours_data():
                 break
             start = data[0]["result"].get("next_start", start + max_results)
             watchdog -= 1
-            time.sleep(1)
         return pd.DataFrame(all_rows)
     return cached_fetch("gripp_hours_data", fetch)
 
 
 if __name__ == "__main__":
-    datasets = {
-        "gripp_invoices": fetch_gripp_invoices(),
-        "gripp_projects": fetch_gripp_projects(),
-        "gripp_employees": fetch_gripp_employees(),
-        "gripp_companies": fetch_gripp_companies(),
-        "gripp_hours_data": fetch_gripp_hours_data(),
-    }
+    datasets = {}
+
+    print("⏳ Ophalen van facturen...")
+    time.sleep(0.5)
+    def fetch_and_cache_gripp_invoices():
+        def fetch():
+            df = fetch_gripp_invoices()
+            df.to_parquet(INVOICE_CACHE_PATH, index=False)
+            return df
+        return cached_fetch("gripp_invoices", fetch)
+
+    datasets["gripp_invoices"] = fetch_and_cache_gripp_invoices()
+
+    print("⏳ Ophalen van projecten...")
+    time.sleep(0.5)
+    datasets["gripp_projects"] = fetch_gripp_projects()
+
+    print("⏳ Ophalen van medewerkers...")
+    time.sleep(0.5)
+    datasets["gripp_employees"] = fetch_gripp_employees()
+
+    print("⏳ Ophalen van relaties...")
+    time.sleep(0.5)
+    datasets["gripp_companies"] = fetch_gripp_companies()
+
+    print("⏳ Ophalen van uren...")
+    time.sleep(0.5)
+    datasets["gripp_hours_data"] = fetch_gripp_hours_data()
 
     print(f"\n🔑 API Key geladen: {'gevonden' if API_KEY else 'NIET gevonden'}")
 
