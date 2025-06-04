@@ -5,7 +5,7 @@ import time
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from typing import Callable
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from supabase import create_client, Client
 load_dotenv()
 MOCK_MODE = False  # Zet op False voor live API-verzoeken
@@ -63,7 +63,7 @@ MAX_CACHE_AGE_MINUTES = 30
 CACHE_DIR = "data"
 os.makedirs(CACHE_DIR, exist_ok=True)
 
-def fetch_gripp_invoices():
+def fetch_gripp_invoices(last_sync_date=None):
     if MOCK_MODE:
         print("📦 MOCK: invoices geladen uit dummy bestand.")
         return pd.read_csv("mock_data/invoices.csv")
@@ -83,6 +83,10 @@ def fetch_gripp_invoices():
     }]
     response_company = requests.post(BASE_URL, headers=HEADERS, json=payload_company)
     remaining = response_company.headers.get("X-RateLimit-Remaining")
+    reset_timestamp = response_company.headers.get("X-RateLimit-Reset")
+    if reset_timestamp:
+        reset_time = datetime.fromtimestamp(int(reset_timestamp))
+        print(f"⏳ Rate limit reset at: {reset_time.strftime('%H:%M:%S')}")
     if remaining is not None:
         print(f"📉 Remaining requests: {remaining}")
     print(f"🕒 Remaining requests this hour: {remaining if remaining else 'Onbekend'}")
@@ -103,6 +107,7 @@ def fetch_gripp_invoices():
     watchdog = 50  # failsafe tegen infinite loop
 
     while watchdog > 0:
+        print(f"📦 Ophalen facturen... pagina start: {start}", flush=True)
         payload_invoice = [{
             "id": 2,
             "method": "invoice.get",
@@ -117,15 +122,33 @@ def fetch_gripp_invoices():
                 }
             ]
         }]
+        if last_sync_date:
+            payload_invoice[0]["params"][0].append({
+                "field": "invoice.modifieddate",
+                "operator": "greaterthan",
+                "value": last_sync_date.isoformat()
+            })
         time.sleep(0.5)
         response = requests.post(BASE_URL, headers=HEADERS, json=payload_invoice)
         remaining = response.headers.get("X-RateLimit-Remaining")
+        reset_timestamp = response.headers.get("X-RateLimit-Reset")
+        if reset_timestamp:
+            reset_time = datetime.fromtimestamp(int(reset_timestamp))
+            print(f"⏳ Rate limit reset at: {reset_time.strftime('%H:%M:%S')}")
         if remaining is not None:
             print(f"📉 Remaining requests: {remaining}")
         if remaining and remaining.isdigit() and int(remaining) <= 1:
-            print("🚨 Bijna aan je limiet, wachten 60 seconden...")
-            time.sleep(60)
+            print("🚨 Bijna aan je limiet.")
+            if reset_timestamp:
+                wait_seconds = int(reset_timestamp) - int(time.time())
+                wait_seconds = max(wait_seconds, 1)
+                print(f"⏱️ Wachten tot reset in {wait_seconds} seconden...", flush=True)
+                time.sleep(wait_seconds)
+            else:
+                print("⏱️ Geen reset-tijd bekend, standaard 60 seconden wachten...")
+                time.sleep(60)
         response.raise_for_status()
+        print("✅ API-call succesvol", flush=True)
         data = response.json()
         rows = data[0].get("result", {}).get("rows", [])
         if not rows:
@@ -141,6 +164,7 @@ def fetch_gripp_invoices():
         print("⚠️ Geen facturen gevonden.")
         return pd.DataFrame()
     df = pd.DataFrame(all_rows)
+    print(f"✅ Totaal opgehaalde facturen: {len(df)}")
     df.to_parquet("data/gripp_invoices.parquet", index=False)
     return df
 
@@ -190,6 +214,10 @@ def fetch_gripp_projects():
             time.sleep(0.5)
             response = requests.post(BASE_URL, headers=HEADERS, json=payload)
             remaining = response.headers.get("X-RateLimit-Remaining")
+            reset_timestamp = response.headers.get("X-RateLimit-Reset")
+            if reset_timestamp:
+                reset_time = datetime.fromtimestamp(int(reset_timestamp))
+                print(f"⏳ Rate limit reset at: {reset_time.strftime('%H:%M:%S')}")
             if remaining is not None:
                 print(f"📉 Remaining requests: {remaining}")
             response.raise_for_status()
@@ -224,6 +252,10 @@ def fetch_gripp_employees():
             time.sleep(0.5)
             response = requests.post(BASE_URL, headers=HEADERS, json=payload)
             remaining = response.headers.get("X-RateLimit-Remaining")
+            reset_timestamp = response.headers.get("X-RateLimit-Reset")
+            if reset_timestamp:
+                reset_time = datetime.fromtimestamp(int(reset_timestamp))
+                print(f"⏳ Rate limit reset at: {reset_time.strftime('%H:%M:%S')}")
             if remaining is not None:
                 print(f"📉 Remaining requests: {remaining}")
             response.raise_for_status()
@@ -258,6 +290,10 @@ def fetch_gripp_companies():
             time.sleep(0.5)
             response = requests.post(BASE_URL, headers=HEADERS, json=payload)
             remaining = response.headers.get("X-RateLimit-Remaining")
+            reset_timestamp = response.headers.get("X-RateLimit-Reset")
+            if reset_timestamp:
+                reset_time = datetime.fromtimestamp(int(reset_timestamp))
+                print(f"⏳ Rate limit reset at: {reset_time.strftime('%H:%M:%S')}")
             if remaining is not None:
                 print(f"📉 Remaining requests: {remaining}")
             response.raise_for_status()
@@ -292,6 +328,10 @@ def fetch_gripp_hours_data():
             time.sleep(0.5)
             response = requests.post(BASE_URL, headers=HEADERS, json=payload)
             remaining = response.headers.get("X-RateLimit-Remaining")
+            reset_timestamp = response.headers.get("X-RateLimit-Reset")
+            if reset_timestamp:
+                reset_time = datetime.fromtimestamp(int(reset_timestamp))
+                print(f"⏳ Rate limit reset at: {reset_time.strftime('%H:%M:%S')}")
             if remaining is not None:
                 print(f"📉 Remaining requests: {remaining}")
             response.raise_for_status()
@@ -309,11 +349,23 @@ def fetch_gripp_hours_data():
 if __name__ == "__main__":
     datasets = {}
 
+    def get_last_sync_date(table_name: str):
+        query = f"SELECT MAX(snapshot_timestamp) FROM {table_name}"
+        try:
+            with engine.connect() as conn:
+                result = conn.execute(text(query)).fetchone()
+                if result is not None and result[0] is not None:
+                    return result[0]
+        except Exception as e:
+            print(f"⚠️ Kon laatste sync-datum niet ophalen voor {table_name}: {e}")
+        return None
+
     print("⏳ Ophalen van facturen...")
     time.sleep(0.5)
+    last_sync_invoices = get_last_sync_date("gripp_invoices")
     def fetch_and_cache_gripp_invoices():
         def fetch():
-            df = fetch_gripp_invoices()
+            df = fetch_gripp_invoices(last_sync_date=last_sync_invoices)
             df.to_parquet(INVOICE_CACHE_PATH, index=False)
             return df
         return cached_fetch("gripp_invoices", fetch)
@@ -340,18 +392,23 @@ if __name__ == "__main__":
 
     # Upload urenregistratie naar Supabase
     if not datasets["gripp_hours_data"].empty:
+        print(f"⬆️ Uploaden naar Supabase: gripp_hours_data")
         upload_uren_to_supabase(datasets["gripp_hours_data"].to_dict("records"))
 
     if not datasets["gripp_projects"].empty:
+        print(f"⬆️ Uploaden naar Supabase: gripp_projects")
         upload_projects_to_supabase(datasets["gripp_projects"].to_dict("records"))
 
     if not datasets["gripp_employees"].empty:
+        print(f"⬆️ Uploaden naar Supabase: gripp_employees")
         upload_employees_to_supabase(datasets["gripp_employees"].to_dict("records"))
 
     if not datasets["gripp_companies"].empty:
+        print(f"⬆️ Uploaden naar Supabase: gripp_companies")
         upload_companies_to_supabase(datasets["gripp_companies"].to_dict("records"))
 
     if not datasets["gripp_invoices"].empty:
+        print(f"⬆️ Uploaden naar Supabase: gripp_invoices")
         upload_invoices_to_supabase(datasets["gripp_invoices"].to_dict("records"))
 
     for name, df in datasets.items():
@@ -361,3 +418,4 @@ if __name__ == "__main__":
         print(f"Rijen: {len(df)}")
         df["snapshot_timestamp"] = datetime.now()
         df.to_sql(name, engine, if_exists="append", index=False)
+        print(f"💾 Dataset {name} opgeslagen in Postgres.")
