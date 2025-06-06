@@ -18,42 +18,6 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
-
-# Nieuwe functie om uren en kosten per project te tonen
-def print_project_costs_and_hours(project_id: int):
-    print(f"\n⏳ Ophalen van uren en kosten voor project ID {project_id}...")
-    
-    # Ophalen en filteren uren per project
-    hours_raw = flatten_dict_column(fetch_gripp_hours_data())
-    hours_clean = sanitize_for_supabase(hours_raw)
-    hours_filtered = hours_clean[hours_clean["offerprojectbase_id"] == project_id]
-    
-    # Ophalen en filteren kosten per project
-    costs_raw = flatten_dict_column(fetch_gripp_costs())
-    costs_clean = sanitize_for_supabase(costs_raw)
-    print("Kolommen in costs_clean:", costs_clean.columns.tolist())
-    # Gebruik offerprojectbase_id in plaats van project_id als filterkolom
-    if "offerprojectbase_id" in costs_clean.columns:
-        costs_filtered = costs_clean[costs_clean["offerprojectbase_id"] == project_id]
-    else:
-        print("⚠️ Geen kolom 'offerprojectbase_id' gevonden in costs dataset.")
-        costs_filtered = pd.DataFrame()  # lege dataframe
-    
-    print(f"\n📊 Uren voor project {project_id} (aantal rijen: {len(hours_filtered)})")
-    if not hours_filtered.empty:
-        print(f"  Kolomnamen: {hours_filtered.columns.tolist()}")
-        import pprint
-        pprint.pprint(hours_filtered.head(5).to_dict(orient='records'), indent=2, width=120, compact=False)
-    else:
-        print("  Geen uren gevonden voor dit project.")
-    
-    print(f"\n📊 Kosten voor project {project_id} (aantal rijen: {len(costs_filtered)})")
-    if not costs_filtered.empty:
-        print(f"  Kolomnamen: {costs_filtered.columns.tolist()}")
-        import pprint
-        pprint.pprint(costs_filtered.head(5).to_dict(orient='records'), indent=2, width=120, compact=False)
-    else:
-        print("  Geen kosten gevonden voor dit project.")
 def filter_projects(df: pd.DataFrame) -> pd.DataFrame:
     keep_cols = [
         "id", "number", "name", "description", "clientreference",
@@ -386,68 +350,6 @@ def fetch_gripp_hours_data():
         return pd.DataFrame(all_rows)
     return cached_fetch("gripp_hours_data", fetch, force_refresh=FORCE_REFRESH)
 
-def fetch_gripp_costheadings():
-    def fetch():
-        all_rows = []
-        start = 0
-        max_results = 100
-        watchdog = 50
-        while watchdog > 0:
-            payload = [{
-                "id": 1,
-                "method": "costheading.get",
-                "params": [
-                    [],
-                    {"paging": {"firstresult": start, "maxresults": max_results}}
-                ]
-            }]
-            time.sleep(0.5)
-            response = requests.post(BASE_URL, headers=HEADERS, json=payload)
-            remaining = response.headers.get("X-RateLimit-Remaining")
-            if remaining is not None:
-                print(f"📉 Remaining requests: {remaining}")
-            response.raise_for_status()
-            data = response.json()
-            rows = data[0].get("result", {}).get("rows", [])
-            all_rows.extend(rows)
-            if not data[0]["result"].get("more_items_in_collection", False):
-                break
-            start = data[0]["result"].get("next_start", start + max_results)
-            watchdog -= 1
-        return pd.DataFrame(all_rows)
-    return cached_fetch("gripp_costheadings", fetch, force_refresh=FORCE_REFRESH)
-
-def fetch_gripp_costs():
-    def fetch():
-        all_rows = []
-        start = 0
-        max_results = 100
-        watchdog = 50
-        while watchdog > 0:
-            payload = [{
-                "id": 1,
-                "method": "cost.get",
-                "params": [
-                    [],
-                    {"paging": {"firstresult": start, "maxresults": max_results}}
-                ]
-            }]
-            time.sleep(0.5)
-            response = requests.post(BASE_URL, headers=HEADERS, json=payload)
-            remaining = response.headers.get("X-RateLimit-Remaining")
-            if remaining is not None:
-                print(f"📉 Remaining requests: {remaining}")
-            response.raise_for_status()
-            data = response.json()
-            rows = data[0].get("result", {}).get("rows", [])
-            all_rows.extend(rows)
-            if not data[0]["result"].get("more_items_in_collection", False):
-                break
-            start = data[0]["result"].get("next_start", start + max_results)
-            watchdog -= 1
-        return pd.DataFrame(all_rows)
-    return cached_fetch("gripp_costs", fetch, force_refresh=FORCE_REFRESH)
-
 def fetch_gripp_tasktypes():
     def fetch():
         if MOCK_MODE:
@@ -485,7 +387,36 @@ def fetch_gripp_tasktypes():
             watchdog -= 1
         return pd.DataFrame(all_rows)
     return cached_fetch("gripp_tasktypes", fetch, force_refresh=FORCE_REFRESH)
-
+def print_projectlines_for_company(company_name: str, projects_df: pd.DataFrame, projectlines_df: pd.DataFrame):
+    """
+    Print een overzicht van alle projectlines voor alle projecten van een bepaalde company.
+    """
+    print(f"\n📋 Projectlines overzicht voor bedrijf: '{company_name}'")
+    # Filter projecten van het bedrijf
+    projects_for_company = projects_df[projects_df["company_searchname"] == company_name]
+    if projects_for_company.empty:
+        print(f"⚠️ Geen projecten gevonden voor bedrijf '{company_name}'.")
+        return
+    project_ids = projects_for_company["id"].tolist()
+    relevant_projectlines = projectlines_df[projectlines_df["offerprojectbase_id"].isin(project_ids)]
+    print(f"  Aantal projecten gevonden: {len(projects_for_company)}")
+    print(f"  Aantal projectlines gevonden: {len(relevant_projectlines)}")
+    if relevant_projectlines.empty:
+        print("⚠️ Geen projectlines gevonden voor deze projecten.")
+        return
+    # Print overzicht per project
+    for project_id, project in projects_for_company.iterrows():
+        lines = relevant_projectlines[relevant_projectlines["offerprojectbase_id"] == project["id"]]
+        if lines.empty:
+            continue
+        print(f"\n🔹 Project: {project['name']} (ID {project['id']}, Nummer {project.get('number', '-')})")
+        # Selecteer een paar interessante kolommen als ze bestaan
+        columns_to_show = [col for col in [
+            "id", "description", "amount", "totalexclvat", "tasktype_searchname", "createdon_date", "updatedon_date"
+        ] if col in lines.columns]
+        # Print netjes met pandas
+        print(lines[columns_to_show].to_string(index=False))
+    print("\n✅ Overzicht projectlines voor bedrijf afgerond.")
 # Toegevoegd: Ophalen van projectlijnen (offerprojectlines)
 def fetch_gripp_projectlines():
     def fetch():
@@ -553,16 +484,6 @@ if __name__ == "__main__":
     hours_clean = sanitize_for_supabase(hours_raw)
     datasets["gripp_hours_data"] = filter_hours(hours_clean)
 
-    print("⏳ Ophalen van kostencategorieën (costheadings)...")
-    costheadings_raw = flatten_dict_column(fetch_gripp_costheadings())
-    costheadings_clean = sanitize_for_supabase(costheadings_raw)
-    datasets["gripp_costheadings"] = costheadings_clean
-
-    print("⏳ Ophalen van kosten (costs)...")
-    costs_raw = flatten_dict_column(fetch_gripp_costs())
-    costs_clean = sanitize_for_supabase(costs_raw)
-    datasets["gripp_costs"] = costs_clean
-
     # Toegevoegd: Ophalen van projectlijnen (offerprojectlines)
     print("⏳ Ophalen van projectlijnen (offerprojectlines)...")
     projectlines_raw = flatten_dict_column(fetch_gripp_projectlines())
@@ -599,60 +520,77 @@ if __name__ == "__main__":
             print("⚠️ Geen detailregels gevonden voor dit project.")
 
     print_project_details(273)  # Vervang 273 door de gewenste project-ID
-
-    for name in ["gripp_costheadings", "gripp_costs"]:
-        df = datasets[name]
-        print(f"\n📊 Dataset naam: {name}")
-        print(f"  Aantal rijen: {len(df)}")
-        print(f"  Kolomnamen: {df.columns.tolist()}")
-        if not df.empty:
-            first_record = df.iloc[0].to_dict()
-            import pprint
-            pprint.pprint(first_record, indent=2, width=120, compact=False)
-        else:
-            print("  Eerste record als dictionary: (dataset is leeg)")
-
     print(f"\n🔑 API Key geladen: {'gevonden' if API_KEY else 'NIET gevonden'}")
 
-    print_project_costs_and_hours(1089)  # Vervang 273 door de gewenste project-ID
-
-
-
-    # Print per dataset de gevraagde info
-    for name, df in datasets.items():
-        print(f"\n📊 Dataset naam: {name}")
-        print(f"  Aantal rijen: {len(df)}")
-        print(f"  Kolomnamen: {df.columns.tolist()}")
-        if not df.empty:
-            first_record = df.iloc[6].to_dict()
-            pprint.pprint(first_record, indent=2, width=120, compact=False)
-        else:
-            print("  Eerste record als dictionary: (dataset is leeg)")
-
-
-    def find_invoices_by_project_number_and_company(project_number: int, company_name: str):
-        projects_df = datasets["gripp_projects"]
-        project_id = None
-        for _, row in projects_df.iterrows():
-            if row.get("number") == project_number and row.get("company_searchname") == company_name:
-                project_id = row.get("id")
-                break
-
-        if project_id is None:
-            print(f"⚠️ Geen project gevonden met nummer {project_number} voor {company_name}.")
-            return None
-
-        print(f"✅ Project-ID gevonden: {project_id}")
-
-        projectlines_df = datasets["gripp_projectlines"]
-        facturen = projectlines_df[projectlines_df["offerprojectbase_id"] == project_id]
-        print(f"📄 Aantal factuurregels gevonden: {len(facturen)}")
-        if not facturen.empty:
-            import pprint
-            pprint.pprint(facturen.to_dict(orient="records"), indent=2, width=120, compact=False)
+    def find_invoices_by_project_number_and_company(project_number: int, company_name: str, projects_df: pd.DataFrame, projectlines_df: pd.DataFrame):
+        """
+        Zoek een project op basis van projectnummer en bedrijfsnaam,
+        en geef alle bijbehorende projectlines (factuurregels) terug.
+        """
+        project = projects_df[
+            (projects_df["number"] == project_number) &
+            (projects_df["company_searchname"] == company_name)
+        ]
+        if project.empty:
+            print(f"⚠️ Geen project gevonden met nummer {project_number} voor bedrijf '{company_name}'.")
+            return pd.DataFrame()
+        project_id = project.iloc[0]["id"]
+        print(f"✅ Project gevonden: '{project.iloc[0]['name']}' (ID {project_id})")
+        invoices = projectlines_df[projectlines_df["offerprojectbase_id"] == project_id]
+        print(f"📄 Aantal factuurregels gevonden: {len(invoices)}")
+        if not invoices.empty:
+            print(invoices.to_string(index=False))
         else:
             print("⚠️ Geen factuurregels gevonden voor dit project.")
-        return facturen
+        return invoices
 
-    print("\n🔍 Facturen zoeken voor Opdracht 1089 en bedrijf 'Korff Dakwerken Volendam B.V.'")
-    find_invoices_by_project_number_and_company(1089, "Korff Dakwerken Volendam B.V.")
+    # Voorbeeld: projectnummer 1089 en bedrijf 'Korff Dakwerken Volendam B.V.'
+    find_invoices_by_project_number_and_company(
+        1089,
+        "Korff Dakwerken Volendam B.V.",
+        datasets["gripp_projects"],
+        datasets["gripp_projectlines"]
+    )
+
+    def print_matching_columns_for_company_project(project_number: int, company_name: str):
+        projects_df = datasets["gripp_projects"]
+        projectlines_df = datasets["gripp_projectlines"]
+        project = projects_df[
+            (projects_df["number"] == project_number) &
+            (projects_df["company_searchname"] == company_name)
+        ]
+        if project.empty:
+            print(f"⚠️ Geen project gevonden met nummer {project_number} voor bedrijf '{company_name}'.")
+            return
+        project_id = project.iloc[0]["id"]
+        projectlines = projectlines_df[projectlines_df["offerprojectbase_id"] == project_id]
+        print(f"\n📋 Project (gripp_projects) kolommen:")
+        print(project.columns.tolist())
+        print(f"\n🧾 Projectlines (gripp_projectlines) kolommen voor project ID {project_id}:")
+        print(projectlines.columns.tolist())
+        common_cols = set(project.columns).intersection(set(projectlines.columns))
+        print(f"\n🔗 Overeenkomende kolommen:")
+        for col in sorted(common_cols):
+            print(f"- {col}")
+        print(f"\n🔍 Waarden vergelijking voor gemeenschappelijke kolommen:")
+        for col in sorted(common_cols):
+            project_value = project.iloc[0][col]
+            projectlines_values = projectlines[col].dropna().unique()
+            if len(projectlines_values) == 0:
+                print(f"  - Kolom '{col}': Alleen waarde in project: {project_value} (geen waarden in projectlines)")
+                continue
+            if all((project_value == val) or (pd.isna(project_value) and pd.isna(val)) for val in projectlines_values):
+                print(f"  - Kolom '{col}': Waarden matchen exact tussen project en alle projectlines.")
+            else:
+                print(f"  - Kolom '{col}': Waarden verschillen!")
+                print(f"    Project waarde   : {project_value}")
+                print(f"    Projectlines waarden: {projectlines_values}")
+
+    print_matching_columns_for_company_project(1089, "Korff Dakwerken Volendam B.V.")
+
+    # Toegevoegd: Print overzicht van projectlines voor een heel bedrijf
+    print_projectlines_for_company(
+        "Korff Dakwerken Volendam B.V.",
+        datasets["gripp_projects"],
+        datasets["gripp_projectlines"]
+    )
