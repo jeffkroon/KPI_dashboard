@@ -780,4 +780,23 @@ def print_random_contractlines(n=5):
 print_random_contractlines(5)
 
 
+def get_contractlines_for_company(company_name: str = None):
+    print(f"\n📄 Ophalen van contractlines...")
 
+    companies_df = datasets.get("gripp_companies")
+
+    if companies_df is None:
+        print("❌ Dataset met bedrijven is niet geladen.")
+        return pd.DataFrame()
+
+    # Hardcoded bedrijf
+    company_name = "Korff Dakwerken Volendam B.V."
+    company_match = companies_df[companies_df["companyname"] == company_name]
+
+    if company_match.empty:
+        print(f"⚠️ Geen bedrijf gevonden met naam: {company_name}")
+        return pd.DataFrame()
+    
+print(get_contractlines_for_company("Viswinkel Peter Tol"))
+companies_df = datasets.get("gripp_companies")
+print(companies_df.columns)
