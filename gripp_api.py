@@ -688,71 +688,7 @@ def get_projectlines_for_company(company_name: str) -> pd.DataFrame:
         pprint.pprint(matching_lines.head(10).to_dict(orient="records"), indent=2)
 
     return matching_lines
-def get_contractlines_for_company(company_name: str):
-    print(f"\n📄 Ophalen van contractlines voor bedrijf: '{company_name}'...")
-    companies_df = datasets.get("gripp_companies")
 
-    if companies_df is None:
-        print("❌ Dataset met bedrijven is niet geladen.")
-        return pd.DataFrame()
-
-    # Zoek het bedrijf op naam
-    company_match = companies_df[companies_df["searchname"] == company_name]
-    if company_match.empty:
-        print(f"⚠️ Geen bedrijf gevonden met naam: {company_name}")
-        return pd.DataFrame()
-    company_id = company_match.iloc[0]["id"]
-
-    # Ophalen van contractlines met filter op company_id
-    all_rows = []
-    start = 0
-    max_results = 100
-    watchdog = 50
-    while watchdog > 0:
-        payload = [{
-            "id": 1,
-            "method": "contractline.get",
-            "params": [
-                [
-                    {
-                        "field": "contractline.company_id",
-                        "operator": "equals",
-                        "value": company_id
-                    }
-                ],
-                {
-                    "paging": {
-                        "firstresult": start,
-                        "maxresults": max_results
-                    },
-                    "orderings": [
-                        {
-                            "field": "contractline.id",
-                            "direction": "asc"
-                        }
-                    ]
-                }
-            ]
-        }]
-        response = requests.post(BASE_URL, headers=HEADERS, json=payload)
-        response.raise_for_status()
-        data = response.json()
-        rows = data[0].get("result", {}).get("rows", [])
-        all_rows.extend(rows)
-        if not data[0]["result"].get("more_items_in_collection", False):
-            break
-        start = data[0]["result"].get("next_start", start + max_results)
-        watchdog -= 1
-
-    df = pd.DataFrame(all_rows)
-    if df.empty:
-        print("⚠️ Geen contractlines gevonden.")
-    else:
-        print(f"✅ Aantal contractlines gevonden: {len(df)}")
-        print(df.to_string(index=False))
-    return df
-
-    
 def calculate_total_costs_per_task_type(projectlines: list) -> dict:
     """
     Berekent de totale kosten per 'product_searchname' (soort taak) op basis van de projectlines.
@@ -796,5 +732,5 @@ def print_total_costs_per_tasktype_for_company(company_name: str):
 get_projectlines_for_company("Mijnijzerwaren B.V.")
 print_total_costs_per_tasktype_for_company("Mijnijzerwaren B.V.")
 
-companies_df = datasets.get("gripp_companies")
+
 
