@@ -733,4 +733,51 @@ get_projectlines_for_company("Mijnijzerwaren B.V.")
 print_total_costs_per_tasktype_for_company("Mijnijzerwaren B.V.")
 
 
+# Voeg toe: Print een willekeurige selectie van contractlines
+def print_random_contractlines(n=5):
+    print(f"\n🎲 Willekeurige selectie van {n} contractlines ophalen...")
+    all_rows = []
+    start = 0
+    max_results = 100
+    watchdog = 50
+    while watchdog > 0:
+        payload = [{
+            "id": 1,
+            "method": "contractline.get",
+            "params": [
+                [],
+                {
+                    "paging": {
+                        "firstresult": start,
+                        "maxresults": max_results
+                    },
+                    "orderings": [
+                        {
+                            "field": "contractline.id",
+                            "direction": "asc"
+                        }
+                    ]
+                }
+            ]
+        }]
+        response = requests.post(BASE_URL, headers=HEADERS, json=payload)
+        response.raise_for_status()
+        data = response.json()
+        rows = data[0].get("result", {}).get("rows", [])
+        all_rows.extend(rows)
+        if not data[0]["result"].get("more_items_in_collection", False):
+            break
+        start = data[0]["result"].get("next_start", start + max_results)
+        watchdog -= 1
+
+    df = pd.DataFrame(all_rows)
+    if df.empty:
+        print("⚠️ Geen contractlines gevonden.")
+    else:
+        df_sample = df.sample(n=min(n, len(df)))
+        print(df_sample.to_string(index=False))
+
+print_random_contractlines(5)
+
+
 
