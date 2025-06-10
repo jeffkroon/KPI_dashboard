@@ -3,6 +3,7 @@ import pandas as pd
 import requests
 import os
 import time
+import pprint
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from typing import Callable
@@ -17,6 +18,34 @@ MOCK_MODE = False  # Zet op False voor live API-verzoeken
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+
+
+def filter_active_projects_only(projects_df: pd.DataFrame) -> pd.DataFrame:
+    """Filtert alleen niet-gearchiveerde projecten (actief)."""
+    return projects_df[projects_df["archived"] == False]
+
+def get_active_projectlines_for_company(company_name: str) -> pd.DataFrame:
+    print(f"\n🔍 Actieve projectlines ophalen voor bedrijf: '{company_name}'...")
+
+    projects_df = datasets.get("gripp_projects")
+    projectlines_df = datasets.get("gripp_projectlines")
+
+    if projects_df is None or projectlines_df is None:
+        print("❌ Vereiste datasets zijn niet geladen.")
+        return pd.DataFrame()
+
+    active_projects = filter_active_projects_only(projects_df)
+    company_projects = active_projects[active_projects["company_searchname"] == company_name]
+    if company_projects.empty:
+        print(f"⚠️ Geen actieve projecten gevonden voor bedrijf '{company_name}'.")
+        return pd.DataFrame()
+
+    project_ids = company_projects["id"].tolist()
+    matching_lines = projectlines_df[projectlines_df["offerprojectbase_id"].isin(project_ids)]
+
+    print(f"✅ Gevonden: {len(matching_lines)} projectlines voor {len(project_ids)} actieve projecten.")
+    return matching_lines
+
 
 def filter_projects(df: pd.DataFrame) -> pd.DataFrame:
     keep_cols = [
@@ -451,7 +480,6 @@ def fetch_gripp_projectlines():
 
 
 if __name__ == "__main__":
-    import pprint
     datasets = {}
     # Ophalen en sanitiseren van datasets
     print("⏳ Ophalen van projecten...")
@@ -494,7 +522,6 @@ if __name__ == "__main__":
     print(f"  Aantal rijen: {len(projectlines_clean)}")
     print(f"  Kolomnamen: {projectlines_clean.columns.tolist()}")
     if not projectlines_clean.empty:
-        import pprint
         pprint.pprint(projectlines_clean.head(5).to_dict(orient='records'), indent=2, width=120, compact=False)
     else:
         print("  Eerste record als dictionary: (dataset is leeg)")
@@ -507,14 +534,12 @@ if __name__ == "__main__":
 
         print(f"\n📋 Project info (ID {project_id}):")
         if not project_filtered.empty:
-            import pprint
             pprint.pprint(project_filtered.iloc[0].to_dict(), indent=2, width=120, compact=False)
         else:
             print("⚠️ Project niet gevonden.")
 
         print(f"\n🧾 Detailregels (offerprojectline) voor project {project_id} (aantal: {len(projectlines_filtered)}):")
         if not projectlines_filtered.empty:
-            import pprint
             pprint.pprint(projectlines_filtered.to_dict(orient='records'), indent=2, width=120, compact=False)
         else:
             print("⚠️ Geen detailregels gevonden voor dit project.")
@@ -594,3 +619,182 @@ if __name__ == "__main__":
         datasets["gripp_projects"],
         datasets["gripp_projectlines"]
     )
+    
+    # Print de eerste 10 offerprojectlines
+    
+def get_first_offerprojectlines():
+    payload = [{
+        "id": 1,
+        "method": "offerprojectline.get",
+        "params": [
+            [
+                {
+                    "field": "offerprojectline.id",
+                    "operator": "greaterequals",
+                    "value": 1
+                }
+            ],
+            {
+                "paging": {
+                    "firstresult": 0,
+                    "maxresults": 10
+                },
+                "orderings": [
+                    {
+                        "field": "offerprojectline.id",
+                        "direction": "asc"
+                    }
+                ]
+            }
+        ]
+    }]
+
+    response = requests.post(BASE_URL, headers=HEADERS, json=payload)
+    response.raise_for_status()
+    data = response.json()
+    rows = data[0]["result"]["rows"]
+    df = pd.DataFrame(rows)
+    print(df.to_string(index=False))
+    return df
+
+
+def get_projectlines_for_company(company_name: str) -> pd.DataFrame:
+    print(f"\n🔍 Projectlines ophalen voor bedrijf: '{company_name}'...")
+
+    # datasets moet globaal beschikbaar zijn
+    projects_df = datasets.get("gripp_projects")
+    projectlines_df = datasets.get("gripp_projectlines")
+
+    if projects_df is None or projectlines_df is None:
+        print("❌ Vereiste datasets zijn niet geladen.")
+        return pd.DataFrame()
+
+    # Stap 1: Filter projecten van dit bedrijf
+    company_projects = projects_df[projects_df["company_searchname"] == company_name]
+    if company_projects.empty:
+        print(f"⚠️ Geen projecten gevonden voor bedrijf '{company_name}'.")
+        return pd.DataFrame()
+
+    project_ids = company_projects["id"].tolist()
+
+    # Stap 2: Filter de offerprojectlines
+    matching_lines = projectlines_df[projectlines_df["offerprojectbase_id"].isin(project_ids)]
+
+    if matching_lines.empty:
+        print(f"⚠️ Geen projectlines gevonden voor projecten van '{company_name}'.")
+    else:
+        print(f"✅ Gevonden: {len(matching_lines)} projectlines voor {len(project_ids)} projecten.")
+        import pprint
+        pprint.pprint(matching_lines.head(10).to_dict(orient="records"), indent=2)
+
+    return matching_lines
+def get_contractlines_for_company(company_name: str):
+    print(f"\n📄 Ophalen van contractlines voor bedrijf: '{company_name}'...")
+    companies_df = datasets.get("gripp_companies")
+
+    if companies_df is None:
+        print("❌ Dataset met bedrijven is niet geladen.")
+        return pd.DataFrame()
+
+    # Zoek het bedrijf op naam
+    company_match = companies_df[companies_df["searchname"] == company_name]
+    if company_match.empty:
+        print(f"⚠️ Geen bedrijf gevonden met naam: {company_name}")
+        return pd.DataFrame()
+    company_id = company_match.iloc[0]["id"]
+
+    # Ophalen van contractlines met filter op company_id
+    all_rows = []
+    start = 0
+    max_results = 100
+    watchdog = 50
+    while watchdog > 0:
+        payload = [{
+            "id": 1,
+            "method": "contractline.get",
+            "params": [
+                [
+                    {
+                        "field": "contractline.company_id",
+                        "operator": "equals",
+                        "value": company_id
+                    }
+                ],
+                {
+                    "paging": {
+                        "firstresult": start,
+                        "maxresults": max_results
+                    },
+                    "orderings": [
+                        {
+                            "field": "contractline.id",
+                            "direction": "asc"
+                        }
+                    ]
+                }
+            ]
+        }]
+        response = requests.post(BASE_URL, headers=HEADERS, json=payload)
+        response.raise_for_status()
+        data = response.json()
+        rows = data[0].get("result", {}).get("rows", [])
+        all_rows.extend(rows)
+        if not data[0]["result"].get("more_items_in_collection", False):
+            break
+        start = data[0]["result"].get("next_start", start + max_results)
+        watchdog -= 1
+
+    df = pd.DataFrame(all_rows)
+    if df.empty:
+        print("⚠️ Geen contractlines gevonden.")
+    else:
+        print(f"✅ Aantal contractlines gevonden: {len(df)}")
+        print(df.to_string(index=False))
+    return df
+
+    
+def calculate_total_costs_per_task_type(projectlines: list) -> dict:
+    """
+    Berekent de totale kosten per 'product_searchname' (soort taak) op basis van de projectlines.
+    Returnt een dictionary met taaknaam als key en totaalprijs als value.
+    """
+    from collections import defaultdict
+
+    total_per_task = defaultdict(float)
+
+    for line in projectlines:
+        try:
+            if line.get("rowtype_searchname") == "NORMAAL":
+                task = line.get("product_searchname", "Onbekend")
+                amount = float(line.get("amountwritten", 0))
+                price = float(line.get("sellingprice", 0))
+                total_per_task[task] += amount * price
+        except (TypeError, ValueError):
+            continue  # Foute data overslaan
+
+    return dict(total_per_task)
+
+
+def print_total_costs_per_tasktype_for_company(company_name: str):
+    lines = get_active_projectlines_for_company(company_name)
+    if lines.empty:
+        print("❌ Geen projectlines beschikbaar voor analyse.")
+        return
+
+    kosten_per_taak = calculate_total_costs_per_task_type(lines.to_dict(orient="records"))
+    kosten_df = pd.DataFrame([
+        {"tasktype": taak, "total_cost": kosten}
+        for taak, kosten in kosten_per_taak.items()
+    ]).sort_values(by="total_cost", ascending=False)
+
+    print(f"\n💰 Totale kosten per soort taak voor '{company_name}':")
+    print(kosten_df.to_string(index=False))
+    return kosten_df
+
+# Aanroep
+
+get_projectlines_for_company("Mijnijzerwaren B.V.")
+print_total_costs_per_tasktype_for_company("Mijnijzerwaren B.V.")
+
+companies_df = datasets.get("gripp_companies")
+
