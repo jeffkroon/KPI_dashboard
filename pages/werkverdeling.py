@@ -48,7 +48,7 @@ selected_projects = st.multiselect(
     help="Gebruik het zoekveld om projecten te vinden"
 )
 # Filter uren op geselecteerde projecten (via offerprojectbase_id)
-df_uren_filtered = df_uren[df_uren['offerprojectbase_id'].isin(df_projects[df_projects['name'].isin(selected_projects)]['id'])]
+df_uren_filtered = df_uren[df_uren['offerprojectbase_id'].isin(df_projects[df_projects['name'].isin(selected_projects)]['id'])].copy()
 
 # Datumfilter (optioneel)
 df_uren_filtered['date_date'] = pd.to_datetime(df_uren_filtered['date_date'], errors='coerce')
