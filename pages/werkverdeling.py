@@ -46,16 +46,22 @@ df_projects = df_projects.merge(
 st.title("📋 Project Overzicht met Medewerker Uren")
 
 # --- Filters bovenaan ---
+# Project opties en standaard selectie
 project_options = df_projects['name'].unique().tolist()
 # Alleen eerste 10 projecten standaard geselecteerd
 default_projects = project_options[:10]
 
-selected_projects = st.multiselect(
-    "Selecteer één of meerdere projecten",
-    options=project_options,
-    default=default_projects,
-    help="Gebruik het zoekveld om projecten te vinden"
-)
+# Checkbox voor 'Selecteer alles'
+select_all_projects = st.checkbox("Selecteer alle projecten", value=False)
+if select_all_projects:
+    selected_projects = project_options
+else:
+    selected_projects = st.multiselect(
+        "Selecteer één of meerdere projecten",
+        options=project_options,
+        default=default_projects,
+        help="Gebruik het zoekveld om projecten te vinden"
+    )
 # Filter uren op geselecteerde projecten (via offerprojectbase_id)
 df_uren_filtered = df_uren[df_uren['offerprojectbase_id'].isin(df_projects[df_projects['name'].isin(selected_projects)]['id'])].copy()
 
