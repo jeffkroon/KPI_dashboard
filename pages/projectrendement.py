@@ -365,11 +365,11 @@ cluster_data = aggregatie_per_bedrijf[["totaal_uren", "werkelijke_opbrengst", "r
 scaled = StandardScaler().fit_transform(cluster_data)
 kmeans = KMeans(n_clusters=4, random_state=42).fit(scaled)
 cluster_data["cluster"] = kmeans.labels_
-
 fig_cluster = px.scatter_3d(
     cluster_data,
     x="totaal_uren", y="werkelijke_opbrengst", z="rendement_per_uur",
-    color="cluster", title="3D Clustering van Bedrijven"
+    color="cluster", title="3D Clustering van Bedrijven",
+    hover_name=aggregatie_per_bedrijf.loc[cluster_data.index, "bedrijf_naam"]
 )
 st.plotly_chart(fig_cluster, use_container_width=True)
 
@@ -411,5 +411,8 @@ def genereer_advies(prompt):
         return response.choices[0].message.content.strip()
     except Exception as e:
         return f"⚠️ Fout bij ophalen van AI-advies: {e}"
-advies_output = genereer_advies(advies_prompt)
-st.info(advies_output)
+
+# Only generate and display AI advice when the button is pressed
+if st.button("Genereer AI-advies"):
+    advies_output = genereer_advies(advies_prompt)
+    st.info(advies_output)

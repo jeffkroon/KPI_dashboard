@@ -5,6 +5,15 @@ from sqlalchemy import create_engine
 from dotenv import load_dotenv
 import plotly.express as px
 
+
+st.logo("images/dunion-logo-def_donker-06.png")
+st.set_page_config(
+    page_title="Werkverdeling",
+    page_icon="📈",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
 # Data & omgeving setup
 load_dotenv()
 POSTGRES_URL = os.getenv("POSTGRES_URL")
