@@ -551,5 +551,3 @@ def collect_projectlines_per_company(companies_df: pd.DataFrame, projects_df: pd
     combined_df = pd.concat(all_lines, ignore_index=True)
     print(f"✅ Samengevoegde projectlines voor {len(combined_df)} regels.")
     return combined_df
-
-

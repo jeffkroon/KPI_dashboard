@@ -1,196 +1,220 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import plotly.express as px
+from sqlalchemy import create_engine
+import os
+from dotenv import load_dotenv
+from datetime import datetime
+# --- SETUP ---
+load_dotenv()
+POSTGRES_URL = os.getenv("POSTGRES_URL")
+engine = create_engine(POSTGRES_URL)
 
-st.logo("images/dunion-logo-def_donker-06.png")
 st.set_page_config(
-    page_title="Dunion KPI-dashboard",
+    page_title="Dunion KPI Dashboard",
     page_icon="images/dunion-logo-def_donker-06.png",
     layout="wide",
     initial_sidebar_state="expanded")
+try:
+    from streamlit_extras.metric_cards import style_metric_cards
+except ImportError:
+    st.warning("📛 'streamlit-extras' is niet geïnstalleerd of niet vindbaar door je environment.")
+st.logo("images/dunion-logo-def_donker-06.png")
+st.title("Dunion KPI Dashboard – Overzicht")
 
-# --- Custom CSS for hover and fade-in ---
-st.markdown("""
-<style>
-/* Hover effect voor KPI cards */
-.css-1d391kg:hover {
-    box-shadow: 0 8px 20px rgba(144, 202, 249, 0.8);
-    transform: translateY(-4px);
-    transition: all 0.3s ease;
-}
+# --- LOAD DATA ---
+@st.cache_data
+def load_data(table_name):
+    query = f"SELECT * FROM {table_name};"
+    return pd.read_sql(query, con=engine)
 
-/* Fade-in animatie voor de hele main container */
-.main > div:first-child {
-    animation: fadeIn 1s ease forwards;
-}
+df_projects = load_data("projects")
+# Exclude archived projects
+df_projects = df_projects[df_projects["archived"] != True]
+df_projects["totalexclvat"] = pd.to_numeric(df_projects["totalexclvat"], errors="coerce")
+df_employees = load_data("employees")
+df_companies = load_data("companies")
+df_uren = load_data("urenregistratie")
+df_projectlines = load_data("projectlines_per_company")
+# Filter verborgen regels uit df_projectlines
+#df_projectlines = df_projectlines[df_projectlines["hidefortimewriting"].fillna(False) != True]
+# Debug: Toon aantal verborgen regels
 
-@keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-}
+# Filter enkel projectlines van actieve projecten en met rowtype 'NORMAAL'
+active_project_ids = df_projects["id"].tolist()
+df_projectlines = df_projectlines[df_projectlines["offerprojectbase_id"].isin(active_project_ids)]
+df_projectlines = df_projectlines[df_projectlines["rowtype_searchname"] == "NORMAAL"]
 
-/* Tooltip styling voor plotly */
-.js-plotly-tooltip {
-    background-color: #121212 !important;
-    color: #E0E0E0 !important;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
-    font-size: 14px !important;
-    border-radius: 8px !important;
-    padding: 8px !important;
-    box-shadow: 0 0 10px rgba(144, 202, 249, 0.7) !important;
-}
-</style>
-""", unsafe_allow_html=True)
+df_projectlines["amountwritten"] = pd.to_numeric(df_projectlines["amountwritten"], errors="coerce")
 
-st.title("Dunion KPI Dashboard – Executive Overview")
-st.markdown("Welkom bij het dashboard. Hieronder een snapshot van de belangrijkste bedrijfs-KPI's.")
+# Bereken omzet én uren per bedrijf op basis van projectlines
+df_projectlines["werkelijke_opbrengst"] = pd.to_numeric(df_projectlines["sellingprice"], errors="coerce") * df_projectlines["amountwritten"]
+aggregatie_per_bedrijf = df_projectlines.groupby("bedrijf_id").agg({
+    "werkelijke_opbrengst": "sum",
+    "amountwritten": "sum"
+}).reset_index()
+aggregatie_per_bedrijf.columns = ["bedrijf_id", "werkelijke_opbrengst", "totaal_uren"]
 
-# --- Simulatie data ---
-np.random.seed(42)
-klanten = [f"Klant {chr(i)}" for i in range(65, 91)]  # Klant A t/m Z
-n_klanten = len(klanten)
+# Voeg werkelijke omzet toe aan projects via een merge
+df_projects = df_projects.merge(aggregatie_per_bedrijf, left_on="company_id", right_on="bedrijf_id", how="left")
+df_projects["werkelijke_opbrengst"] = df_projects["werkelijke_opbrengst"].fillna(0)
+df_projects["totaal_uren"] = df_projects["totaal_uren"].fillna(0)
 
-# Simuleer ROI met focus op positief, maar met een paar negatieve uitschieters
-roi_values = np.random.normal(loc=20, scale=15, size=n_klanten)
-roi_values[roi_values < -10] = np.random.uniform(-30, -5, size=(roi_values < -10).sum())  # negatieve ROI voor enkelen
 
-# Simuleer omzet (in tienduizenden)
-omzet_values = np.random.normal(loc=200000, scale=100000, size=n_klanten)
-omzet_values[omzet_values < 30000] = np.random.uniform(10000, 30000, size=(omzet_values < 30000).sum())
-
-# Simuleer labels op basis van ROI en omzet thresholds
-labels = []
-for roi, omzet in zip(roi_values, omzet_values):
-    if roi < 0:
-        labels.append("❌ Slecht")
-    elif roi < 15:
-        labels.append("⚠️ Gemiddeld")
-    else:
-        labels.append("✅ Winstgevend")
-
-df_summary = pd.DataFrame({
-    "klant": klanten,
-    "ROI": roi_values,
-    "omzet": omzet_values,
-    "label": labels
-})
-
-# KPI Cards: totale omzet, gemiddelde ROI, aantal winstgevende en negatieve ROI klanten
-total_omzet = df_summary["omzet"].sum()
-avg_roi = df_summary["ROI"].mean()
-n_winstgevend = sum(df_summary["label"] == "✅ Winstgevend")
-n_slecht = sum(df_summary["label"] == "❌ Slecht")
-
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("Totale Omzet", f"€{total_omzet:,.0f}", f"{np.random.uniform(1,10):.1f}% stijging")
-col2.metric("Gemiddelde ROI", f"{avg_roi:.1f}%", f"{np.random.uniform(-5,5):+.1f}% t.o.v. vorig kwartaal")
-col3.metric("Aantal winstgevende klanten", n_winstgevend, f"+{np.random.randint(0,3)} sinds vorige maand")
-col4.metric("Aantal klanten met negatieve ROI", n_slecht, f"{np.random.randint(0,2)} nieuw")
-
-st.markdown("---")
-
-# Alerts op basis van slechte klanten en random teamload issues
-st.subheader("🚨 Actuele Alerts")
-alerts = []
-if n_slecht > 0:
-    slecht_klanten = df_summary[df_summary["label"] == "❌ Slecht"]["klant"].tolist()
-    alerts.append(f"Klanten met negatieve ROI: {', '.join(slecht_klanten)}")
-if np.random.rand() < 0.5:
-    alerts.append(f"Teamlid Jansen werkt momenteel met 120% capaciteit!")
-
-if alerts:
-    for alert in alerts:
-        st.warning(alert)
-else:
-    st.success("Geen kritieke alerts, alles loopt op rolletjes!")
-
-st.markdown("---")
-
-# Interactieve klantsegmentatie treemap
-st.subheader("📊 Klantsegmentatie Overzicht")
-fig = px.treemap(
-    df_summary,
-    path=["label", "klant"],
-    values="omzet",
-    color="ROI",
-    color_continuous_scale=px.colors.sequential.Blues
-)
-fig.update_traces(
-    hovertemplate=(
-        "<b>%{label}</b><br>" +
-        "Omzet: €%{value:,.0f}<br>" +
-        "ROI: %{color:.1f}%<extra></extra>"
+# --- KPI CARDS ---
+kpi_section = st.container()
+with kpi_section:
+    style_metric_cards(
+        background_color="#F0F4F8",
+        border_size_px=1,
+        border_color="#BBB",
+        border_radius_px=8,
+        border_left_color="#9AD8E1",
+        box_shadow=True
     )
-)
-fig.update_layout(
-    margin=dict(t=50, l=25, r=25, b=25),
-    paper_bgcolor='white',
-    plot_bgcolor='white',
-    font=dict(color='#E0E0E0'),
-    transition={'duration': 500, 'easing': 'cubic-in-out'}
-)
-st.plotly_chart(fig, use_container_width=True)
+    st.subheader("KPI's Overzicht")
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        actieve_projecten = df_projects[df_projects["enddate_date"].isna()].shape[0]
+        st.metric(label="📁 Actieve Projecten", value=actieve_projecten, delta=None, delta_color="normal", help=None, label_visibility="visible")
+    with col2:
+        huidig_jaar = datetime.now().year
+        df_projects["startdate_dt"] = pd.to_datetime(df_projects["startdate_date"], errors="coerce")
+        projecten_dit_jaar = df_projects[df_projects["startdate_dt"].dt.year == huidig_jaar].shape[0]
+        st.metric("📅 Projecten dit jaar", projecten_dit_jaar)
+    with col3:
+        uren = f"{df_projects['totaal_uren'].sum():.0f} uur"
+        st.metric(label="⌛ Gewerkte Uren", value=uren, delta=None, delta_color="normal", help=None, label_visibility="visible")
+    with col4:
+        actieve_medewerkers = df_employees[df_employees["active"] == True].shape[0]
+        st.metric(label="🧑 Actieve Medewerkers", value=actieve_medewerkers, delta=None, delta_color="normal", help=None, label_visibility="visible")
 
-st.markdown("---")
+extra_kpis = st.container()
+with extra_kpis:
+    kpi5, kpi6 = st.columns(2)
+    with kpi5:
+        if not df_projects.empty:
+            topklant_row = df_projects.groupby("company_searchname")["werkelijke_opbrengst"].sum().idxmax()
+            topklant_omzet = df_projects.groupby("company_searchname")["werkelijke_opbrengst"].sum().max()
+            st.metric("👑 Topklant Omzet", topklant_row, f"€ {topklant_omzet:,.2f}")
+        else:
+            st.metric("👑 Topklant Omzet", "N/A", "€ 0.00")
+    with kpi6:
+        totale_opbrengst = f"€ {df_projects['werkelijke_opbrengst'].sum():,.2f}"
+        st.metric(label="💰 Totale Opbrengst", value=totale_opbrengst, delta=None, delta_color="normal", help=None, label_visibility="visible")
 
-# Top 5 beste klanten op basis van ROI
-st.subheader("🏆 Top 5 Beste Klanten (ROI)")
-top5 = df_summary.sort_values(by="ROI", ascending=False).head(5)
-fig_top5 = px.bar(top5, x="klant", y="ROI", color="ROI", color_continuous_scale="blues", text="ROI")
-fig_top5.update_layout(yaxis_title="ROI (%)", xaxis_title="Klant", paper_bgcolor='#111827', plot_bgcolor='#111827', font=dict(color='#E0E0E0'))
-st.plotly_chart(fig_top5, use_container_width=True)
 
-# Bottom 5 klanten met negatieve ROI
-st.subheader("⚠️ Bottom 5 Klanten (Negatieve ROI)")
-bottom5 = df_summary[df_summary["ROI"] < 0].sort_values(by="ROI").head(5)
-fig_bottom5 = px.bar(bottom5, x="klant", y="ROI", color="ROI", color_continuous_scale="reds", text="ROI")
-fig_bottom5.update_layout(yaxis_title="ROI (%)", xaxis_title="Klant", paper_bgcolor='#111827', plot_bgcolor='#111827', font=dict(color='#E0E0E0'))
-st.plotly_chart(fig_bottom5, use_container_width=True)
+# --- CHARTS ---
+st.subheader("📊 Inzichten")
+tabs = st.tabs(["Status", "Topklanten", "Uren & Omzet", "Treemap", "Cumulatief"])
 
-st.markdown("---")
+with tabs[0]:
+    st.markdown("**🔄 Projectstatus (Fase)**")
+    fase_counts = df_projects["phase_searchname"].value_counts().reset_index()
+    fase_counts.columns = ["Fase", "Aantal"]
+    fig1 = px.bar(fase_counts, x="Fase", y="Aantal", title="Aantal projecten per fase")
+    st.plotly_chart(fig1, use_container_width=True)
 
-# Forecasting omzet voor de komende 6 maanden
-st.subheader("🔮 Omzet Forecast (6 maanden)")
-months = pd.date_range(start=pd.Timestamp.today(), periods=6, freq='M').strftime('%b %Y')
-forecast_omzet = total_omzet * (1 + np.cumsum(np.random.normal(0.02, 0.01, 6)))
-df_forecast = pd.DataFrame({"Maand": months, "Forecast Omzet": forecast_omzet})
-fig_forecast = px.line(df_forecast, x="Maand", y="Forecast Omzet", markers=True)
-fig_forecast.update_layout(yaxis_title="Omzet (€)", xaxis_title="Maand", paper_bgcolor='#111827', plot_bgcolor='#111827', font=dict(color='#E0E0E0'))
-st.plotly_chart(fig_forecast, use_container_width=True)
+with tabs[1]:
+    st.markdown("**💼 Top 5 Klanten op Opbrengst**")
+    omzet_per_klant = df_projects.groupby("company_searchname")["werkelijke_opbrengst"].sum().nlargest(5).reset_index()
+    omzet_per_klant.columns = ["Klant", "Opbrengst"]
+    fig2 = px.bar(omzet_per_klant, x="Opbrengst", y="Klant", orientation='h', title="Top 5 Klanten (opbrengst uit projectlines)")
+    totaal_opbrengst = omzet_per_klant["Opbrengst"].sum()
+    st.metric("📊 Totaal Opbrengst Top 5", f"€ {totaal_opbrengst:,.2f}")
+    st.plotly_chart(fig2, use_container_width=True)
 
-st.markdown("---")
+with tabs[2]:
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("**📈 Uren per Maand**")
+        df_uren["maand"] = pd.to_datetime(df_uren["date_date"]).dt.to_period("M").astype(str)
+        uren_per_maand = df_uren.groupby("maand")["amount"].sum().reset_index()
+        fig3 = px.line(uren_per_maand, x="maand", y="amount", title="Gewerkte uren per maand")
+        st.plotly_chart(fig3, use_container_width=True)
+    with col2:
+        st.markdown("**📉 Omzettrend per Maand**")
+        df_projects["maand"] = pd.to_datetime(df_projects["startdate_date"]).dt.to_period("M").astype(str)
+        omzet_per_maand = df_projects.groupby("maand")["totalexclvat"].sum().reset_index()
+        fig4 = px.line(omzet_per_maand, x="maand", y="totalexclvat", title="Omzet per maand")
+        st.plotly_chart(fig4, use_container_width=True)
 
-# Workload heatmap simulatie per teamlid en week
-st.subheader("📅 Team Workload Heatmap")
-teamleden = ["Jansen", "De Vries", "Meijer", "Smit", "Bakker"]
-weken = [f"Wk {i}" for i in range(1, 13)]
-workload = np.random.randint(40, 120, size=(len(teamleden), len(weken)))
-df_workload = pd.DataFrame(workload, index=teamleden, columns=weken)
-fig_heatmap = px.imshow(df_workload, color_continuous_scale='Viridis', labels=dict(x="Week", y="Teamlid", color="Workload (%)"))
-fig_heatmap.update_layout(paper_bgcolor='#111827', plot_bgcolor='#111827', font=dict(color='#E0E0E0'))
-st.plotly_chart(fig_heatmap, use_container_width=True)
+with tabs[3]:
+    st.markdown("**📦 Omzet per klant als treemap**")
+    omzet_per_klant_treemap = df_projects.groupby("company_searchname", as_index=False)["werkelijke_opbrengst"].sum()
+    fig5 = px.treemap(omzet_per_klant_treemap, path=["company_searchname"], values="werkelijke_opbrengst", title="📦 Verdeling opbrengst per klant (treemap)")
+    st.plotly_chart(fig5, use_container_width=True)
 
-st.markdown("---")
+with tabs[4]:
+    st.markdown("**📈 Cumulatieve omzetgroei door het jaar**")
+    df_projects["startdate"] = pd.to_datetime(df_projects["startdate_date"])
+    df_projects['jaar'] = df_projects['startdate'].dt.year
+    df_projects['maand'] = df_projects['startdate'].dt.to_period('M').astype(str)
+    omzet_growth = df_projects.groupby('maand')["werkelijke_opbrengst"].sum().cumsum().reset_index()
+    fig6 = px.area(omzet_growth, x="maand", y="werkelijke_opbrengst", title="📈 Cumulatieve omzetgroei door het jaar")
+    st.plotly_chart(fig6, use_container_width=True)
 
-# AI Recommendations (simulated)
-st.subheader("🤖 AI Aanbevelingen")
-recommendations = [
-    "Focus op klanten met gemiddelde ROI voor upsell kansen.",
-    "Onderzoek oorzaken van negatieve ROI bij Klant E en Klant Q.",
-    "Optimaliseer teamcapaciteit om overbelasting te voorkomen.",
-    "Investeer in marketingcampagnes gericht op top 5 klanten.",
-    "Plan kwartaalbijeenkomsten voor kennisdeling binnen het team."
-]
-for rec in recommendations:
-    st.info(rec)
 
-st.markdown("---")
+# --- PROJECTOVERZICHT MET FILTERS ---
+with st.expander("📁 Projectoverzicht en filters", expanded=True):
+    klant_filter = st.multiselect("Klant", options=df_projects["company_searchname"].unique())
+    fase_filter = st.multiselect("Fase", options=df_projects["phase_searchname"].unique())
+    datum_filter = st.date_input("Startdatum vanaf", value=None)
 
-# Footer
-st.markdown("""
-<footer style='text-align:center; padding:10px; color:#888;'>
-    <hr>
-    <p>© 2024 Dunion - KPI Dashboard. Alle rechten voorbehouden.</p>
-</footer>
-""", unsafe_allow_html=True)
+    filtered_df = df_projects.copy()
+    if klant_filter:
+        filtered_df = filtered_df[filtered_df["company_searchname"].isin(klant_filter)]
+    if fase_filter:
+        filtered_df = filtered_df[filtered_df["phase_searchname"].isin(fase_filter)]
+    if datum_filter:
+        filtered_df = filtered_df[pd.to_datetime(filtered_df["startdate_date"]) >= pd.to_datetime(datum_filter)]
+
+    st.dataframe(filtered_df[["name", "company_searchname", "phase_searchname", "startdate_date", "totalexclvat"]])
+
+
+st.subheader("📋 Projectregels per bedrijf")
+
+bedrijf_namen = df_companies["companyname"].sort_values().unique().tolist()
+gekozen_bedrijf = st.selectbox("📌 Selecteer een bedrijf om de projectlines te bekijken", bedrijf_namen)
+
+bedrijf_info = df_companies[df_companies["companyname"] == gekozen_bedrijf].iloc[0]
+bedrijf_id = bedrijf_info["id"]
+
+projectlines = df_projectlines[df_projectlines["bedrijf_id"] == bedrijf_id]
+
+if not projectlines.empty:
+    st.write(f"### 📂 Projectlines voor bedrijf: {gekozen_bedrijf} (ID: {bedrijf_id})")
+
+    display_cols = ["offerprojectbase_id", "searchname", "sellingprice", "amountwritten", "werkelijke_opbrengst"]
+    projectlines_display = projectlines[display_cols].copy()
+    projectlines_display["offerprojectbase_id"] = projectlines_display["offerprojectbase_id"].astype(str)
+
+    projectlines_display["sellingprice"] = pd.to_numeric(projectlines_display["sellingprice"], errors="coerce").round(2)
+    projectlines_display["amountwritten"] = pd.to_numeric(projectlines_display["amountwritten"], errors="coerce").round(2)
+    projectlines_display["werkelijke_opbrengst"] = pd.to_numeric(projectlines_display["werkelijke_opbrengst"], errors="coerce").round(2)
+
+    # Voeg totalen toe
+    sellingprice_sum = pd.to_numeric(projectlines["sellingprice"], errors="coerce").sum()
+    amountwritten_sum = pd.to_numeric(projectlines["amountwritten"], errors="coerce").sum()
+    werkelijke_opbrengst_sum = pd.to_numeric(projectlines["werkelijke_opbrengst"], errors="coerce").sum()
+
+    total_row = pd.DataFrame({
+        "offerprojectbase_id": ["TOTAAL"],
+        "searchname": ["TOTAAL"],
+        "sellingprice": [round(sellingprice_sum, 2)],
+        "amountwritten": [round(amountwritten_sum, 2)],
+        "werkelijke_opbrengst": [round(werkelijke_opbrengst_sum, 2)]
+    })
+
+    projectlines_display = pd.concat([projectlines_display, total_row], ignore_index=True)
+
+    # Zorg dat alle kolommen tekst zijn waar nodig om serialization errors te vermijden
+    projectlines_display["offerprojectbase_id"] = projectlines_display["offerprojectbase_id"].astype(str)
+    projectlines_display["searchname"] = projectlines_display["searchname"].astype(str)
+
+    # Sorteer op werkelijke_opbrengst aflopend
+    projectlines_display = projectlines_display.sort_values(by="werkelijke_opbrengst", ascending=False)
+
+    st.dataframe(projectlines_display, use_container_width=True)
+else:
+    st.info("Geen projectregels gevonden voor dit bedrijf.")
