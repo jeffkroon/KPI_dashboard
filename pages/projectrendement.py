@@ -1,14 +1,13 @@
 import streamlit as st
 import pandas as pd
 import os
-import shap
+import openai
 import plotly.express as px
 import altair as alt
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
-from xgboost import XGBRegressor
 from sklearn.ensemble import RandomForestRegressor
 import matplotlib.pyplot as plt
 importances_df = None
@@ -113,7 +112,6 @@ col2.metric("Mediaan rendement per uur", f"€ {mediaan_rendement}")
 col3.metric(f"Aantal bedrijven < €{ondergrens}", f"{aantal_slecht}")
 
 # Horizontale bar chart van rendement per uur per bedrijf
-st.markdown("### 📈 Vergelijking rendement per uur per bedrijf")
 fig = px.bar(
     df_rend,
     x="rendement_per_uur",
@@ -357,27 +355,6 @@ if verschil > 0:
     st.success("✅ Huidige opbrengst voldoet al aan deze ROI-eis.")
 
 
-# === EXTRA ADVANCED AI-MODULES (EXPERIMENTEEL) ===
-st.markdown("### 🧠 Experimentele AI-analyse – alternatieve modellen")
-
-st.markdown("#### 1. XGBoost Regressie")
-st.write("Gebruik een krachtiger regressiemodel voor nauwkeuriger voorspelling van ROI.")
-
-
-model_xgb = XGBRegressor(n_estimators=100, learning_rate=0.1, random_state=42)
-model_xgb.fit(X, y)
-roi_pred_xgb = model_xgb.predict(X_sim)[0]
-st.metric("📈 XGBoost ROI-voorspelling", f"{roi_pred_xgb:.2f}")
-
-st.markdown("#### 2. SHAP Feature-Uitleg")
-
-explainer = shap.Explainer(model_xgb)
-shap_values = explainer(X)
-
-with st.expander("Toon SHAP-feature importance (voor geselecteerd bedrijf)"):
-    shap.initjs()
-    st_shap_plot = shap.plots.waterfall(shap_values[0], show=False)
-    st.pyplot(st_shap_plot.figure)
 
 st.markdown("#### 3. Clustering van bedrijven op basis van prestaties")
 from sklearn.preprocessing import StandardScaler
@@ -395,15 +372,44 @@ fig_cluster = px.scatter_3d(
 )
 st.plotly_chart(fig_cluster, use_container_width=True)
 
-st.markdown("#### 4. AutoML met FLAML")
-st.write("Laat een AutoML-engine het beste regressiemodel kiezen (werkt traag bij grote datasets).")
+ 
+# === AI-adviseur: automatisch gegenereerd advies per bedrijf op basis van prestaties ===
+st.markdown("### 🧠 AI-adviseur: Automatisch gegenereerd advies per bedrijf")
 
-try:
-    from flaml import AutoML
-    automl = AutoML()
-    automl.fit(X, y, task="regression", time_budget=15)
-    X_sim_df = pd.DataFrame([[sim_uren, sim_opbrengst]], columns=["totaal_uren", "verwachte_opbrengst"])
-    roi_automl = automl.predict(X_sim_df)[0]
-    st.metric("🤖 AutoML ROI-voorspelling", f"{roi_automl:.2f}")
-except Exception as e:
-    st.warning(f"AutoML kon niet uitgevoerd worden: {e}")
+bedrijf_advies = st.selectbox("📌 Kies een bedrijf voor advies", aggregatie_per_bedrijf["bedrijf_naam"].dropna().unique())
+
+bedrijf_info = aggregatie_per_bedrijf[aggregatie_per_bedrijf["bedrijf_naam"] == bedrijf_advies].iloc[0]
+
+advies_prompt = f"""
+Je bent een zakelijke AI-consultant. Geef beknopt maar concreet advies voor het volgende bedrijf:
+- Naam: {bedrijf_advies}
+- Totaal bestede uren: {bedrijf_info['totaal_uren']}
+- Werkelijke opbrengst: €{bedrijf_info['werkelijke_opbrengst']:.2f}
+- Verwachte opbrengst: €{bedrijf_info['verwachte_opbrengst']:.2f}
+- ROI-ratio: {bedrijf_info['ROI_ratio']:.2f}
+- Rendement per uur: €{bedrijf_info['rendement_per_uur']:.2f}
+- % tijdsbesteding: {bedrijf_info['% tijdsbesteding']}%
+
+Geef suggesties over klantprioriteit, verbeterpotentieel, tariefoptimalisatie of workloadplanning. Houd het zakelijk en feitelijk.
+"""
+
+
+
+def genereer_advies(prompt):
+    openai.api_key = os.getenv("OPENAI_API_KEY")
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "Je bent een zakelijke AI-consultant die kort, feitelijk en strategisch advies geeft op basis van inputdata."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.4,
+            max_tokens=250
+        )
+        return response["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        return f"⚠️ Fout bij ophalen van AI-advies: {e}"
+
+advies_output = genereer_advies(advies_prompt)
+st.info(advies_output)
