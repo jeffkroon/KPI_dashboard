@@ -1,15 +1,17 @@
 import streamlit as st
 import pandas as pd
 import os
-import openai
 import plotly.express as px
 import altair as alt
+from openai import OpenAI
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 from sklearn.ensemble import RandomForestRegressor
 import matplotlib.pyplot as plt
+from dotenv import load_dotenv
+load_dotenv()
 importances_df = None
 
 st.logo("images/dunion-logo-def_donker-06.png")
@@ -35,7 +37,6 @@ from datetime import datetime
 load_dotenv()
 POSTGRES_URL = os.getenv("POSTGRES_URL")
 engine = create_engine(POSTGRES_URL)
-
 df_projects = load_data("projects")
 df_projectlines = load_data("projectlines_per_company")
 bedrijf_namen = df_projectlines[["bedrijf_id", "bedrijf_naam"]].drop_duplicates()
@@ -394,22 +395,21 @@ Geef suggesties over klantprioriteit, verbeterpotentieel, tariefoptimalisatie of
 """
 
 
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def genereer_advies(prompt):
-    openai.api_key = os.getenv("OPENAI_API_KEY")
     try:
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-4",
             messages=[
                 {"role": "system", "content": "Je bent een zakelijke AI-consultant die kort, feitelijk en strategisch advies geeft op basis van inputdata."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.4,
-            max_tokens=250
+            max_tokens=500
         )
-        return response["choices"][0]["message"]["content"].strip()
+        return response.choices[0].message.content.strip()
     except Exception as e:
         return f"⚠️ Fout bij ophalen van AI-advies: {e}"
-
 advies_output = genereer_advies(advies_prompt)
 st.info(advies_output)
