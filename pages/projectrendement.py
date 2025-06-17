@@ -84,6 +84,7 @@ df_rend = df_rend.sort_values("rendement_per_uur", ascending=False)
 # KPI-cards: top 3 bedrijven met hoogste rendement per uur
 st.markdown("### 🥇 Top 3 bedrijven op basis van rendement per uur")
 cols = st.columns(3)
+# Let op: afronden alleen bij presentatie, niet in berekening!
 for i, (_, row) in enumerate(df_rend.head(3).iterrows()):
     cols[i].metric(
         label=f"{row['bedrijf_naam']}",
@@ -94,6 +95,7 @@ for i, (_, row) in enumerate(df_rend.head(3).iterrows()):
 st.markdown("### 🛑 Bottom 10 bedrijven op basis van rendement per uur")
 df_bottom_10 = df_rend.nsmallest(10, "rendement_per_uur")[["bedrijf_naam", "totaal_uren", "werkelijke_opbrengst", "rendement_per_uur"]]
 df_bottom_10.columns = ["Bedrijf", "Totaal Uren", "Opbrengst", "Rendement per Uur"]
+# Alleen afronden in presentatie, niet in data!
 st.dataframe(df_bottom_10.style.format({
     "Totaal Uren": "{:.1f}",
     "Opbrengst": "€ {:.2f}",
@@ -101,15 +103,16 @@ st.dataframe(df_bottom_10.style.format({
 }), use_container_width=True)
 
 # Extra inzichten: gemiddeld rendement, mediaan, en aantal bedrijven onder drempel
-gemiddeld_rendement = df_rend["rendement_per_uur"].mean().round(2)
-mediaan_rendement = round(df_rend["rendement_per_uur"].median(), 2)
+gemiddeld_rendement = df_rend["rendement_per_uur"].mean()
+mediaan_rendement = df_rend["rendement_per_uur"].median()
 ondergrens = 75  # drempelrendement, aanpasbaar
 aantal_slecht = (df_rend["rendement_per_uur"] < ondergrens).sum()
 
 st.markdown("### 📌 Extra Inzichten over Bedrijfsrendement")
 col1, col2, col3 = st.columns(3)
-col1.metric("Gemiddeld rendement per uur", f"€ {gemiddeld_rendement}")
-col2.metric("Mediaan rendement per uur", f"€ {mediaan_rendement}")
+# Alleen afronden bij presentatie, niet in berekening!
+col1.metric("Gemiddeld rendement per uur", f"€ {gemiddeld_rendement:.2f}")
+col2.metric("Mediaan rendement per uur", f"€ {mediaan_rendement:.2f}")
 col3.metric(f"Aantal bedrijven < €{ondergrens}", f"{aantal_slecht}")
 
 # Horizontale bar chart van rendement per uur per bedrijf
@@ -125,7 +128,12 @@ fig = px.bar(
 fig.update_layout(yaxis={'categoryorder': 'total ascending'}, margin={'l': 150})
 
 st.markdown("### 🧾 Volledige rendementstabel")
-st.dataframe(df_rend, use_container_width=True)
+# Alleen afronden bij presentatie, niet in data!
+st.dataframe(df_rend.style.format({
+    "totaal_uren": "{:.1f}",
+    "werkelijke_opbrengst": "€ {:.2f}",
+    "rendement_per_uur": "€ {:.2f}"
+}), use_container_width=True)
 
 # === VISUELE PLOT VAN RISICOCATEGORIEËN ===
 # Removed visual risk analysis section per instructions
@@ -196,6 +204,7 @@ aggregatie_per_bedrijf = aggregatie_per_bedrijf[
 st.markdown("### 🧮 Extra KPI's")
 
 col1, col2 = st.columns(2)
+# Alleen afronden bij presentatie, niet in data!
 col1.metric("Totale bestede uren", f"{totale_uren_all:.0f} uur")
 roi_gem = aggregatie_per_bedrijf["ROI_ratio"].mean()
 col2.metric("Gemiddelde ROI-ratio", f"{roi_gem:.2f}")
@@ -205,7 +214,14 @@ col2.metric("Gemiddelde ROI-ratio", f"{roi_gem:.2f}")
 st.markdown("### 📋 Bedrijven met % tijdsbesteding en ROI-ratio")
 df_extra = aggregatie_per_bedrijf[["bedrijf_naam", "totaal_uren", "% tijdsbesteding", "werkelijke_opbrengst", "verwachte_opbrengst", "ROI_ratio"]]
 df_extra = df_extra.dropna(subset=["ROI_ratio"])
-st.dataframe(df_extra.sort_values("ROI_ratio", ascending=True), use_container_width=True)
+# Alleen afronden bij presentatie, niet in data!
+st.dataframe(df_extra.sort_values("ROI_ratio", ascending=True).style.format({
+    "totaal_uren": "{:.1f}",
+    "% tijdsbesteding": "{:.1f}",
+    "werkelijke_opbrengst": "€ {:.2f}",
+    "verwachte_opbrengst": "€ {:.2f}",
+    "ROI_ratio": "{:.2f}"
+}), use_container_width=True)
 
  # === Urenverdeling per bedrijf (percentage van totale uren) ===
 st.markdown("### ⏳ Urenverdeling per bedrijf")
@@ -289,6 +305,7 @@ bedrijf_data = aggregatie_per_bedrijf[aggregatie_per_bedrijf["bedrijf_naam"] == 
 default_uren = int(bedrijf_data["totaal_uren"])
 default_opbrengst = int(bedrijf_data["verwachte_opbrengst"])
 
+# Alleen afronden bij presentatie, niet in data!
 sim_uren = st.number_input("⚙️ Stel totaal bestede uren in", min_value=1, value=default_uren)
 sim_opbrengst = st.number_input("💰 Stel verwachte opbrengst in (€)", min_value=1, value=default_opbrengst)
 
@@ -352,7 +369,7 @@ st.write(f"🔍 Om een ROI van {desired_roi:.1f} te halen bij {sim_uren} uur, is
 if verschil > 0:
     stijging_pct = verschil / huidige_opbrengst * 100
     st.warning(f"→ Dat is een stijging van €{verschil:.0f} (+{stijging_pct:.1f}%) t.o.v. huidige opbrengst.")
-
+else:
     st.success("✅ Huidige opbrengst voldoet al aan deze ROI-eis.")
 
 
@@ -384,12 +401,12 @@ bedrijf_info = aggregatie_per_bedrijf[aggregatie_per_bedrijf["bedrijf_naam"] == 
 advies_prompt = f"""
 Je bent een zakelijke AI-consultant. Geef beknopt maar concreet advies voor het volgende bedrijf:
 - Naam: {bedrijf_advies}
-- Totaal bestede uren: {bedrijf_info['totaal_uren']}
+- Totaal bestede uren: {bedrijf_info['totaal_uren']:.1f}
 - Werkelijke opbrengst: €{bedrijf_info['werkelijke_opbrengst']:.2f}
 - Verwachte opbrengst: €{bedrijf_info['verwachte_opbrengst']:.2f}
 - ROI-ratio: {bedrijf_info['ROI_ratio']:.2f}
 - Rendement per uur: €{bedrijf_info['rendement_per_uur']:.2f}
-- % tijdsbesteding: {bedrijf_info['% tijdsbesteding']}%
+- % tijdsbesteding: {bedrijf_info['% tijdsbesteding']:.1f}%
 
 Geef suggesties over klantprioriteit, verbeterpotentieel, tariefoptimalisatie of workloadplanning. Houd het zakelijk en feitelijk.
 """

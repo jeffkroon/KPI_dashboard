@@ -53,6 +53,13 @@ def get_active_projectlines_for_company(company_name: str) -> pd.DataFrame:
     project_ids = company_projects["id"].tolist()
     matching_lines = projectlines_df[projectlines_df["offerprojectbase_id"].isin(project_ids)]
 
+    # Filter op definitief, normal en fixed invoicebasis
+    matching_lines = matching_lines[
+        (matching_lines["status_searchname"] == "DEFINITIEF") &
+        (matching_lines["rowtype_searchname"] == "NORMAL") &
+        (matching_lines["invoicebasis"] == "FIXED")
+    ]
+
     print(f"✅ Gevonden: {len(matching_lines)} projectlines voor {len(project_ids)} actieve projecten.")
     return matching_lines
 
@@ -470,6 +477,13 @@ def get_projectlines_for_company(company_name: str) -> pd.DataFrame:
     project_ids = company_projects["id"].tolist()
     matching_lines = projectlines_df[projectlines_df["offerprojectbase_id"].isin(project_ids)]
 
+    # Filter op definitief, normal en fixed invoicebasis
+    matching_lines = matching_lines[
+        (matching_lines["status_searchname"] == "DEFINITIEF") &
+        (matching_lines["rowtype_searchname"] == "NORMAL") &
+        (matching_lines["invoicebasis"] == "FIXED")
+    ]
+
     if matching_lines.empty:
         print(f"⚠️ Geen projectlines gevonden voor projecten van '{company_name}'.")
     else:
@@ -480,23 +494,23 @@ def get_projectlines_for_company(company_name: str) -> pd.DataFrame:
     return matching_lines
 
 def calculate_total_costs_per_task_type(projectlines: list) -> dict:
-    """
-    Berekent de totale kosten per 'product_searchname' (soort taak) op basis van de projectlines.
-    Returnt een dictionary met taaknaam als key en totaalprijs als value.
-    """
+    # Helperfunctie voor het berekenen van totale kosten per taaktype
     from collections import defaultdict
-
     total_per_task = defaultdict(float)
 
     for line in projectlines:
         try:
-            if line.get("rowtype_searchname") == "NORMAAL":
+            if (
+                line.get("rowtype_searchname") == "NORMAL"
+                and line.get("status_searchname") == "DEFINITIEF"
+                and line.get("invoicebasis") == "FIXED"
+            ):
                 task = line.get("product_searchname", "Onbekend")
                 amount = float(line.get("amountwritten", 0))
                 price = float(line.get("sellingprice", 0))
                 total_per_task[task] += amount * price
         except (TypeError, ValueError):
-            continue  # Foute data overslaan
+            continue
 
     return dict(total_per_task)
 
@@ -509,13 +523,22 @@ def print_total_costs_per_tasktype_for_company(company_name: str):
 
     kosten_per_taak = calculate_total_costs_per_task_type(lines.to_dict(orient="records"))
     kosten_df = pd.DataFrame([
-        {"tasktype": taak, "total_cost": kosten}
+        {"tasktype": taak, "total_cost": round(float(kosten), 2)}
         for taak, kosten in kosten_per_taak.items()
     ]).sort_values(by="total_cost", ascending=False)
 
     print(f"\n💰 Totale kosten per soort taak voor '{company_name}':")
     print(kosten_df.to_string(index=False))
     return kosten_df
+
+
+# Helper function for debugging unique values
+def log_unique_values(df: pd.DataFrame, columns: list):
+    for col in columns:
+        if col in df.columns:
+            print(f"Unieke waarden in '{col}': {df[col].unique()}\n")
+        else:
+            print(f"Kolom '{col}' bestaat niet in de dataset.\n")
 
 
 def collect_projectlines_per_company(companies_df: pd.DataFrame, projects_df: pd.DataFrame, projectlines_df: pd.DataFrame) -> pd.DataFrame:

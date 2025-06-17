@@ -5,6 +5,9 @@ from sqlalchemy import create_engine
 import os
 from dotenv import load_dotenv
 from datetime import datetime
+
+pd.set_option('future.no_silent_downcasting', True)
+
 # --- SETUP ---
 load_dotenv()
 POSTGRES_URL = os.getenv("POSTGRES_URL")
@@ -15,10 +18,12 @@ st.set_page_config(
     page_icon="images/dunion-logo-def_donker-06.png",
     layout="wide",
     initial_sidebar_state="expanded")
+
 try:
     from streamlit_extras.metric_cards import style_metric_cards
 except ImportError:
     st.warning("📛 'streamlit-extras' is niet geïnstalleerd of niet vindbaar door je environment.")
+
 st.logo("images/dunion-logo-def_donker-06.png")
 st.title("Dunion KPI Dashboard – Overzicht")
 
@@ -29,37 +34,44 @@ def load_data(table_name):
     return pd.read_sql(query, con=engine)
 
 df_projects = load_data("projects")
-# Exclude archived projects
 df_projects = df_projects[df_projects["archived"] != True]
 df_projects["totalexclvat"] = pd.to_numeric(df_projects["totalexclvat"], errors="coerce")
+df_projects["startdate_date"] = pd.to_datetime(df_projects["startdate_date"], errors="coerce")
+df_projects["enddate_date"] = pd.to_datetime(df_projects["enddate_date"], errors="coerce")
+
 df_employees = load_data("employees")
 df_companies = load_data("companies")
 df_uren = load_data("urenregistratie")
 df_projectlines = load_data("projectlines_per_company")
-# Filter verborgen regels uit df_projectlines
-#df_projectlines = df_projectlines[df_projectlines["hidefortimewriting"].fillna(False) != True]
-# Debug: Toon aantal verborgen regels
 
-# Filter enkel projectlines van actieve projecten en met rowtype 'NORMAAL'
+# Filter alleen projectlines voor actieve projecten en rowtype 'NORMAAL'
 active_project_ids = df_projects["id"].tolist()
 df_projectlines = df_projectlines[df_projectlines["offerprojectbase_id"].isin(active_project_ids)]
 df_projectlines = df_projectlines[df_projectlines["rowtype_searchname"] == "NORMAAL"]
 
-df_projectlines["amountwritten"] = pd.to_numeric(df_projectlines["amountwritten"], errors="coerce")
+# Zet numerieke kolommen om naar numeriek (float)
+for col in ["amountwritten", "sellingprice"]:
+    df_projectlines.loc[:, col] = pd.to_numeric(df_projectlines[col], errors="coerce")
 
-# Bereken omzet én uren per bedrijf op basis van projectlines
-df_projectlines["werkelijke_opbrengst"] = pd.to_numeric(df_projectlines["sellingprice"], errors="coerce") * df_projectlines["amountwritten"]
+# Bereken werkelijke opbrengst zonder afronding
+df_projectlines.loc[:, "werkelijke_opbrengst"] = df_projectlines["sellingprice"] * df_projectlines["amountwritten"]
+
+# Aggregatie per bedrijf
 aggregatie_per_bedrijf = df_projectlines.groupby("bedrijf_id").agg({
     "werkelijke_opbrengst": "sum",
     "amountwritten": "sum"
 }).reset_index()
 aggregatie_per_bedrijf.columns = ["bedrijf_id", "werkelijke_opbrengst", "totaal_uren"]
 
-# Voeg werkelijke omzet toe aan projects via een merge
+# Merge met projecten en vul NaN's op met 0
 df_projects = df_projects.merge(aggregatie_per_bedrijf, left_on="company_id", right_on="bedrijf_id", how="left")
-df_projects["werkelijke_opbrengst"] = df_projects["werkelijke_opbrengst"].fillna(0)
-df_projects["totaal_uren"] = df_projects["totaal_uren"].fillna(0)
 
+# Vul NaN met 0 en converteer naar numeriek met infer_objects(copy=False)
+# voor werkelijke_opbrengst
+df_projects["werkelijke_opbrengst"] = df_projects["werkelijke_opbrengst"].fillna(0).infer_objects(copy=False)
+
+# voor totaal_uren
+df_projects["totaal_uren"] = df_projects["totaal_uren"].fillna(0).infer_objects(copy=False)
 
 # --- KPI CARDS ---
 kpi_section = st.container()
@@ -76,33 +88,33 @@ with kpi_section:
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         actieve_projecten = df_projects[df_projects["enddate_date"].isna()].shape[0]
-        st.metric(label="📁 Actieve Projecten", value=actieve_projecten, delta=None, delta_color="normal", help=None, label_visibility="visible")
+        st.metric(label="📁 Actieve Projecten", value=actieve_projecten)
     with col2:
         huidig_jaar = datetime.now().year
-        df_projects["startdate_dt"] = pd.to_datetime(df_projects["startdate_date"], errors="coerce")
+        df_projects.loc[:, "startdate_dt"] = pd.to_datetime(df_projects["startdate_date"], errors="coerce")
         projecten_dit_jaar = df_projects[df_projects["startdate_dt"].dt.year == huidig_jaar].shape[0]
         st.metric("📅 Projecten dit jaar", projecten_dit_jaar)
     with col3:
-        uren = f"{df_projects['totaal_uren'].sum():.0f} uur"
-        st.metric(label="⌛ Gewerkte Uren", value=uren, delta=None, delta_color="normal", help=None, label_visibility="visible")
+        uren = f"{df_projects['totaal_uren'].sum():.2f} uur"
+        st.metric(label="⌛ Gewerkte Uren", value=uren)
     with col4:
         actieve_medewerkers = df_employees[df_employees["active"] == True].shape[0]
-        st.metric(label="🧑 Actieve Medewerkers", value=actieve_medewerkers, delta=None, delta_color="normal", help=None, label_visibility="visible")
+        st.metric(label="🧑 Actieve Medewerkers", value=actieve_medewerkers)
 
 extra_kpis = st.container()
 with extra_kpis:
     kpi5, kpi6 = st.columns(2)
     with kpi5:
         if not df_projects.empty:
-            topklant_row = df_projects.groupby("company_searchname")["werkelijke_opbrengst"].sum().idxmax()
-            topklant_omzet = df_projects.groupby("company_searchname")["werkelijke_opbrengst"].sum().max()
+            topklant_omzet_series = df_projects.groupby("company_searchname")["werkelijke_opbrengst"].sum()
+            topklant_row = topklant_omzet_series.idxmax()
+            topklant_omzet = topklant_omzet_series.max()
             st.metric("👑 Topklant Omzet", topklant_row, f"€ {topklant_omzet:,.2f}")
         else:
             st.metric("👑 Topklant Omzet", "N/A", "€ 0.00")
     with kpi6:
         totale_opbrengst = f"€ {df_projects['werkelijke_opbrengst'].sum():,.2f}"
-        st.metric(label="💰 Totale Opbrengst", value=totale_opbrengst, delta=None, delta_color="normal", help=None, label_visibility="visible")
-
+        st.metric(label="💰 Totale Opbrengst", value=totale_opbrengst)
 
 # --- CHARTS ---
 st.subheader("📊 Inzichten")
@@ -128,13 +140,14 @@ with tabs[2]:
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("**📈 Uren per Maand**")
-        df_uren["maand"] = pd.to_datetime(df_uren["date_date"]).dt.to_period("M").astype(str)
+        df_uren.loc[:, "amount"] = df_uren["amount"].fillna(0).infer_objects(copy=False)
+        df_uren.loc[:, "maand"] = pd.to_datetime(df_uren["date_date"], errors="coerce").dt.to_period("M").astype(str)
         uren_per_maand = df_uren.groupby("maand")["amount"].sum().reset_index()
         fig3 = px.line(uren_per_maand, x="maand", y="amount", title="Gewerkte uren per maand")
         st.plotly_chart(fig3, use_container_width=True)
     with col2:
         st.markdown("**📉 Omzettrend per Maand**")
-        df_projects["maand"] = pd.to_datetime(df_projects["startdate_date"]).dt.to_period("M").astype(str)
+        df_projects.loc[:, "maand"] = pd.to_datetime(df_projects["startdate_date"], errors="coerce").dt.to_period("M").astype(str)
         omzet_per_maand = df_projects.groupby("maand")["totalexclvat"].sum().reset_index()
         fig4 = px.line(omzet_per_maand, x="maand", y="totalexclvat", title="Omzet per maand")
         st.plotly_chart(fig4, use_container_width=True)
@@ -147,9 +160,9 @@ with tabs[3]:
 
 with tabs[4]:
     st.markdown("**📈 Cumulatieve omzetgroei door het jaar**")
-    df_projects["startdate"] = pd.to_datetime(df_projects["startdate_date"])
-    df_projects['jaar'] = df_projects['startdate'].dt.year
-    df_projects['maand'] = df_projects['startdate'].dt.to_period('M').astype(str)
+    df_projects.loc[:, "startdate"] = pd.to_datetime(df_projects["startdate_date"], errors="coerce")
+    df_projects.loc[:, 'jaar'] = df_projects['startdate'].dt.year
+    df_projects.loc[:, 'maand'] = df_projects['startdate'].dt.to_period('M').astype(str)
     omzet_growth = df_projects.groupby('maand')["werkelijke_opbrengst"].sum().cumsum().reset_index()
     fig6 = px.area(omzet_growth, x="maand", y="werkelijke_opbrengst", title="📈 Cumulatieve omzetgroei door het jaar")
     st.plotly_chart(fig6, use_container_width=True)
@@ -157,8 +170,8 @@ with tabs[4]:
 
 # --- PROJECTOVERZICHT MET FILTERS ---
 with st.expander("📁 Projectoverzicht en filters", expanded=True):
-    klant_filter = st.multiselect("Klant", options=df_projects["company_searchname"].unique())
-    fase_filter = st.multiselect("Fase", options=df_projects["phase_searchname"].unique())
+    klant_filter = st.multiselect("Klant", options=df_projects["company_searchname"].dropna().unique())
+    fase_filter = st.multiselect("Fase", options=df_projects["phase_searchname"].dropna().unique())
     datum_filter = st.date_input("Startdatum vanaf", value=None)
 
     filtered_df = df_projects.copy()
@@ -169,12 +182,13 @@ with st.expander("📁 Projectoverzicht en filters", expanded=True):
     if datum_filter:
         filtered_df = filtered_df[pd.to_datetime(filtered_df["startdate_date"]) >= pd.to_datetime(datum_filter)]
 
-    st.dataframe(filtered_df[["name", "company_searchname", "phase_searchname", "startdate_date", "totalexclvat"]])
+    display_cols = ["name", "company_searchname", "phase_searchname", "startdate_date", "totalexclvat"]
+    st.dataframe(filtered_df[display_cols])
 
 
 st.subheader("📋 Projectregels per bedrijf")
 
-bedrijf_namen = df_companies["companyname"].sort_values().unique().tolist()
+bedrijf_namen = df_companies["companyname"].dropna().sort_values().unique().tolist()
 gekozen_bedrijf = st.selectbox("📌 Selecteer een bedrijf om de projectlines te bekijken", bedrijf_namen)
 
 bedrijf_info = df_companies[df_companies["companyname"] == gekozen_bedrijf].iloc[0]
@@ -187,33 +201,33 @@ if not projectlines.empty:
 
     display_cols = ["offerprojectbase_id", "searchname", "sellingprice", "amountwritten", "werkelijke_opbrengst"]
     projectlines_display = projectlines[display_cols].copy()
+
+    # Zorg dat offerprojectbase_id ALLEEN strings bevat vóór toevoegen totaalrij
     projectlines_display["offerprojectbase_id"] = projectlines_display["offerprojectbase_id"].astype(str)
 
-    projectlines_display["sellingprice"] = pd.to_numeric(projectlines_display["sellingprice"], errors="coerce").round(2)
-    projectlines_display["amountwritten"] = pd.to_numeric(projectlines_display["amountwritten"], errors="coerce").round(2)
-    projectlines_display["werkelijke_opbrengst"] = pd.to_numeric(projectlines_display["werkelijke_opbrengst"], errors="coerce").round(2)
-
-    # Voeg totalen toe
-    sellingprice_sum = pd.to_numeric(projectlines["sellingprice"], errors="coerce").sum()
-    amountwritten_sum = pd.to_numeric(projectlines["amountwritten"], errors="coerce").sum()
-    werkelijke_opbrengst_sum = pd.to_numeric(projectlines["werkelijke_opbrengst"], errors="coerce").sum()
-
+    # Voeg totaalrij toe
     total_row = pd.DataFrame({
         "offerprojectbase_id": ["TOTAAL"],
         "searchname": ["TOTAAL"],
-        "sellingprice": [round(sellingprice_sum, 2)],
-        "amountwritten": [round(amountwritten_sum, 2)],
-        "werkelijke_opbrengst": [round(werkelijke_opbrengst_sum, 2)]
+        "sellingprice": [projectlines_display["sellingprice"].sum()],
+        "amountwritten": [projectlines_display["amountwritten"].sum()],
+        "werkelijke_opbrengst": [projectlines_display["werkelijke_opbrengst"].sum()]
     })
 
     projectlines_display = pd.concat([projectlines_display, total_row], ignore_index=True)
 
-    # Zorg dat alle kolommen tekst zijn waar nodig om serialization errors te vermijden
-    projectlines_display["offerprojectbase_id"] = projectlines_display["offerprojectbase_id"].astype(str)
-    projectlines_display["searchname"] = projectlines_display["searchname"].astype(str)
+    # Sorteer op werkelijke_opbrengst aflopend (TOTAAL onderaan)
+    projectlines_display.loc[projectlines_display["offerprojectbase_id"] != "TOTAAL", "werkelijke_opbrengst"] = (
+        projectlines_display.loc[projectlines_display["offerprojectbase_id"] != "TOTAAL", "werkelijke_opbrengst"]
+        .fillna(0)
+        .infer_objects(copy=False)
+    )
+    projectlines_display = projectlines_display.sort_values(by="werkelijke_opbrengst", ascending=False, na_position='last')
 
-    # Sorteer op werkelijke_opbrengst aflopend
-    projectlines_display = projectlines_display.sort_values(by="werkelijke_opbrengst", ascending=False)
+    # Format numerieke kolommen voor weergave, inclusief euroteken bij sellingprice en werkelijke_opbrengst
+    projectlines_display.loc[:, "sellingprice"] = projectlines_display["sellingprice"].apply(lambda x: f"€ {x:,.2f}" if pd.notnull(x) else "")
+    projectlines_display.loc[:, "amountwritten"] = projectlines_display["amountwritten"].apply(lambda x: f"{x:,.2f}" if pd.notnull(x) else "")
+    projectlines_display.loc[:, "werkelijke_opbrengst"] = projectlines_display["werkelijke_opbrengst"].apply(lambda x: f"€ {x:,.2f}" if pd.notnull(x) else "")
 
     st.dataframe(projectlines_display, use_container_width=True)
 else:
