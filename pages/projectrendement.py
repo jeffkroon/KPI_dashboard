@@ -220,6 +220,18 @@ aggregatie_per_bedrijf = aggregatie_per_bedrijf[
 
 st.markdown("### 🧮 Extra KPI's")
 
+# Topbedrijf op basis van hoogste realisatie-ratio
+top_realisatie = aggregatie_per_bedrijf.sort_values("realisatie_ratio", ascending=False).iloc[0]
+st.metric("🏆 Beste realisatie-ratio", f"{top_realisatie['realisatie_ratio']:.2f}", help=f"{top_realisatie['bedrijf_naam']}")
+
+# Topbedrijf op basis van hoogste totale opbrengst
+top_opbrengst = aggregatie_per_bedrijf.sort_values("werkelijke_opbrengst", ascending=False).iloc[0]
+st.metric("💰 Hoogste opbrengst totaal", f"€ {top_opbrengst['werkelijke_opbrengst']:.2f}", help=f"{top_opbrengst['bedrijf_naam']}")
+
+# Topbedrijf op basis van hoogste rendement per uur
+top_rendement = aggregatie_per_bedrijf.sort_values("rendement_per_uur", ascending=False).iloc[0]
+st.metric("⚙️ Hoogste rendement per uur", f"€ {top_rendement['rendement_per_uur']:.2f}", help=f"{top_rendement['bedrijf_naam']}")
+
 # Uitleg over de realisatie-ratio in een expander
 with st.expander("ℹ️ Wat is de realisatie-ratio?"):
     st.markdown("""
