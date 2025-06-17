@@ -108,32 +108,33 @@ with st.spinner("Data wordt geladen, even geduld..."):
     # Initialiseer OpenAI client
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-    # Verstuur prompt en ontvang antwoord
-    response = client.chat.completions.create(
-        model="gpt-4",
-        messages=[
-            {"role": "system", "content": "Je bent een KPI-gedreven business analist."},
-            {"role": "user", "content": prompt}
-        ]
-    )
-
-    ai_advies = response.choices[0].message.content
+    ai_advies = None
+    if st.button("Genereer AI Advies"):
+        response = client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": "Je bent een KPI-gedreven business analist."},
+                {"role": "user", "content": prompt}
+            ]
+        )
+        ai_advies = response.choices[0].message.content
 
 st.markdown("## 🔮 AI Advies gebaseerd op data")
-with st.expander("Bekijk AI analyse en aanbevelingen"):
-    aanbevelingen = [lijn.strip() for lijn in ai_advies.split('\n') if lijn.strip()]
-    filtered_adviezen = []
-    for item in aanbevelingen:
-        if item and len(item) > 1:
-            if item[0].isdigit() and item[1] == '.':
-                filtered_adviezen.append(item[2:].strip())
-            elif item.startswith('-') or item.startswith('*'):
-                filtered_adviezen.append(item[1:].strip())
-            else:
-                filtered_adviezen.append(item)
-    for idx, advies in enumerate(filtered_adviezen):
-        st.markdown(f"### Aanbeveling {idx+1}")
-        st.info(advies)
+if ai_advies:
+    with st.expander("Bekijk AI analyse en aanbevelingen"):
+        aanbevelingen = [lijn.strip() for lijn in ai_advies.split('\n') if lijn.strip()]
+        filtered_adviezen = []
+        for item in aanbevelingen:
+            if item and len(item) > 1:
+                if item[0].isdigit() and item[1] == '.':
+                    filtered_adviezen.append(item[2:].strip())
+                elif item.startswith('-') or item.startswith('*'):
+                    filtered_adviezen.append(item[1:].strip())
+                else:
+                    filtered_adviezen.append(item)
+        for idx, advies in enumerate(filtered_adviezen):
+            st.markdown(f"### Aanbeveling {idx+1}")
+            st.info(advies)
 
 # --- CHATBOT-SECTIE ---
 
