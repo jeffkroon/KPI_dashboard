@@ -7,6 +7,9 @@ import altair as alt
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
+from langchain_experimental.agents import create_pandas_dataframe_agent
+from langchain_community.chat_models import ChatOpenAI
+
 from sklearn.metrics import silhouette_score
 from sklearn.ensemble import RandomForestRegressor
 import matplotlib.pyplot as plt
@@ -14,13 +17,13 @@ from dotenv import load_dotenv
 load_dotenv()
 importances_df = None
 
-st.logo("images/dunion-logo-def_donker-06.png")
 st.set_page_config(
     page_title="Customer-analysis",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded"
 )
+st.logo("images/dunion-logo-def_donker-06.png")
 
 st.title("AI inzichten/uitschieters")
 
@@ -131,3 +134,42 @@ with st.expander("Bekijk AI analyse en aanbevelingen"):
     for idx, advies in enumerate(filtered_adviezen):
         st.markdown(f"### Aanbeveling {idx+1}")
         st.info(advies)
+
+# --- CHATBOT-SECTIE ---
+
+# Laad de chatbot alleen als het dataframe beschikbaar is
+if aggregatie_per_bedrijf is not None and not aggregatie_per_bedrijf.empty:
+    st.markdown("---")
+    st.subheader("🤖 AI Chatbot – Vraag het aan je KPI’s")
+
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
+
+    user_input = st.text_input("Stel een vraag over je klanten, omzet of prestaties:", key="chat_input")
+
+    if "agent" not in st.session_state:
+        # Maak één keer de agent aan met het dataframe
+        from langchain.memory import ConversationBufferMemory
+        ChatOpenAI = ChatOpenAI(temperature=0, model="gpt-4", streaming=True)
+        memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+        st.session_state.agent = create_pandas_dataframe_agent(
+            ChatOpenAI,
+            aggregatie_per_bedrijf,
+            verbose=False,
+            memory=memory,
+            allow_dangerous_code=True
+        )
+
+    if user_input:
+        try:
+            antwoord = st.session_state.agent.run(user_input)
+            st.session_state.chat_history.append(("Jij", user_input))
+            st.session_state.chat_history.append(("AI", antwoord))
+        except Exception as e:
+            st.session_state.chat_history.append(("AI", f"Er trad een fout op: {e}"))
+
+    for speaker, text in st.session_state.chat_history:
+        if speaker == "Jij":
+            st.markdown(f"**🧍 Jij:** {text}")
+        else:
+            st.markdown(f"**🤖 AI:** {text}")
