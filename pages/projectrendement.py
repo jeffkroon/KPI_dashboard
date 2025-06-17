@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import os
 import plotly.express as px
 import altair as alt
@@ -311,8 +312,6 @@ top_klanten = df_rend[(df_rend["rendement_per_uur"] > mediaan_rendement) & (df_r
 
 
 # === 🔮 AI Forecasting: Verwacht KPI's via regressiemodel ===
-
-import numpy as np
 
 st.markdown("### 🔮 AI Simulatie per Bedrijf – Wat als Scenario's & Aanbevelingen")
 
