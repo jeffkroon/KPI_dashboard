@@ -163,3 +163,5 @@ if aantal_medewerkers > 0:
 
 else:
     st.info("Geen data beschikbaar voor visualisaties.")
+    
+    

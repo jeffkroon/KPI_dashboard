@@ -232,3 +232,64 @@ if not projectlines.empty:
     st.dataframe(projectlines_display, use_container_width=True)
 else:
     st.info("Geen projectregels gevonden voor dit bedrijf.")
+
+
+df_companies["accountmanager_searchname"] = df_companies["accountmanager_searchname"].astype(str).str.strip()
+
+df_projects = df_projects.merge(
+    df_companies[["id", "accountmanager_searchname"]],
+    how="left",
+    left_on="company_id",
+    right_on="id",
+    suffixes=("", "_company")
+)
+
+# Als project geen eigen accountmanager heeft, gebruik die van het bedrijf
+df_projects["projectmanager"] = df_projects["accountmanager_searchname"]
+df_projects.loc[df_projects["projectmanager"] == "", "projectmanager"] = df_projects["accountmanager_searchname_company"]
+df_projects["projectmanager"] = df_projects["projectmanager"].replace("", pd.NA).fillna("Onbekend")
+
+
+# --- Bedrijven per Accountmanager ---
+st.subheader("📋 Bedrijven per Accountmanager")
+
+# Strip whitespace en drop lege entries
+df_companies["accountmanager_searchname"] = df_companies["accountmanager_searchname"].astype(str).str.strip()
+df_companies["accountmanager_searchname"] = df_companies["accountmanager_searchname"].replace("", pd.NA)
+accountmanagers = df_companies["accountmanager_searchname"].dropna().unique()
+
+gekozen_am = st.selectbox("👤 Kies een accountmanager", sorted(accountmanagers))
+bedrijven_van_am = df_companies[df_companies["accountmanager_searchname"] == gekozen_am]
+
+if not bedrijven_van_am.empty:
+    st.write(f"### 🏢 Bedrijven onder begeleiding van: {gekozen_am}")
+    st.dataframe(bedrijven_van_am[["companyname", "legalname", "customernumber", "email", "phone"]])
+else:
+    st.info("Geen bedrijven gevonden voor deze accountmanager.")
+
+st.subheader("📊 Accountmanagers: Uren vs Omzet per Bedrijf")
+
+# Merge df_projects (met uren en omzet) met df_companies (voor accountmanager info)
+df_aggregatie = df_projects.groupby("company_id").agg({
+    "totaal_uren": "sum",
+    "werkelijke_opbrengst": "sum"
+}).reset_index()
+
+df_aggregatie = df_aggregatie.merge(df_companies[["id", "companyname", "accountmanager_searchname"]], left_on="company_id", right_on="id", how="left")
+
+# Groepeer opnieuw op accountmanager
+accountmanager_stats = df_aggregatie.groupby("accountmanager_searchname").agg({
+    "totaal_uren": "sum",
+    "werkelijke_opbrengst": "sum"
+}).reset_index()
+
+accountmanager_stats = accountmanager_stats.sort_values(by="werkelijke_opbrengst", ascending=False)
+
+# Maak barchart
+fig_am = px.bar(accountmanager_stats, 
+                x="accountmanager_searchname", 
+                y=["werkelijke_opbrengst"],
+                title="Werkverdeling per accountmanager (omzet)",
+                labels={"value": "Totaal", "accountmanager_searchname": "Accountmanager"},
+                barmode="group")
+st.plotly_chart(fig_am, use_container_width=True)

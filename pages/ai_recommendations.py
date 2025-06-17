@@ -22,7 +22,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-st.title("projectrendement")
+st.title("AI inzichten/uitschieters")
 
 with st.spinner("Data wordt geladen, even geduld..."):
     # --- LOAD DATA ---
