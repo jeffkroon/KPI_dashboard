@@ -131,3 +131,33 @@ with st.expander("Bekijk AI analyse en aanbevelingen"):
     for idx, advies in enumerate(filtered_adviezen):
         st.markdown(f"### Aanbeveling {idx+1}")
         st.info(advies)
+
+st.markdown("## 📊 ROI per Bedrijf")
+
+# Maak een kopie en filter voor duidelijkheid
+df_roi = aggregatie_per_bedrijf.copy()
+df_roi = df_roi[df_roi["rendement_per_uur"].notna()]
+df_roi = df_roi.sort_values("rendement_per_uur", ascending=True)
+
+fig_roi = px.bar(
+    df_roi,
+    x="rendement_per_uur",
+    y="bedrijf_naam",
+    orientation="h",
+    title="Rendement per Uur (ROI) per Bedrijf",
+    labels={
+        "rendement_per_uur": "Rendement per Uur (€)",
+        "bedrijf_naam": "Bedrijf"
+    },
+    color="rendement_per_uur",
+    color_continuous_scale="RdYlGn"
+)
+
+fig_roi.update_layout(
+    xaxis_title="Rendement per Uur (€)",
+    yaxis_title="Bedrijf",
+    yaxis=dict(tickmode="linear"),
+    height=800
+)
+
+st.plotly_chart(fig_roi, use_container_width=True)

@@ -122,7 +122,12 @@ fig = px.bar(
     y="bedrijf_naam",
     orientation="h",
     title="Rendement per uur per bedrijf",
-    labels={"rendement_per_uur": "€ per uur", "bedrijf_naam": "Bedrijf"},
+    labels={
+        "rendement_per_uur": "Rendement per Uur",
+        "bedrijf_naam": "Bedrijf",
+        "totaal_uren": "Totaal Uren",
+        "werkelijke_opbrengst": "Werkelijke Opbrengst"
+    },
     height=600
 )
 fig.update_layout(yaxis={'categoryorder': 'total ascending'}, margin={'l': 150})
@@ -153,7 +158,13 @@ fig_scatter = px.scatter(
     size="rendement_per_uur",
     color="rendement_per_uur",
     color_continuous_scale="Viridis",
-    title="Tijdsinvestering vs Opbrengst per bedrijf (Hover voor details)"
+    title="Tijdsinvestering vs Opbrengst per bedrijf (Hover voor details)",
+    labels={
+        "totaal_uren": "Totaal Uren",
+        "werkelijke_opbrengst": "Werkelijke Opbrengst",
+        "rendement_per_uur": "Rendement per Uur",
+        "bedrijf_naam": "Bedrijf"
+    }
 )
 fig_scatter.update_layout(height=700)
 st.plotly_chart(fig_scatter, use_container_width=True)
@@ -168,7 +179,13 @@ fig_treemap = px.treemap(
     color="werkelijke_opbrengst",
     hover_data={"rendement_per_uur": True},
     color_continuous_scale="RdYlGn",
-    title="Treemap: tijdsinvestering (grootte) vs opbrengst (kleur) per bedrijf"
+    title="Treemap: tijdsinvestering (grootte) vs opbrengst (kleur) per bedrijf",
+    labels={
+        "bedrijf_naam": "Bedrijf",
+        "totaal_uren": "Totaal Uren",
+        "werkelijke_opbrengst": "Werkelijke Opbrengst",
+        "rendement_per_uur": "Rendement per Uur"
+    }
 )
 st.plotly_chart(fig_treemap, use_container_width=True)
 
@@ -189,38 +206,46 @@ verwachte_opbrengst_per_bedrijf.columns = ["bedrijf_id", "verwachte_opbrengst"]
 
 aggregatie_per_bedrijf = aggregatie_per_bedrijf.merge(verwachte_opbrengst_per_bedrijf, on="bedrijf_id", how="left")
 
-aggregatie_per_bedrijf["ROI_ratio"] = (
+aggregatie_per_bedrijf["realisatie_ratio"] = (
     aggregatie_per_bedrijf["werkelijke_opbrengst"] / aggregatie_per_bedrijf["verwachte_opbrengst"]
 ).round(2)
 
-# Filter: verwijder rijen waarbij ROI_ratio NaN is, verwachte_opbrengst 0 of leeg, of ROI_ratio gelijk aan 0
+# Filter: verwijder rijen waarbij realisatie_ratio NaN is, verwachte_opbrengst 0 of leeg, of realisatie_ratio gelijk aan 0
 aggregatie_per_bedrijf = aggregatie_per_bedrijf[
-    aggregatie_per_bedrijf["ROI_ratio"].notna() &
+    aggregatie_per_bedrijf["realisatie_ratio"].notna() &
     (aggregatie_per_bedrijf["verwachte_opbrengst"] > 0) &
-    (aggregatie_per_bedrijf["ROI_ratio"] > 0)
+    (aggregatie_per_bedrijf["realisatie_ratio"] > 0)
 ]
 
-# KPI-widgets voor deze extra inzichten
 st.markdown("### 🧮 Extra KPI's")
+
+# Uitleg over de realisatie-ratio in een expander
+with st.expander("ℹ️ Wat is de realisatie-ratio?"):
+    st.markdown("""
+    De realisatie-ratio vergelijkt de _werkelijke opbrengst_ van een bedrijf met de _verwachte opbrengst_ (gebaseerd op geoffreerde tarieven en hoeveelheden).  
+    - Een ratio van **1.0** betekent dat het project exact volgens verwachting is uitgevoerd.  
+    - Lager dan 1.0 betekent dat er minder opbrengst is gerealiseerd dan verwacht (bijvoorbeeld door korting, minder uren geschreven of verlies).  
+    - Hoger dan 1.0 betekent dat er meer is verdiend dan vooraf begroot (bijvoorbeeld door extra werk of hogere tarieven).
+    """)
 
 col1, col2 = st.columns(2)
 # Alleen afronden bij presentatie, niet in data!
 col1.metric("Totale bestede uren", f"{totale_uren_all:.0f} uur")
-roi_gem = aggregatie_per_bedrijf["ROI_ratio"].mean()
-col2.metric("Gemiddelde ROI-ratio", f"{roi_gem:.2f}")
+realisatie_gem = aggregatie_per_bedrijf["realisatie_ratio"].mean()
+col2.metric("Gemiddelde realisatie-ratio", f"{realisatie_gem:.2f}")
 
 # Tabel tonen met nieuwe inzichten
 
-st.markdown("### 📋 Bedrijven met % tijdsbesteding en ROI-ratio")
-df_extra = aggregatie_per_bedrijf[["bedrijf_naam", "totaal_uren", "% tijdsbesteding", "werkelijke_opbrengst", "verwachte_opbrengst", "ROI_ratio"]]
-df_extra = df_extra.dropna(subset=["ROI_ratio"])
+st.markdown("### 📋 Bedrijven met % tijdsbesteding en realisatie-ratio")
+df_extra = aggregatie_per_bedrijf[["bedrijf_naam", "totaal_uren", "% tijdsbesteding", "werkelijke_opbrengst", "verwachte_opbrengst", "realisatie_ratio"]]
+df_extra = df_extra.dropna(subset=["realisatie_ratio"])
 # Alleen afronden bij presentatie, niet in data!
-st.dataframe(df_extra.sort_values("ROI_ratio", ascending=True).style.format({
+st.dataframe(df_extra.sort_values("realisatie_ratio", ascending=True).style.format({
     "totaal_uren": "{:.1f}",
     "% tijdsbesteding": "{:.1f}",
     "werkelijke_opbrengst": "€ {:.2f}",
     "verwachte_opbrengst": "€ {:.2f}",
-    "ROI_ratio": "{:.2f}"
+    "realisatie_ratio": "{:.2f}"
 }), use_container_width=True)
 
  # === Urenverdeling per bedrijf (percentage van totale uren) ===
@@ -234,7 +259,11 @@ fig_uren = px.bar(
     x="% tijdsbesteding",
     y="bedrijf_naam",
     orientation="h",
-    labels={"% tijdsbesteding": "% van totale uren", "bedrijf_naam": "Bedrijf"},
+    labels={
+        "% tijdsbesteding": "Percentage Tijdsbesteding",
+        "bedrijf_naam": "Bedrijf",
+        "totaal_uren": "Totaal Uren"
+    },
     title="Verdeling van totaal bestede uren per bedrijf",
     height=600
 )
@@ -256,7 +285,12 @@ fig_pareto = px.line(
     x=df_pareto.index + 1,
     y="cumulatief_percentage",
     markers=True,
-    labels={"x": "Aantal bedrijven", "cumulatief_percentage": "Cumulatieve opbrengst (%)"},
+    labels={
+        "x": "Aantal Bedrijven",
+        "cumulatief_percentage": "Cumulatieve Opbrengst (%)",
+        "bedrijf_naam": "Bedrijf",
+        "werkelijke_opbrengst": "Werkelijke Opbrengst"
+    },
     title="Pareto-analyse: cumulatieve opbrengst over bedrijven"
 )
 fig_pareto.add_hline(y=80, line_dash="dash", line_color="red")
@@ -283,10 +317,10 @@ import numpy as np
 st.markdown("### 🔮 AI Simulatie per Bedrijf – Wat als Scenario's & Aanbevelingen")
 
 # Voorbereiding data voor regressie
-reg_data = aggregatie_per_bedrijf[["totaal_uren", "verwachte_opbrengst", "werkelijke_opbrengst", "ROI_ratio", "rendement_per_uur"]].dropna()
+reg_data = aggregatie_per_bedrijf[["totaal_uren", "verwachte_opbrengst", "werkelijke_opbrengst", "realisatie_ratio", "rendement_per_uur"]].dropna()
 
 X = reg_data[["totaal_uren", "verwachte_opbrengst"]]
-y = reg_data["ROI_ratio"]
+y = reg_data["realisatie_ratio"]
 
 model = RandomForestRegressor(random_state=42)
 model.fit(X, y)
@@ -312,65 +346,80 @@ sim_opbrengst = st.number_input("💰 Stel verwachte opbrengst in (€)", min_va
 X_sim = pd.DataFrame([[sim_uren, sim_opbrengst]], columns=['totaal_uren', 'verwachte_opbrengst'])
 sim_roi = model.predict(X_sim)[0]
 
-st.metric("📈 Voorspelde ROI-ratio", f"{sim_roi:.2f}")
+st.metric("📈 Voorspelde realisatie-ratio", f"{sim_roi:.2f}")
 if sim_roi < 1.0:
-    st.warning("⚠️ Verwachte ROI lager dan 1.0 – verlieslatend scenario.")
+    st.warning("⚠️ Verwachte realisatie-ratio lager dan 1.0 – verlieslatend scenario.")
 elif sim_roi < 1.2:
-    st.info("ℹ️ ROI is marginaal – overweeg tariefverhoging of urenverlaging.")
+    st.info("ℹ️ Realisatie-ratio is marginaal – overweeg tariefverhoging of urenverlaging.")
 else:
-    st.success("✅ Verwachte ROI is goed – rendabel project.")
+    st.success("✅ Verwachte realisatie-ratio is goed – rendabel project.")
 
-# Suggestie bij lage ROI
+# Suggestie bij lage realisatie-ratio
 if sim_roi < 1.2:
     st.markdown("### 📌 AI-advies:")
     ratio_verbeter = 1.5
     nodig_opbrengst = ratio_verbeter * sim_uren
     extra_opbrengst = nodig_opbrengst - sim_opbrengst
     procent_tariefstijging = (extra_opbrengst / sim_opbrengst * 100)
-    st.write(f"📊 Om een ROI van 1.5 te behalen, zou je de opbrengst moeten verhogen met ~€{extra_opbrengst:.0f} → dat is een tariefstijging van {procent_tariefstijging:.1f}%.")
+    st.write(f"📊 Om een realisatie-ratio van 1.5 te behalen, zou je de opbrengst moeten verhogen met ~€{extra_opbrengst:.0f} → dat is een tariefstijging van {procent_tariefstijging:.1f}%.")
 
 # Elasticiteitsgrafiek
-st.markdown("### 📉 Elasticiteitsgrafiek: hoe verandert ROI bij toenemende uren")
+st.markdown("### 📉 Elasticiteitsgrafiek: hoe verandert realisatie-ratio bij toenemende uren")
 
 uren_range = np.arange(10, 200, 10)
 opbrengst = sim_opbrengst  # opbrengst constant
-roi_pred = model.predict(
+realisatie_pred = model.predict(
     pd.DataFrame(
         np.column_stack((uren_range, [opbrengst]*len(uren_range))),
         columns=['totaal_uren', 'verwachte_opbrengst']
     )
 )
 
-fig_elastic = px.line(x=uren_range, y=roi_pred,
-                      labels={"x": "Totaal Uren", "y": "Voorspelde ROI"},
-                      title="Elasticiteit van ROI bij variërende uren (opbrengst constant)")
+fig_elastic = px.line(
+    x=uren_range,
+    y=realisatie_pred,
+    labels={
+        "x": "Totaal Uren",
+        "y": "Voorspelde realisatie-ratio"
+    },
+    title="Elasticiteit van realisatie-ratio bij variërende uren (opbrengst constant)"
+)
 fig_elastic.add_hline(y=1.0, line_dash="dot", line_color="red")
 fig_elastic.add_hline(y=1.5, line_dash="dot", line_color="green")
 st.plotly_chart(fig_elastic, use_container_width=True)
 
 # === Feature Importance visualisatie ===
-st.markdown("### 🔍 Belangrijkste factoren die ROI beïnvloeden (Feature Importance)")
+st.markdown("### 🔍 Belangrijkste factoren die realisatie-ratio beïnvloeden (Feature Importance)")
 
 if importances_df is not None:
-    fig_importance = px.bar(importances_df, x='Importance', y='Feature', orientation='h',
-                            title='Belang van input-variabelen voor ROI voorspelling')
+    fig_importance = px.bar(
+        importances_df,
+        x='Importance',
+        y='Feature',
+        orientation='h',
+        title='Belang van input-variabelen voor realisatie-ratio voorspelling',
+        labels={
+            "Importance": "Belang",
+            "Feature": "Kenmerk"
+        }
+    )
     fig_importance.update_layout(margin={'l': 150})
     st.plotly_chart(fig_importance, use_container_width=True)
 
  # Pricing engine
-st.markdown("### 🧮 Pricing Engine: Minimale opbrengst voor gewenste ROI")
+st.markdown("### 🧮 Pricing Engine: Minimale opbrengst voor gewenste realisatie-ratio")
 
-desired_roi = st.slider("Streef-ROI", min_value=1.0, max_value=3.0, step=0.1, value=1.5)
-benodigde_opbrengst = sim_uren * desired_roi
+desired_realisatie = st.slider("Streef-realisatie-ratio", min_value=1.0, max_value=3.0, step=0.1, value=1.5)
+benodigde_opbrengst = sim_uren * desired_realisatie
 huidige_opbrengst = sim_opbrengst
 verschil = benodigde_opbrengst - huidige_opbrengst
 
-st.write(f"🔍 Om een ROI van {desired_roi:.1f} te halen bij {sim_uren} uur, is minimaal €{benodigde_opbrengst:.0f} aan opbrengst nodig.")
+st.write(f"🔍 Om een realisatie-ratio van {desired_realisatie:.1f} te halen bij {sim_uren} uur, is minimaal €{benodigde_opbrengst:.0f} aan opbrengst nodig.")
 if verschil > 0:
     stijging_pct = verschil / huidige_opbrengst * 100
     st.warning(f"→ Dat is een stijging van €{verschil:.0f} (+{stijging_pct:.1f}%) t.o.v. huidige opbrengst.")
 else:
-    st.success("✅ Huidige opbrengst voldoet al aan deze ROI-eis.")
+    st.success("✅ Huidige opbrengst voldoet al aan deze realisatie-ratio-eis.")
 
 
 
@@ -385,8 +434,15 @@ cluster_data["cluster"] = kmeans.labels_
 fig_cluster = px.scatter_3d(
     cluster_data,
     x="totaal_uren", y="werkelijke_opbrengst", z="rendement_per_uur",
-    color="cluster", title="3D Clustering van Bedrijven",
-    hover_name=aggregatie_per_bedrijf.loc[cluster_data.index, "bedrijf_naam"]
+    color="cluster",
+    title="3D Clustering van Bedrijven",
+    hover_name=aggregatie_per_bedrijf.loc[cluster_data.index, "bedrijf_naam"],
+    labels={
+        "totaal_uren": "Totaal Uren",
+        "werkelijke_opbrengst": "Werkelijke Opbrengst",
+        "rendement_per_uur": "Rendement per Uur",
+        "cluster": "Cluster"
+    }
 )
 st.plotly_chart(fig_cluster, use_container_width=True)
 
@@ -404,7 +460,7 @@ Je bent een zakelijke AI-consultant. Geef beknopt maar concreet advies voor het 
 - Totaal bestede uren: {bedrijf_info['totaal_uren']:.1f}
 - Werkelijke opbrengst: €{bedrijf_info['werkelijke_opbrengst']:.2f}
 - Verwachte opbrengst: €{bedrijf_info['verwachte_opbrengst']:.2f}
-- ROI-ratio: {bedrijf_info['ROI_ratio']:.2f}
+- realisatie-ratio: {bedrijf_info['realisatie_ratio']:.2f}
 - Rendement per uur: €{bedrijf_info['rendement_per_uur']:.2f}
 - % tijdsbesteding: {bedrijf_info['% tijdsbesteding']:.1f}%
 
