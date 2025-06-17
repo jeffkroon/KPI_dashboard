@@ -110,14 +110,20 @@ with st.spinner("Data wordt geladen, even geduld..."):
 
     ai_advies = None
     if st.button("Genereer AI Advies"):
-        response = client.chat.completions.create(
-            model="gpt-4",
-            messages=[
-                {"role": "system", "content": "Je bent een KPI-gedreven business analist."},
-                {"role": "user", "content": prompt}
-            ]
-        )
-        ai_advies = response.choices[0].message.content
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4",
+                messages=[
+                    {"role": "system", "content": "Je bent een KPI-gedreven business analist."},
+                    {"role": "user", "content": prompt}
+                ]
+            )
+            ai_advies = response.choices[0].message.content
+        except Exception as e:
+            if "RateLimitError" in str(type(e)):
+                st.error("🚫 Je hebt de OpenAI-quota bereikt. Probeer het later opnieuw of upgrade je API-limiet.")
+            else:
+                st.error(f"Er ging iets mis: {e}")
 
 st.markdown("## 🔮 AI Advies gebaseerd op data")
 if ai_advies:
