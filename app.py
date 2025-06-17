@@ -5,6 +5,7 @@ from sqlalchemy import create_engine
 import os
 from dotenv import load_dotenv
 from datetime import datetime
+from streamlit_extras.metric_cards import style_metric_cards
 
 pd.set_option('future.no_silent_downcasting', True)
 
