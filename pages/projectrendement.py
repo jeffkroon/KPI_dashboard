@@ -417,20 +417,37 @@ if importances_df is not None:
     fig_importance.update_layout(margin={'l': 150})
     st.plotly_chart(fig_importance, use_container_width=True)
 
- # Pricing engine
-st.markdown("### 🧮 Pricing Engine: Minimale opbrengst voor gewenste realisatie-ratio")
 
-desired_realisatie = st.slider("Streef-realisatie-ratio", min_value=1.0, max_value=3.0, step=0.1, value=1.5)
+# Pricing engine
+st.markdown("### 🧮 Scenario-analyse: Minimale opbrengst voor gewenste realisatie-ratio")
+desired_realisatie = st.slider("🎯 Gewenste realisatie-ratio (doelstelling)", min_value=1.0, max_value=3.0, step=0.1, value=1.5)
+
 benodigde_opbrengst = sim_uren * desired_realisatie
+st.caption("📝 Je huidige verwachte opbrengst is gebaseerd op je eigen invoer hierboven.")
 huidige_opbrengst = sim_opbrengst
-verschil = benodigde_opbrengst - huidige_opbrengst
 
 st.write(f"🔍 Om een realisatie-ratio van {desired_realisatie:.1f} te halen bij {sim_uren} uur, is minimaal €{benodigde_opbrengst:.0f} aan opbrengst nodig.")
-if verschil > 0:
-    stijging_pct = verschil / huidige_opbrengst * 100
-    st.warning(f"→ Dat is een stijging van €{verschil:.0f} (+{stijging_pct:.1f}%) t.o.v. huidige opbrengst.")
+if sim_uren > 0 and desired_realisatie > 0:
+    stijging_pct = (benodigde_opbrengst - huidige_opbrengst) / huidige_opbrengst * 100 if huidige_opbrengst > 0 else float('inf')
+
+    if huidige_opbrengst <= 0:
+        st.info("ℹ️ Opbrengst is €0, geen vergelijking mogelijk voor stijging.")
+    elif huidige_opbrengst >= benodigde_opbrengst:
+        if stijging_pct > 50:
+            st.warning(f"⚠️ Je voldoet wel aan de doelratio, maar de opbrengst ligt >50% boven de huidige → mogelijk onrealistisch scenario.")
+    else:
+        verschil = benodigde_opbrengst - huidige_opbrengst
+        st.warning(f"🚀 Je zou je opbrengst moeten verhogen met €{verschil:.0f} (+{stijging_pct:.1f}%) om de doel-ratio te halen.")
+    # Historische ratiovergelijking
+    historisch_ratio = bedrijf_data.get("realisatie_ratio", None)
+    if historisch_ratio and desired_realisatie > historisch_ratio * 1.5:
+        st.info(f"📉 De gewenste ratio ({desired_realisatie:.1f}) ligt fors boven de historische realisatie-ratio van {historisch_ratio:.2f}. Overweeg realistischere planning.")
+
+    # Check op lage inputwaarden
+    if sim_uren < 10 or sim_opbrengst < 500:
+        st.warning("⚠️ Te lage inputwaarden – oordeel over haalbaarheid is beperkt betrouwbaar.")
 else:
-    st.success("✅ Huidige opbrengst voldoet al aan deze realisatie-ratio-eis.")
+    st.info("ℹ️ Voer geldige inputwaarden in om een correcte berekening te maken.")
 
 
 
