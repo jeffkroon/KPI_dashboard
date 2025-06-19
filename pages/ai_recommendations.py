@@ -2,20 +2,23 @@ from openai import OpenAI
 import os
 import streamlit as st
 import pandas as pd
-import plotly.express as px
-import altair as alt
-from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.preprocessing import StandardScaler
-from sklearn.cluster import KMeans
 from langchain_experimental.agents import create_pandas_dataframe_agent
-from langchain_community.chat_models import ChatOpenAI
-
-from sklearn.metrics import silhouette_score
-from sklearn.ensemble import RandomForestRegressor
-import matplotlib.pyplot as plt
+from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
+from langchain.tools import Tool
+from langchain_community.utilities import SQLDatabase
+from langchain_community.agent_toolkits.sql.toolkit import SQLDatabaseToolkit
+from langchain.agents import initialize_agent
+from langgraph.graph import StateGraph, END
+from langgraph.prebuilt import create_react_agent
+from langgraph.graph import StateGraph
+from langchain_core.runnables import Runnable
+from langchain_core.messages import HumanMessage, AIMessage
 load_dotenv()
 importances_df = None
+
+def vraag_is_relevant(vraag, kolommen):
+    return any(col.lower() in vraag.lower() for col in kolommen)
 
 st.set_page_config(
     page_title="Customer-analysis",
@@ -41,6 +44,54 @@ with st.spinner("Data wordt geladen, even geduld..."):
     load_dotenv()
     POSTGRES_URL = os.getenv("POSTGRES_URL")
     engine = create_engine(POSTGRES_URL)
+
+    # --- SQL DATABASE CHATBOT ---
+
+    st.markdown("---")
+    st.subheader("🧠 Chat direct met je database")
+
+    if "sql_chat_history" not in st.session_state:
+        st.session_state.sql_chat_history = []
+
+    sql_user_input = st.text_input("Stel een vraag over je data (SQL-agent):", key="sql_input")
+
+    try:
+        db = SQLDatabase.from_uri(POSTGRES_URL)
+        llm = ChatOpenAI(temperature=0, model="gpt-4")
+        sql_toolkit = SQLDatabaseToolkit(db=db, llm=llm)
+        # LangGraph aanpak voor SQL agent
+        class SQLChatState:
+            def __init__(self):
+                self.history = []
+
+        def build_sql_langgraph_agent(llm, tools):
+            agent_runnable: Runnable = create_react_agent(llm, tools)
+            workflow = StateGraph(SQLChatState)
+            workflow.add_node("agent", agent_runnable)
+            workflow.set_entry_point("agent")
+            workflow.set_finish_point("agent")
+            return workflow.compile()
+
+        sql_agent = build_sql_langgraph_agent(llm, sql_toolkit.get_tools())
+    except Exception as e:
+        st.warning("SQL-agent kon niet worden geïnitialiseerd. Controleer je verbinding of API-sleutel.")
+        sql_agent = None
+
+    if sql_user_input and sql_agent:
+        try:
+            sql_response = sql_agent.run(sql_user_input)
+            st.session_state.sql_chat_history.append(("Jij", sql_user_input))
+            st.session_state.sql_chat_history.append(("SQL-AI", sql_response))
+        except Exception as e:
+            st.session_state.sql_chat_history.append(("SQL-AI", f"Er trad een fout op: {e}"))
+            st.warning("De SQL-agent kon je vraag niet verwerken. Probeer een andere formulering.")
+
+    for speaker, text in st.session_state.sql_chat_history:
+        if speaker == "Jij":
+            st.markdown(f"**🧍 Jij:** {text}")
+        else:
+            st.markdown(f"**🧠 SQL-AI:** {text}")
+
     df_projects = load_data("projects")
     df_projectlines = load_data("projectlines_per_company")
     bedrijf_namen = df_projectlines[["bedrijf_id", "bedrijf_naam"]].drop_duplicates()
@@ -125,6 +176,110 @@ with st.spinner("Data wordt geladen, even geduld..."):
             else:
                 st.error(f"Er ging iets mis: {e}")
 
+def zoek_bedrijf_op_naam(naam, df=aggregatie_per_bedrijf):
+    match = df[df["bedrijf_naam"].str.contains(naam, case=False)]
+    return match.to_markdown(index=False)
+
+def totaal_rendement(df=aggregatie_per_bedrijf):
+    totaal = df["werkelijke_opbrengst"].sum()
+    uren = df["totaal_uren"].sum()
+    rendement = totaal / uren if uren != 0 else 0
+    return f"Totaal opbrengst: €{totaal:,.2f}\nTotaal uren: {uren:.1f}\nGemiddeld rendement per uur: €{rendement:.2f}"
+
+def top_uren_bedrijven(df=aggregatie_per_bedrijf, n=3):
+    top = df.sort_values("totaal_uren", ascending=False).head(n)
+    return top[["bedrijf_naam", "totaal_uren"]].to_markdown(index=False)
+
+zoek_tool = Tool(
+    name="ZoekBedrijf",
+    func=lambda x: zoek_bedrijf_op_naam(x),
+    description="Gebruik dit om bedrijven op naam te zoeken en hun KPI's te tonen."
+)
+
+rend_tool = Tool(
+    name="TotaalRendement",
+    func=lambda x: totaal_rendement(),
+    description="Gebruik dit om totaalopbrengst, totaal geschreven uren en gemiddeld rendement per uur te krijgen."
+)
+
+top_uren_tool = Tool(
+    name="TopBedrijvenOpUren",
+    func=lambda x: top_uren_bedrijven(),
+    description="Gebruik dit om de topbedrijven met de meeste geschreven uren te tonen."
+)
+
+# --- CHATBOT-SECTIE ---
+
+st.markdown("---")
+st.subheader("🤖 AI Chatbot – Vraag het aan je KPI’s")
+
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+
+user_input = st.text_input("Stel een vraag over je klanten, omzet of prestaties:", key="chat_input")
+
+# Combineer meerdere tabellen voor rijkere inzichten
+data_frames = {
+    "bedrijf_metrics": aggregatie_per_bedrijf,
+    "projects": df_projects,
+    "companies": df_companies,
+    "employees": df_employees,
+    "urenregistratie": df_uren
+}
+
+# Merge alle dataframes naar één indien nodig
+# Voor demonstratie beperken we ons tot bedrijf_metrics, maar dit kan uitgebreid worden
+
+full_data = aggregatie_per_bedrijf.copy()  # Later vervangen door volledige merge
+
+
+# LangGraph state class
+class ChatState:
+    def __init__(self):
+        self.history = []
+
+    def add(self, speaker, text):
+        self.history.append((speaker, text))
+
+    def as_markdown(self):
+        return "\n".join(f"**{s}:** {t}" for s, t in self.history)
+
+ChatLLM = ChatOpenAI(temperature=0, model="gpt-4", streaming=True)
+
+# LangGraph agent builder
+def build_langgraph_agent(llm, tools):
+    from langgraph.prebuilt import create_react_agent
+
+    # Use the correct signature for create_react_agent per latest API
+    agent_runnable: Runnable = create_react_agent(llm, tools)
+
+    workflow = StateGraph(ChatState)
+    workflow.add_node("agent", agent_runnable)
+    workflow.set_entry_point("agent")
+    workflow.set_finish_point("agent")
+    return workflow.compile()
+
+graph_agent = build_langgraph_agent(ChatLLM, [zoek_tool, rend_tool, top_uren_tool])
+st.session_state.agent = graph_agent
+
+if user_input:
+    try:
+        result = st.session_state.agent.invoke(HumanMessage(user_input))
+        antwoord = result.content if hasattr(result, "content") else str(result)
+        st.session_state.chat_history.append(("Jij", user_input))
+        st.session_state.chat_history.append(("AI", antwoord))
+    except Exception as e:
+        foutmelding = str(e)
+        st.session_state.chat_history.append(("AI", f"Er trad een fout op: {foutmelding}"))
+        st.warning("De AI kon je vraag niet verwerken. Probeer een concretere formulering.")
+
+# Toon het gesprek
+for speaker, text in st.session_state.chat_history:
+    if speaker == "Jij":
+        st.markdown(f"**🧍 Jij:** {text}")
+    else:
+        st.markdown(f"**🤖 AI:** {text}")
+
 st.markdown("## 🔮 AI Advies gebaseerd op data")
 if ai_advies:
     with st.expander("Bekijk AI analyse en aanbevelingen"):
@@ -141,42 +296,3 @@ if ai_advies:
         for idx, advies in enumerate(filtered_adviezen):
             st.markdown(f"### Aanbeveling {idx+1}")
             st.info(advies)
-
-# --- CHATBOT-SECTIE ---
-
-# Laad de chatbot alleen als het dataframe beschikbaar is
-if aggregatie_per_bedrijf is not None and not aggregatie_per_bedrijf.empty:
-    st.markdown("---")
-    st.subheader("🤖 AI Chatbot – Vraag het aan je KPI’s")
-
-    if "chat_history" not in st.session_state:
-        st.session_state.chat_history = []
-
-    user_input = st.text_input("Stel een vraag over je klanten, omzet of prestaties:", key="chat_input")
-
-    if "agent" not in st.session_state:
-        # Maak één keer de agent aan met het dataframe
-        from langchain.memory import ConversationBufferMemory
-        ChatOpenAI = ChatOpenAI(temperature=0, model="gpt-4", streaming=True)
-        memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
-        st.session_state.agent = create_pandas_dataframe_agent(
-            ChatOpenAI,
-            aggregatie_per_bedrijf,
-            verbose=False,
-            memory=memory,
-            allow_dangerous_code=True
-        )
-
-    if user_input:
-        try:
-            antwoord = st.session_state.agent.run(user_input)
-            st.session_state.chat_history.append(("Jij", user_input))
-            st.session_state.chat_history.append(("AI", antwoord))
-        except Exception as e:
-            st.session_state.chat_history.append(("AI", f"Er trad een fout op: {e}"))
-
-    for speaker, text in st.session_state.chat_history:
-        if speaker == "Jij":
-            st.markdown(f"**🧍 Jij:** {text}")
-        else:
-            st.markdown(f"**🤖 AI:** {text}")

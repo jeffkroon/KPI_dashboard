@@ -5,7 +5,20 @@ from sqlalchemy import create_engine
 import os
 from dotenv import load_dotenv
 from datetime import datetime
-from streamlit_extras.metric_cards import style_metric_cards
+
+st.set_page_config(
+    page_title="Dunion KPI Dashboard",
+    page_icon="images/dunion-logo-def_donker-06.png",
+    layout="wide",
+    initial_sidebar_state="expanded")
+
+st.logo("images/dunion-logo-def_donker-06.png")
+st.title("Dunion KPI Dashboard – Overzicht")
+@st.cache_data
+def load_data(table_name):
+    query = f"SELECT * FROM {table_name};"
+    return pd.read_sql(query, con=engine)
+
 
 pd.set_option('future.no_silent_downcasting', True)
 
@@ -14,26 +27,12 @@ load_dotenv()
 POSTGRES_URL = os.getenv("POSTGRES_URL")
 engine = create_engine(POSTGRES_URL)
 
-st.set_page_config(
-    page_title="Dunion KPI Dashboard",
-    page_icon="images/dunion-logo-def_donker-06.png",
-    layout="wide",
-    initial_sidebar_state="expanded")
-
 try:
     from streamlit_extras.metric_cards import style_metric_cards
 except ImportError:
     st.warning("📛 'streamlit-extras' is niet geïnstalleerd of niet vindbaar door je environment.")
 
-st.logo("images/dunion-logo-def_donker-06.png")
-st.title("Dunion KPI Dashboard – Overzicht")
-
 # --- LOAD DATA ---
-@st.cache_data
-def load_data(table_name):
-    query = f"SELECT * FROM {table_name};"
-    return pd.read_sql(query, con=engine)
-
 df_projects = load_data("projects")
 df_projects = df_projects[df_projects["archived"] != True]
 df_projects["totalexclvat"] = pd.to_numeric(df_projects["totalexclvat"], errors="coerce")
