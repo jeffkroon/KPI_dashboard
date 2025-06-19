@@ -47,6 +47,14 @@ with st.spinner("Data wordt geladen, even geduld..."):
 
     # --- SQL DATABASE CHATBOT ---
 
+    # SECURITY: Only allow SELECT queries from users
+    def is_safe_sql(query):
+        query = query.strip().lower()
+        # Only allow SELECT statements, no semicolons (to prevent stacked queries)
+        return query.startswith("select") and ";" not in query[6:]
+
+    # SECURITY: Use a read-only DB user for this connection in production!
+
     st.markdown("---")
     st.subheader("🧠 Chat direct met je database")
 
@@ -78,13 +86,17 @@ with st.spinner("Data wordt geladen, even geduld..."):
         sql_agent = None
 
     if sql_user_input and sql_agent:
-        try:
-            sql_response = sql_agent.run(sql_user_input)
-            st.session_state.sql_chat_history.append(("Jij", sql_user_input))
-            st.session_state.sql_chat_history.append(("SQL-AI", sql_response))
-        except Exception as e:
-            st.session_state.sql_chat_history.append(("SQL-AI", f"Er trad een fout op: {e}"))
-            st.warning("De SQL-agent kon je vraag niet verwerken. Probeer een andere formulering.")
+        if is_safe_sql(sql_user_input):
+            try:
+                sql_response = sql_agent.run(sql_user_input)
+                st.session_state.sql_chat_history.append(("Jij", sql_user_input))
+                st.session_state.sql_chat_history.append(("SQL-AI", sql_response))
+            except Exception as e:
+                st.session_state.sql_chat_history.append(("SQL-AI", f"Er trad een fout op: {e}"))
+                st.warning("De SQL-agent kon je vraag niet verwerken. Probeer een andere formulering.")
+        else:
+            st.session_state.sql_chat_history.append(("SQL-AI", "Alleen SELECT-queries zijn toegestaan. Probeer het opnieuw met een veilige query."))
+            st.warning("Alleen SELECT-queries zijn toegestaan. Probeer het opnieuw met een veilige query.")
 
     for speaker, text in st.session_state.sql_chat_history:
         if speaker == "Jij":
@@ -211,7 +223,7 @@ top_uren_tool = Tool(
 # --- CHATBOT-SECTIE ---
 
 st.markdown("---")
-st.subheader("🤖 AI Chatbot – Vraag het aan je KPI’s")
+st.subheader("🤖 AI Chatbot – Vraag het aan je KPI's")
 
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
