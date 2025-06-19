@@ -37,29 +37,30 @@ from datetime import datetime
 
 load_dotenv()
 POSTGRES_URL = os.getenv("POSTGRES_URL")
+if not POSTGRES_URL:
+    raise ValueError("POSTGRES_URL is not set in the environment.")
 engine = create_engine(POSTGRES_URL)
-df_projects = load_data("projects")
-df_projectlines = load_data("projectlines_per_company")
-bedrijf_namen = df_projectlines[["bedrijf_id", "bedrijf_naam"]].drop_duplicates()
-df_uren = load_data("urenregistratie")
-df_projects = df_projects[df_projects["archived"] != True]
+df_projects = pd.DataFrame(load_data("projects"))
+df_projectlines = pd.DataFrame(load_data("projectlines_per_company"))
+bedrijf_namen = df_projectlines[["bedrijf_id", "bedrijf_naam"]].drop_duplicates().copy()
+df_uren = pd.DataFrame(load_data("urenregistratie"))
+df_projects = df_projects[df_projects["archived"] != True].copy()
 df_projects["totalexclvat"] = pd.to_numeric(df_projects["totalexclvat"], errors="coerce")
-df_employees = load_data("employees")
-df_companies = load_data("companies")
-df_uren = load_data("urenregistratie")
-df_projectlines = load_data("projectlines_per_company")
+df_employees = pd.DataFrame(load_data("employees"))
+df_companies = pd.DataFrame(load_data("companies"))
+df_uren = pd.DataFrame(load_data("urenregistratie"))
+df_projectlines = pd.DataFrame(load_data("projectlines_per_company"))
 active_project_ids = df_projects["id"].tolist()
-df_projectlines = df_projectlines[df_projectlines["offerprojectbase_id"].isin(active_project_ids)]
-df_projectlines = df_projectlines[df_projectlines["rowtype_searchname"] == "NORMAAL"]
+df_projectlines = df_projectlines[df_projectlines["offerprojectbase_id"].isin(active_project_ids)].copy()
+df_projectlines = df_projectlines[df_projectlines["rowtype_searchname"] == "NORMAAL"].copy()
 df_projectlines["amountwritten"] = pd.to_numeric(df_projectlines["amountwritten"], errors="coerce")
 df_projectlines["werkelijke_opbrengst"] = pd.to_numeric(df_projectlines["sellingprice"], errors="coerce") * df_projectlines["amountwritten"]
-aggregatie_per_bedrijf = df_projectlines.groupby("bedrijf_id").agg({
+aggregatie_per_bedrijf = pd.DataFrame(df_projectlines.groupby("bedrijf_id").agg({  # type: ignore
     "werkelijke_opbrengst": "sum",
     "amountwritten": "sum"
-}).reset_index()
+}).reset_index().copy())
 aggregatie_per_bedrijf.columns = ["bedrijf_id", "werkelijke_opbrengst", "totaal_uren"]
-
-aggregatie_per_bedrijf = aggregatie_per_bedrijf.merge(bedrijf_namen, on="bedrijf_id", how="left")
+aggregatie_per_bedrijf = aggregatie_per_bedrijf.merge(bedrijf_namen, on="bedrijf_id", how="left").copy()
 
 # Bereken rendement per uur per bedrijf
 aggregatie_per_bedrijf["rendement_per_uur"] = (
@@ -75,9 +76,9 @@ df_projects["totaal_uren"] = df_projects["totaal_uren"].fillna(0)
 
 # Sorteer en filter op rendement per uur, hoogste eerst, filter 0 en NaN
 df_rend = aggregatie_per_bedrijf.copy()
-df_rend = df_rend.dropna(subset=["rendement_per_uur"])
-df_rend = df_rend[df_rend["rendement_per_uur"] > 0]
-df_rend = df_rend.sort_values("rendement_per_uur", ascending=False)
+df_rend = df_rend.dropna(subset=["rendement_per_uur"]).copy()  # type: ignore
+df_rend = df_rend[df_rend["rendement_per_uur"] > 0].copy()  # type: ignore
+df_rend = df_rend.sort_values("rendement_per_uur", ascending=False).copy()  # type: ignore
 
 # === RISICOCATEGORIE TOEVOEGEN OP BASIS VAN RENDEMENT EN TIJDSBESTEDING ===
 # Removed categoriseer_risico function and its apply call per instructions
@@ -202,10 +203,10 @@ df_projectlines["sellingprice"] = pd.to_numeric(df_projectlines["sellingprice"],
 df_projectlines["amount"] = pd.to_numeric(df_projectlines["amount"], errors="coerce")
 df_projectlines["verwachte_opbrengst"] = df_projectlines["sellingprice"] * df_projectlines["amount"]
 
-verwachte_opbrengst_per_bedrijf = df_projectlines.groupby("bedrijf_id")["verwachte_opbrengst"].sum().reset_index()
+verwachte_opbrengst_per_bedrijf = df_projectlines.groupby("bedrijf_id")["verwachte_opbrengst"].sum().reset_index()  # type: ignore
 verwachte_opbrengst_per_bedrijf.columns = ["bedrijf_id", "verwachte_opbrengst"]
 
-aggregatie_per_bedrijf = aggregatie_per_bedrijf.merge(verwachte_opbrengst_per_bedrijf, on="bedrijf_id", how="left")
+aggregatie_per_bedrijf = aggregatie_per_bedrijf.merge(verwachte_opbrengst_per_bedrijf, on="bedrijf_id", how="left").copy()
 
 aggregatie_per_bedrijf["realisatie_ratio"] = (
     aggregatie_per_bedrijf["werkelijke_opbrengst"] / aggregatie_per_bedrijf["verwachte_opbrengst"]
@@ -216,20 +217,20 @@ aggregatie_per_bedrijf = aggregatie_per_bedrijf[
     aggregatie_per_bedrijf["realisatie_ratio"].notna() &
     (aggregatie_per_bedrijf["verwachte_opbrengst"] > 0) &
     (aggregatie_per_bedrijf["realisatie_ratio"] > 0)
-]
+].copy()
 
 st.markdown("### 🧮 Extra KPI's")
 
 # Topbedrijf op basis van hoogste realisatie-ratio
-top_realisatie = aggregatie_per_bedrijf.sort_values("realisatie_ratio", ascending=False).iloc[0]
+top_realisatie = aggregatie_per_bedrijf.sort_values("realisatie_ratio", ascending=False).iloc[0]  # type: ignore
 st.metric("🏆 Beste realisatie-ratio", f"{top_realisatie['realisatie_ratio']:.2f}", help=f"{top_realisatie['bedrijf_naam']}")
 
 # Topbedrijf op basis van hoogste totale opbrengst
-top_opbrengst = aggregatie_per_bedrijf.sort_values("werkelijke_opbrengst", ascending=False).iloc[0]
+top_opbrengst = aggregatie_per_bedrijf.sort_values("werkelijke_opbrengst", ascending=False).iloc[0]  # type: ignore
 st.metric("💰 Hoogste opbrengst totaal", f"€ {top_opbrengst['werkelijke_opbrengst']:.2f}", help=f"{top_opbrengst['bedrijf_naam']}")
 
 # Topbedrijf op basis van hoogste rendement per uur
-top_rendement = aggregatie_per_bedrijf.sort_values("rendement_per_uur", ascending=False).iloc[0]
+top_rendement = aggregatie_per_bedrijf.sort_values("rendement_per_uur", ascending=False).iloc[0]  # type: ignore
 st.metric("⚙️ Hoogste rendement per uur", f"€ {top_rendement['rendement_per_uur']:.2f}", help=f"{top_rendement['bedrijf_naam']}")
 
 # Uitleg over de realisatie-ratio in een expander
@@ -251,9 +252,9 @@ col2.metric("Gemiddelde realisatie-ratio", f"{realisatie_gem:.2f}")
 
 st.markdown("### 📋 Bedrijven met % tijdsbesteding en realisatie-ratio")
 df_extra = aggregatie_per_bedrijf[["bedrijf_naam", "totaal_uren", "% tijdsbesteding", "werkelijke_opbrengst", "verwachte_opbrengst", "realisatie_ratio"]]
-df_extra = df_extra.dropna(subset=["realisatie_ratio"])
+df_extra = df_extra.dropna(subset=["realisatie_ratio"]).copy()  # type: ignore
 # Alleen afronden bij presentatie, niet in data!
-st.dataframe(df_extra.sort_values("realisatie_ratio", ascending=True).style.format({
+st.dataframe(df_extra.sort_values("realisatie_ratio", ascending=True).style.format({  # type: ignore
     "totaal_uren": "{:.1f}",
     "% tijdsbesteding": "{:.1f}",
     "werkelijke_opbrengst": "€ {:.2f}",
@@ -265,7 +266,7 @@ st.dataframe(df_extra.sort_values("realisatie_ratio", ascending=True).style.form
 st.markdown("### ⏳ Urenverdeling per bedrijf")
 
 df_urenverdeling = aggregatie_per_bedrijf[["bedrijf_naam", "totaal_uren", "% tijdsbesteding"]].copy()
-df_urenverdeling = df_urenverdeling.sort_values("% tijdsbesteding", ascending=False)
+df_urenverdeling = df_urenverdeling.sort_values("% tijdsbesteding", ascending=False)  # type: ignore
 
 fig_uren = px.bar(
     df_urenverdeling,
@@ -288,7 +289,7 @@ st.plotly_chart(fig_uren, use_container_width=True)
 st.markdown("### 🧠 Pareto-analyse: Welk aantal bedrijven leveren het meeste op?")
 
 df_pareto = aggregatie_per_bedrijf[["bedrijf_naam", "werkelijke_opbrengst"]].copy()
-df_pareto = df_pareto.sort_values("werkelijke_opbrengst", ascending=False).reset_index(drop=True)
+df_pareto = df_pareto.sort_values("werkelijke_opbrengst", ascending=False).reset_index(drop=True)  # type: ignore
 df_pareto["cumulatieve_opbrengst"] = df_pareto["werkelijke_opbrengst"].cumsum()
 totale_opbrengst = df_pareto["werkelijke_opbrengst"].sum()
 df_pareto["cumulatief_percentage"] = (df_pareto["cumulatieve_opbrengst"] / totale_opbrengst * 100).round(2)
@@ -320,7 +321,7 @@ st.info(f"💡 {bedrijven_80pct} bedrijven zijn samen goed voor 80% van de total
 st.markdown("### 🤖 AI-Inzichten & Automatische Aanbevelingen")
 
 # Topklanten voor intensivering
-top_klanten = df_rend[(df_rend["rendement_per_uur"] > mediaan_rendement) & (df_rend["totaal_uren"] < 50)].sort_values("rendement_per_uur", ascending=False).head(5)
+top_klanten = df_rend[(df_rend["rendement_per_uur"] > mediaan_rendement) & (df_rend["totaal_uren"] < 50)].sort_values("rendement_per_uur", ascending=False).head(5)  # type: ignore
 
 
 # === 🔮 AI Forecasting: Verwacht KPI's via regressiemodel ===
@@ -328,7 +329,7 @@ top_klanten = df_rend[(df_rend["rendement_per_uur"] > mediaan_rendement) & (df_r
 st.markdown("### 🔮 AI Simulatie per Bedrijf – Wat als Scenario's & Aanbevelingen")
 
 # Voorbereiding data voor regressie
-reg_data = aggregatie_per_bedrijf[["totaal_uren", "verwachte_opbrengst", "werkelijke_opbrengst", "realisatie_ratio", "rendement_per_uur"]].dropna()
+reg_data = aggregatie_per_bedrijf[["totaal_uren", "verwachte_opbrengst", "werkelijke_opbrengst", "realisatie_ratio", "rendement_per_uur"]].dropna()  # type: ignore
 
 X = reg_data[["totaal_uren", "verwachte_opbrengst"]]
 y = reg_data["realisatie_ratio"]
@@ -339,14 +340,14 @@ model.fit(X, y)
 # Feature importance berekenen
 feature_importances = model.feature_importances_
 importances_df = pd.DataFrame({
-    'Feature': X.columns,
+    'Feature': X.columns,  # type: ignore
     'Importance': feature_importances
 }).sort_values(by='Importance', ascending=False)
 
-bedrijven_keuze = aggregatie_per_bedrijf["bedrijf_naam"].dropna().unique()
+bedrijven_keuze = aggregatie_per_bedrijf["bedrijf_naam"].dropna().unique()  # type: ignore
 bedrijf_selectie = st.selectbox("Selecteer een bedrijf", bedrijven_keuze)
 
-bedrijf_data = aggregatie_per_bedrijf[aggregatie_per_bedrijf["bedrijf_naam"] == bedrijf_selectie].iloc[0]
+bedrijf_data = aggregatie_per_bedrijf[aggregatie_per_bedrijf["bedrijf_naam"] == bedrijf_selectie].iloc[0]  # type: ignore
 default_uren = int(bedrijf_data["totaal_uren"])
 default_opbrengst = int(bedrijf_data["verwachte_opbrengst"])
 
@@ -354,7 +355,7 @@ default_opbrengst = int(bedrijf_data["verwachte_opbrengst"])
 sim_uren = st.number_input("⚙️ Stel totaal bestede uren in", min_value=1, value=default_uren)
 sim_opbrengst = st.number_input("💰 Stel verwachte opbrengst in (€)", min_value=1, value=default_opbrengst)
 
-X_sim = pd.DataFrame([[sim_uren, sim_opbrengst]], columns=['totaal_uren', 'verwachte_opbrengst'])
+X_sim = pd.DataFrame([[sim_uren, sim_opbrengst]], columns=['totaal_uren', 'verwachte_opbrengst'])  # type: ignore
 sim_roi = model.predict(X_sim)[0]
 
 st.metric("📈 Voorspelde realisatie-ratio", f"{sim_roi:.2f}")
@@ -382,7 +383,7 @@ opbrengst = sim_opbrengst  # opbrengst constant
 realisatie_pred = model.predict(
     pd.DataFrame(
         np.column_stack((uren_range, [opbrengst]*len(uren_range))),
-        columns=['totaal_uren', 'verwachte_opbrengst']
+        columns=['totaal_uren', 'verwachte_opbrengst']  # type: ignore
     )
 )
 
@@ -455,7 +456,7 @@ st.markdown("#### 3. Clustering van bedrijven op basis van prestaties")
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 
-cluster_data = aggregatie_per_bedrijf[["totaal_uren", "werkelijke_opbrengst", "rendement_per_uur"]].dropna()
+cluster_data = aggregatie_per_bedrijf[["totaal_uren", "werkelijke_opbrengst", "rendement_per_uur"]].dropna()  # type: ignore
 scaled = StandardScaler().fit_transform(cluster_data)
 kmeans = KMeans(n_clusters=4, random_state=42).fit(scaled)
 cluster_data["cluster"] = kmeans.labels_
@@ -478,9 +479,9 @@ st.plotly_chart(fig_cluster, use_container_width=True)
 # === AI-adviseur: automatisch gegenereerd advies per bedrijf op basis van prestaties ===
 st.markdown("### 🧠 AI-adviseur: Automatisch gegenereerd advies per bedrijf")
 
-bedrijf_advies = st.selectbox("📌 Kies een bedrijf voor advies", aggregatie_per_bedrijf["bedrijf_naam"].dropna().unique())
+bedrijf_advies = st.selectbox("📌 Kies een bedrijf voor advies", aggregatie_per_bedrijf["bedrijf_naam"].dropna().unique())  # type: ignore
 
-bedrijf_info = aggregatie_per_bedrijf[aggregatie_per_bedrijf["bedrijf_naam"] == bedrijf_advies].iloc[0]
+bedrijf_info = aggregatie_per_bedrijf[aggregatie_per_bedrijf["bedrijf_naam"] == bedrijf_advies].iloc[0]  # type: ignore
 
 advies_prompt = f"""
 Je bent een zakelijke AI-consultant. Geef beknopt maar concreet advies voor het volgende bedrijf:
@@ -509,7 +510,11 @@ def genereer_advies(prompt):
             temperature=0.4,
             max_tokens=500
         )
-        return response.choices[0].message.content.strip()
+        content = response.choices[0].message.content
+        if content is not None:
+            return content.strip()
+        else:
+            return "⚠️ Geen AI-advies ontvangen."
     except Exception as e:
         return f"⚠️ Fout bij ophalen van AI-advies: {e}"
 

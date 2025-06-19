@@ -18,9 +18,13 @@ MOCK_MODE = False  # Zet op False voor live API-verzoeken
 PROJECTLINES_CACHE_PATH = "data/projectlines_per_company.parquet"
 
 BASE_URL = "https://api.gripp.com/public/api3.php"
-API_KEY = os.getenv("GRIPP_API_KEY")
-HEADERS = {"Authorization": f"Bearer {API_KEY}"}
+GRIPP_API_KEY = os.getenv("GRIPP_API_KEY")
+if not GRIPP_API_KEY:
+    raise ValueError("GRIPP_API_KEY is not set in the environment.")
+HEADERS = {"Authorization": f"Bearer {GRIPP_API_KEY}"}
 POSTGRES_URL = os.getenv("POSTGRES_URL")
+if not POSTGRES_URL:
+    raise ValueError("POSTGRES_URL is not set in the environment.")
 engine = create_engine(POSTGRES_URL)
 CACHE_PATH = "data/gripp_hours.parquet"
 MAX_CACHE_AGE_MINUTES = 30
@@ -32,7 +36,7 @@ datasets = {}
 
 def filter_active_projects_only(projects_df: pd.DataFrame) -> pd.DataFrame:
     """Filtert alleen niet-gearchiveerde projecten (actief)."""
-    return projects_df[projects_df["archived"] == False]
+    return pd.DataFrame(projects_df[projects_df["archived"] == False].copy())
 
 def get_active_projectlines_for_company(company_name: str) -> pd.DataFrame:
     print(f"\n🔍 Actieve projectlines ophalen voor bedrijf: '{company_name}'...")
@@ -76,7 +80,7 @@ def filter_projects(df: pd.DataFrame) -> pd.DataFrame:
         "updatedon_date", "viewonlineurl"
     ]
     cols = [c for c in keep_cols if c in df.columns]
-    return df[cols]
+    return pd.DataFrame(df[cols].copy())
 
 def filter_employees(df: pd.DataFrame) -> pd.DataFrame:
     keep_cols = [
@@ -84,7 +88,7 @@ def filter_employees(df: pd.DataFrame) -> pd.DataFrame:
         "employeesince_date", "department_id", "role_id", "updatedon_date", "identity_id"
     ]
     cols = [c for c in keep_cols if c in df.columns]
-    return df[cols]
+    return pd.DataFrame(df[cols].copy())
 
 def filter_companies(df: pd.DataFrame) -> pd.DataFrame:
     keep_cols = [
@@ -96,14 +100,14 @@ def filter_companies(df: pd.DataFrame) -> pd.DataFrame:
         "visitingaddress_street", "visitingaddress_streetnumber", "visitingaddress_zipcode", "visitingaddress_city"
     ]
     cols = [c for c in keep_cols if c in df.columns]
-    return df[cols]
+    return pd.DataFrame(df[cols].copy())
 
 def filter_tasktypes(df: pd.DataFrame) -> pd.DataFrame:
     keep_cols = [
         "id", "name", "searchname", "color", "createdon_date", "updatedon_date"
     ]
     cols = [c for c in keep_cols if c in df.columns]
-    return df[cols]
+    return pd.DataFrame(df[cols].copy())
 
 def filter_hours(df: pd.DataFrame) -> pd.DataFrame:
     keep_cols = [
@@ -116,14 +120,15 @@ def filter_hours(df: pd.DataFrame) -> pd.DataFrame:
         "definitiveon_date", "updatedon_date"
     ]
     cols = [c for c in keep_cols if c in df.columns]
-    return df[cols]
+    return pd.DataFrame(df[cols].copy())
 def flatten_dict_column(df: pd.DataFrame) -> pd.DataFrame:
     for col in df.columns:
-        if df[col].apply(lambda x: isinstance(x, dict)).any():
+        is_dict_series = df[col].apply(lambda x: isinstance(x, dict))
+        if bool(is_dict_series.any()):
             expanded = df[col].apply(pd.Series)
             expanded.columns = [f"{col}_{subcol}" for subcol in expanded.columns]
             df = df.drop(columns=[col]).join(expanded)
-    return df
+    return pd.DataFrame(df)
 
 def is_cache_fresh():
     if not os.path.exists(CACHE_PATH):
@@ -349,16 +354,14 @@ def print_projectlines_for_company(company_name: str, projects_df: pd.DataFrame,
         return
     # Print overzicht per project
     for project_id, project in projects_for_company.iterrows():
-        lines = relevant_projectlines[relevant_projectlines["offerprojectbase_id"] == project["id"]]
-        if lines.empty:
+        lines = pd.DataFrame(relevant_projectlines[relevant_projectlines["offerprojectbase_id"] == project["id"]])
+        if hasattr(lines, 'empty') and lines.empty:  # type: ignore
             continue
         print(f"\n🔹 Project: {project['name']} (ID {project['id']}, Nummer {project.get('number', '-')})")
-        # Selecteer een paar interessante kolommen als ze bestaan
         columns_to_show = [col for col in [
             "id", "description", "amount", "totalexclvat", "tasktype_searchname", "createdon_date", "updatedon_date"
-        ] if col in lines.columns]
-        # Print netjes met pandas
-        print(lines[columns_to_show].to_string(index=False))
+        ] if col in lines.columns]  # type: ignore
+        print(lines[columns_to_show].to_string(index=False))  # type: ignore
     print("\n✅ Overzicht projectlines voor bedrijf afgerond.")
 # Toegevoegd: Ophalen van projectlijnen (offerprojectlines)
 def fetch_gripp_projectlines():

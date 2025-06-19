@@ -35,44 +35,35 @@ except ImportError:
     st.warning("📛 'streamlit-extras' is niet geïnstalleerd of niet vindbaar door je environment.")
 
 # --- LOAD DATA ---
-df_projects = pd.DataFrame(load_data("projects"))  # type: ignore
+df_projects = pd.DataFrame(load_data("projects"))
 df_projects = df_projects[df_projects["archived"] != True].copy()
 df_projects["totalexclvat"] = pd.to_numeric(df_projects["totalexclvat"], errors="coerce")
 df_projects["startdate_date"] = pd.to_datetime(df_projects["startdate_date"], errors="coerce")
 df_projects["enddate_date"] = pd.to_datetime(df_projects["enddate_date"], errors="coerce")
 
-df_employees = pd.DataFrame(load_data("employees"))  # type: ignore
-df_companies = pd.DataFrame(load_data("companies"))  # type: ignore
-df_uren = pd.DataFrame(load_data("urenregistratie"))  # type: ignore
-df_projectlines = pd.DataFrame(load_data("projectlines_per_company"))  # type: ignore
-
+df_employees = pd.DataFrame(load_data("employees"))
+df_companies = pd.DataFrame(load_data("companies"))
+df_uren = pd.DataFrame(load_data("urenregistratie"))
+df_projectlines = pd.DataFrame(load_data("projectlines_per_company"))
 # Filter alleen projectlines voor actieve projecten en rowtype 'NORMAAL'
 active_project_ids = df_projects["id"].tolist()
-df_projectlines = df_projectlines[df_projectlines["offerprojectbase_id"].isin(active_project_ids)].copy()  # type: ignore
-df_projectlines = df_projectlines[df_projectlines["rowtype_searchname"] == "NORMAAL"].copy()  # type: ignore
-
+df_projectlines = df_projectlines[df_projectlines["offerprojectbase_id"].isin(active_project_ids)].copy()
+df_projectlines = df_projectlines[df_projectlines["rowtype_searchname"] == "NORMAAL"].copy()
 # Zet numerieke kolommen om naar numeriek (float)
 for col in ["amountwritten", "sellingprice"]:
     df_projectlines.loc[:, col] = pd.to_numeric(df_projectlines[col], errors="coerce")  # type: ignore
-
 # Bereken werkelijke opbrengst zonder afronding
 df_projectlines.loc[:, "werkelijke_opbrengst"] = df_projectlines["sellingprice"] * df_projectlines["amountwritten"]  # type: ignore
-
 # Aggregatie per bedrijf
-aggregatie_per_bedrijf = df_projectlines.groupby("bedrijf_id").agg({  # type: ignore
+aggregatie_per_bedrijf = pd.DataFrame(df_projectlines.groupby("bedrijf_id").agg({  # type: ignore
     "werkelijke_opbrengst": "sum",
     "amountwritten": "sum"
-}).reset_index()
+}).reset_index().copy())
 aggregatie_per_bedrijf.columns = ["bedrijf_id", "werkelijke_opbrengst", "totaal_uren"]
-
 # Merge met projecten en vul NaN's op met 0
-df_projects = df_projects.merge(aggregatie_per_bedrijf, left_on="company_id", right_on="bedrijf_id", how="left")
-
+df_projects = df_projects.merge(aggregatie_per_bedrijf, left_on="company_id", right_on="bedrijf_id", how="left").copy()
 # Vul NaN met 0 en converteer naar numeriek met infer_objects(copy=False)
-# voor werkelijke_opbrengst
 df_projects["werkelijke_opbrengst"] = df_projects["werkelijke_opbrengst"].fillna(0).infer_objects(copy=False)
-
-# voor totaal_uren
 df_projects["totaal_uren"] = df_projects["totaal_uren"].fillna(0).infer_objects(copy=False)
 
 # --- KPI CARDS ---

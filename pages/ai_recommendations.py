@@ -107,7 +107,7 @@ with st.spinner("Data wordt geladen, even geduld..."):
             st.markdown(f"**🧠 SQL-AI:** {text}")
 
     df_projects = load_data("projects")
-    df_projectlines = pd.DataFrame(load_data("projectlines_per_company"))  # type: ignore
+    df_projectlines = pd.DataFrame(load_data("projectlines_per_company"))
     bedrijf_namen = df_projectlines[["bedrijf_id", "bedrijf_naam"]].drop_duplicates().copy()
     df_uren = load_data("urenregistratie")
     df_projects = df_projects[df_projects["archived"] != True].copy()
@@ -115,18 +115,17 @@ with st.spinner("Data wordt geladen, even geduld..."):
     df_employees = load_data("employees")
     df_companies = load_data("companies")
     df_uren = load_data("urenregistratie")
-    df_projectlines = pd.DataFrame(load_data("projectlines_per_company"))  # type: ignore
+    df_projectlines = pd.DataFrame(load_data("projectlines_per_company"))
     active_project_ids = df_projects["id"].tolist()
     df_projectlines = df_projectlines[df_projectlines["offerprojectbase_id"].isin(active_project_ids)].copy()
     df_projectlines = df_projectlines[df_projectlines["rowtype_searchname"] == "NORMAAL"].copy()
     df_projectlines["amountwritten"] = pd.to_numeric(df_projectlines["amountwritten"], errors="coerce")
     df_projectlines["werkelijke_opbrengst"] = pd.to_numeric(df_projectlines["sellingprice"], errors="coerce") * df_projectlines["amountwritten"]
-    aggregatie_per_bedrijf = df_projectlines.groupby("bedrijf_id").agg({  # type: ignore
+    aggregatie_per_bedrijf = pd.DataFrame(df_projectlines.groupby("bedrijf_id").agg({  # type: ignore
         "werkelijke_opbrengst": "sum",
         "amountwritten": "sum"
-    }).reset_index().copy()
+    }).reset_index().copy())
     aggregatie_per_bedrijf.columns = ["bedrijf_id", "werkelijke_opbrengst", "totaal_uren"]
-
     aggregatie_per_bedrijf = aggregatie_per_bedrijf.merge(bedrijf_namen, on="bedrijf_id", how="left").copy()
 
     # Bereken rendement per uur per bedrijf
