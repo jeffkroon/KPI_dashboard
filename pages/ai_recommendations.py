@@ -43,6 +43,8 @@ with st.spinner("Data wordt geladen, even geduld..."):
 
     load_dotenv()
     POSTGRES_URL = os.getenv("POSTGRES_URL")
+    if not POSTGRES_URL:
+        raise ValueError("POSTGRES_URL is not set in the environment.")
     engine = create_engine(POSTGRES_URL)
 
     # --- SQL DATABASE CHATBOT ---
@@ -88,7 +90,7 @@ with st.spinner("Data wordt geladen, even geduld..."):
     if sql_user_input and sql_agent:
         if is_safe_sql(sql_user_input):
             try:
-                sql_response = sql_agent.run(sql_user_input)
+                sql_response = sql_agent.run(sql_user_input)  # type: ignore
                 st.session_state.sql_chat_history.append(("Jij", sql_user_input))
                 st.session_state.sql_chat_history.append(("SQL-AI", sql_response))
             except Exception as e:
@@ -105,47 +107,43 @@ with st.spinner("Data wordt geladen, even geduld..."):
             st.markdown(f"**🧠 SQL-AI:** {text}")
 
     df_projects = load_data("projects")
-    df_projectlines = load_data("projectlines_per_company")
-    bedrijf_namen = df_projectlines[["bedrijf_id", "bedrijf_naam"]].drop_duplicates()
+    df_projectlines = pd.DataFrame(load_data("projectlines_per_company"))  # type: ignore
+    bedrijf_namen = df_projectlines[["bedrijf_id", "bedrijf_naam"]].drop_duplicates().copy()
     df_uren = load_data("urenregistratie")
-    df_projects = df_projects[df_projects["archived"] != True]
+    df_projects = df_projects[df_projects["archived"] != True].copy()
     df_projects["totalexclvat"] = pd.to_numeric(df_projects["totalexclvat"], errors="coerce")
     df_employees = load_data("employees")
     df_companies = load_data("companies")
     df_uren = load_data("urenregistratie")
-    df_projectlines = load_data("projectlines_per_company")
+    df_projectlines = pd.DataFrame(load_data("projectlines_per_company"))  # type: ignore
     active_project_ids = df_projects["id"].tolist()
-    df_projectlines = df_projectlines[df_projectlines["offerprojectbase_id"].isin(active_project_ids)]
-    df_projectlines = df_projectlines[df_projectlines["rowtype_searchname"] == "NORMAAL"]
+    df_projectlines = df_projectlines[df_projectlines["offerprojectbase_id"].isin(active_project_ids)].copy()
+    df_projectlines = df_projectlines[df_projectlines["rowtype_searchname"] == "NORMAAL"].copy()
     df_projectlines["amountwritten"] = pd.to_numeric(df_projectlines["amountwritten"], errors="coerce")
     df_projectlines["werkelijke_opbrengst"] = pd.to_numeric(df_projectlines["sellingprice"], errors="coerce") * df_projectlines["amountwritten"]
-    aggregatie_per_bedrijf = df_projectlines.groupby("bedrijf_id").agg({
+    aggregatie_per_bedrijf = df_projectlines.groupby("bedrijf_id").agg({  # type: ignore
         "werkelijke_opbrengst": "sum",
         "amountwritten": "sum"
-    }).reset_index()
+    }).reset_index().copy()
     aggregatie_per_bedrijf.columns = ["bedrijf_id", "werkelijke_opbrengst", "totaal_uren"]
 
-    aggregatie_per_bedrijf = aggregatie_per_bedrijf.merge(bedrijf_namen, on="bedrijf_id", how="left")
+    aggregatie_per_bedrijf = aggregatie_per_bedrijf.merge(bedrijf_namen, on="bedrijf_id", how="left").copy()
 
     # Bereken rendement per uur per bedrijf
     aggregatie_per_bedrijf["rendement_per_uur"] = (
         aggregatie_per_bedrijf["werkelijke_opbrengst"] / aggregatie_per_bedrijf["totaal_uren"]
     ).round(2)
 
-
     # Voeg werkelijke omzet toe aan projects via een merge
-    df_projects = df_projects.merge(aggregatie_per_bedrijf, left_on="company_id", right_on="bedrijf_id", how="left")
+    df_projects = df_projects.merge(aggregatie_per_bedrijf, left_on="company_id", right_on="bedrijf_id", how="left").copy()
     df_projects["werkelijke_opbrengst"] = df_projects["werkelijke_opbrengst"].fillna(0)
     df_projects["totaal_uren"] = df_projects["totaal_uren"].fillna(0)
 
-
     # Sorteer en filter op rendement per uur, hoogste eerst, filter 0 en NaN
     df_rend = aggregatie_per_bedrijf.copy()
-    df_rend = df_rend.dropna(subset=["rendement_per_uur"])
-    df_rend = df_rend[df_rend["rendement_per_uur"] > 0]
-    df_rend = df_rend.sort_values("rendement_per_uur", ascending=False)
-
-
+    df_rend = df_rend.dropna(subset=["rendement_per_uur"]).copy()
+    df_rend = df_rend[df_rend["rendement_per_uur"] > 0].copy()
+    df_rend = df_rend.sort_values("rendement_per_uur", ascending=False).copy()  # type: ignore
 
     # Maak een tekstuele samenvatting van feiten per bedrijf
     summary_lines = []
@@ -244,7 +242,6 @@ data_frames = {
 
 full_data = aggregatie_per_bedrijf.copy()  # Later vervangen door volledige merge
 
-
 # LangGraph state class
 class ChatState:
     def __init__(self):
@@ -277,7 +274,7 @@ st.session_state.agent = graph_agent
 if user_input:
     try:
         result = st.session_state.agent.invoke(HumanMessage(user_input))
-        antwoord = result.content if hasattr(result, "content") else str(result)
+        antwoord = getattr(result, "content", str(result))
         st.session_state.chat_history.append(("Jij", user_input))
         st.session_state.chat_history.append(("AI", antwoord))
     except Exception as e:
