@@ -61,7 +61,12 @@ langchain==0.3.25
 langchain-community==0.3.25
 langchain-core==0.3.65
 langchain-experimental==0.3.4
+langchain-openai==0.3.24
 langchain-text-splitters==0.3.8
+langgraph==0.4.8
+langgraph-checkpoint==2.1.0
+langgraph-prebuilt==0.2.2
+langgraph-sdk==0.1.70
 langsmith==0.3.45
 llvmlite==0.44.0
 lxml==5.4.0
@@ -77,6 +82,7 @@ numba==0.61.2
 numpy==2.2.6
 openai==1.86.0
 orjson==3.10.18
+ormsgpack==1.10.0
 packaging==24.2
 pandas==2.2.3
 pillow==11.2.1
@@ -110,6 +116,7 @@ pytz==2025.2
 PyYAML==6.0.2
 realtime==2.4.3
 referencing==0.36.2
+regex==2024.11.6
 requests==2.32.3
 requests-toolbelt==1.0.0
 rpds-py==0.25.1
@@ -149,6 +156,7 @@ supafunc==0.9.4
 tabulate==0.9.0
 tenacity==9.1.2
 threadpoolctl==3.6.0
+tiktoken==0.9.0
 toml==0.10.2
 tomli==2.2.1
 tomlkit==0.13.3
@@ -164,5 +172,6 @@ urllib3==2.4.0
 validators==0.35.0
 watchdog==6.0.0
 websockets==14.2
+xxhash==3.5.0
 yarl==1.20.0
 zstandard==0.23.0
