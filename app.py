@@ -10,15 +10,16 @@ st.set_page_config(
     page_title="Dunion KPI Dashboard",
     page_icon="images/dunion-logo-def_donker-06.png",
     layout="wide",
-    initial_sidebar_state="expanded")
+    initial_sidebar_state="expanded"
+)
 
 st.logo("images/dunion-logo-def_donker-06.png")
 st.title("Dunion KPI Dashboard – Overzicht")
+
 @st.cache_data
 def load_data(table_name):
     query = f"SELECT * FROM {table_name};"
     return pd.read_sql(query, con=engine)
-
 
 pd.set_option('future.no_silent_downcasting', True)
 
@@ -35,10 +36,11 @@ except ImportError:
     st.warning("📛 'streamlit-extras' is niet geïnstalleerd of niet vindbaar door je environment.")
 
 # --- LOAD DATA ---
-df_projects = pd.DataFrame(load_data("projects"))
+df_projects_raw = pd.DataFrame(load_data("projects"))
 df_companies = pd.DataFrame(load_data("companies"))
 
-df_projects = df_projects.merge(
+# Merge projects with companies to get companyname
+df_projects_raw = df_projects_raw.merge(
     df_companies[["id", "companyname"]],
     left_on="company_id",
     right_on="id",
@@ -46,16 +48,12 @@ df_projects = df_projects.merge(
     suffixes=("", "_bedrijf")
 )
 
-df_invoicelines = pd.DataFrame(load_data("invoicelines"))
-df_invoicelines_merged = df_invoicelines.merge(
-    df_projects[["id", "company_id", "companyname"]],
-    left_on="project_id",
-    right_on="id",
-    how="left",
-    suffixes=("", "_project")
-)
+# Load invoices
+df_invoices = pd.DataFrame(load_data("invoices"))
 
-df_projects = df_projects[df_projects["archived"] != True].copy()
+# 🔥 pas hier filter je projecten
+df_projects = df_projects_raw[df_projects_raw["archived"] != True].copy()
+
 df_projects["totalexclvat"] = pd.to_numeric(df_projects["totalexclvat"], errors="coerce")
 df_projects["startdate_date"] = pd.to_datetime(df_projects["startdate_date"], errors="coerce")
 df_projects["enddate_date"] = pd.to_datetime(df_projects["enddate_date"], errors="coerce")
@@ -63,29 +61,27 @@ df_projects["enddate_date"] = pd.to_datetime(df_projects["enddate_date"], errors
 df_employees = pd.DataFrame(load_data("employees"))
 df_uren = pd.DataFrame(load_data("urenregistratie"))
 df_projectlines = pd.DataFrame(load_data("projectlines_per_company"))
-# Filter alleen projectlines voor actieve projecten en rowtype 'NORMAAL'
+
+# Filter projectlines op actieve projecten en 'NORMAAL'
 active_project_ids = df_projects["id"].tolist()
 df_projectlines = df_projectlines[df_projectlines["offerprojectbase_id"].isin(active_project_ids)].copy()
 df_projectlines = df_projectlines[df_projectlines["rowtype_searchname"] == "NORMAAL"].copy()
-# Zet numerieke kolommen om naar numeriek (float)
+
+# Numerieke kolommen netjes maken
 for col in ["amountwritten", "sellingprice"]:
-    df_projectlines.loc[:, col] = pd.to_numeric(df_projectlines[col], errors="coerce")  # type: ignore
-# Bereken werkelijke opbrengst zonder afronding
-aggregatie_per_bedrijf = pd.DataFrame(df_projectlines.groupby("bedrijf_id").agg({  # type: ignore
+    df_projectlines.loc[:, col] = pd.to_numeric(df_projectlines[col], errors="coerce")
+
+# Bereken totaal uren per bedrijf
+aggregatie_per_bedrijf = pd.DataFrame(df_projectlines.groupby("bedrijf_id").agg({
     "amountwritten": "sum"
 }).reset_index().copy())
 aggregatie_per_bedrijf.columns = ["bedrijf_id", "totaal_uren"]
-# Merge met projecten en vul NaN's op met 0
-df_projects = df_projects.merge(aggregatie_per_bedrijf, left_on="company_id", right_on="bedrijf_id", how="left").copy()
-# Vul NaN met 0 en converteer naar numeriek met infer_objects(copy=False)
-df_projects["totaal_uren"] = df_projects["totaal_uren"].fillna(0).infer_objects(copy=False)
-st.write(df_projects[df_projects['id'] == 330])
-st.write(df_projectlines[df_projectlines['offerprojectbase_id'] == 330])
-st.write(df_invoicelines[df_invoicelines['project_id'] == 330])
-# Merge invoicelines met projectlines op project_id
-# Dit geeft je toegang tot projectinformatie bij elke factuurregel
-# Suffixes voorkomen kolomnaam-conflicten
 
+# Merge in projecten
+df_projects = df_projects.merge(aggregatie_per_bedrijf, left_on="company_id", right_on="bedrijf_id", how="left").copy()
+df_projects["totaal_uren"] = df_projects["totaal_uren"].fillna(0).infer_objects(copy=False)
+
+# --- UI ---
 st.subheader("Factuurregels per bedrijf zoeken")
 
 bedrijf_zoek = st.text_input("Zoek op bedrijfsnaam:")
@@ -101,22 +97,24 @@ bedrijf_naam = st.selectbox("Kies een bedrijf:", bedrijf_opties) if bedrijf_opti
 if bedrijf_naam:
     bedrijf_id = gefilterde_bedrijven.loc[gefilterde_bedrijven["companyname"] == bedrijf_naam, "id"].iloc[0]
     st.write(f"Bedrijf ID: {bedrijf_id}")
-    
-    # Filter de factuurregels per geselecteerd bedrijf
-    factuurregels_bedrijf = df_invoicelines_merged[df_invoicelines_merged["company_id"] == bedrijf_id]
 
-    st.subheader(f"Factuurregels voor {bedrijf_naam}")
-    st.dataframe(factuurregels_bedrijf[["project_id", "companyname", "description", "amount", "sellingprice"]])
+    # Filter invoices for this company
+    facturen_bedrijf = df_invoices[df_invoices["company_id"] == bedrijf_id].copy()
+    facturen_bedrijf["totalinclvat"] = pd.to_numeric(facturen_bedrijf["totalinclvat"], errors="coerce")
 
+    st.subheader(f"Facturen voor {bedrijf_naam}")
+    totaal_factuurbedrag = facturen_bedrijf["totalinclvat"].sum()
 
-# --- Toevoeging: Zoekbare tabel voor factuurregels per bedrijf ---
-st.subheader("Factuurregels zoeken per bedrijf – Tabeloverzicht")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("Aantal facturen", len(facturen_bedrijf))
+    with col2:
+        st.metric("Totale gefactureerde waarde", f"€ {totaal_factuurbedrag:,.2f}")
 
-zoek_bedrijf_tabel = st.text_input("Zoek bedrijfsnaam in tabelweergave:")
+    st.dataframe(facturen_bedrijf[["company_searchname","company_id", "number", "date_date", "status_searchname", "totalinclvat"]])
 
-if zoek_bedrijf_tabel:
-    gefilterd_df = df_invoicelines_merged[df_invoicelines_merged["companyname"].str.contains(zoek_bedrijf_tabel, case=False, na=False)]
-else:
-    gefilterd_df = df_invoicelines_merged
+    factuurregels_bedrijf = pd.DataFrame()  # Geen factuurregels beschikbaar
+    st.info("Factuurregels zijn niet langer beschikbaar in dit dashboard.")
 
-st.dataframe(gefilterd_df[["companyname", "project_id", "description", "amount", "sellingprice"]])
+# --- BONUS: unmatched facturen ---
+# (Removed per instructions)
