@@ -204,7 +204,7 @@ if not projectlines.empty:
     total_row = pd.DataFrame({
         "offerprojectbase_id": ["TOTAAL"],
         "searchname": ["TOTAAL"],
-        "sellingprice": [projectlines_display["sellingprice"].sum()],
+        "sellingprice": [""],
         "amountwritten": [projectlines_display["amountwritten"].sum()],
         "werkelijke_opbrengst": [projectlines_display["werkelijke_opbrengst"].sum()]
     })
@@ -220,7 +220,9 @@ if not projectlines.empty:
     projectlines_display = projectlines_display.sort_values(by="werkelijke_opbrengst", ascending=False, na_position='last')  # type: ignore
 
     # Format numerieke kolommen voor weergave, inclusief euroteken bij sellingprice en werkelijke_opbrengst
-    projectlines_display.loc[:, "sellingprice"] = projectlines_display["sellingprice"].apply(lambda x: f"€ {x:,.2f}" if pd.notnull(x) else "")
+    projectlines_display.loc[:, "sellingprice"] = projectlines_display["sellingprice"].apply(
+        lambda x: f"€ {x:,.2f}" if pd.notnull(x) and isinstance(x, (int, float)) else str(x) if x == "" else ""
+    )
     projectlines_display.loc[:, "amountwritten"] = projectlines_display["amountwritten"].apply(lambda x: f"{x:,.2f}" if pd.notnull(x) else "")
     projectlines_display.loc[:, "werkelijke_opbrengst"] = projectlines_display["werkelijke_opbrengst"].apply(lambda x: f"€ {x:,.2f}" if pd.notnull(x) else "")
 
