@@ -68,3 +68,24 @@ st.write(df_invoicelines[df_invoicelines['project_id'] == 330])
 # Merge invoicelines met projectlines op project_id
 # Dit geeft je toegang tot projectinformatie bij elke factuurregel
 # Suffixes voorkomen kolomnaam-conflicten
+
+st.subheader("Factuurregels per bedrijf zoeken")
+
+bedrijf_zoek = st.text_input("Zoek op bedrijfsnaam:")
+
+if bedrijf_zoek:
+    gefilterde_bedrijven = df_companies[df_companies["companyname"].str.contains(bedrijf_zoek, case=False, na=False)]
+else:
+    gefilterde_bedrijven = df_companies
+
+bedrijf_opties = gefilterde_bedrijven["companyname"].tolist()
+bedrijf_naam = st.selectbox("Kies een bedrijf:", bedrijf_opties) if bedrijf_opties else None
+
+if bedrijf_naam:
+    bedrijf_id = gefilterde_bedrijven.loc[gefilterde_bedrijven["companyname"] == bedrijf_naam, "id"].iloc[0]
+    st.write(bedrijf_id)
+    project_id = df_projects[]
+    st.write(project_id)
+    st.write(df_projects[df_projects["company_id"] == bedrijf_id])
+    st.write(df_projectlines[df_projectlines['bedrijf_id'] == bedrijf_id])
+    st.write(df_invoicelines[df_invoicelines['project_id'] == 330])
