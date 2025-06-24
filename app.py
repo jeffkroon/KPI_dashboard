@@ -36,14 +36,31 @@ except ImportError:
 
 # --- LOAD DATA ---
 df_projects = pd.DataFrame(load_data("projects"))
+df_companies = pd.DataFrame(load_data("companies"))
+
+df_projects = df_projects.merge(
+    df_companies[["id", "companyname"]],
+    left_on="company_id",
+    right_on="id",
+    how="left",
+    suffixes=("", "_bedrijf")
+)
+
 df_invoicelines = pd.DataFrame(load_data("invoicelines"))
+df_invoicelines_merged = df_invoicelines.merge(
+    df_projects[["id", "company_id", "companyname"]],
+    left_on="project_id",
+    right_on="id",
+    how="left",
+    suffixes=("", "_project")
+)
+
 df_projects = df_projects[df_projects["archived"] != True].copy()
 df_projects["totalexclvat"] = pd.to_numeric(df_projects["totalexclvat"], errors="coerce")
 df_projects["startdate_date"] = pd.to_datetime(df_projects["startdate_date"], errors="coerce")
 df_projects["enddate_date"] = pd.to_datetime(df_projects["enddate_date"], errors="coerce")
 
 df_employees = pd.DataFrame(load_data("employees"))
-df_companies = pd.DataFrame(load_data("companies"))
 df_uren = pd.DataFrame(load_data("urenregistratie"))
 df_projectlines = pd.DataFrame(load_data("projectlines_per_company"))
 # Filter alleen projectlines voor actieve projecten en rowtype 'NORMAAL'
@@ -83,9 +100,23 @@ bedrijf_naam = st.selectbox("Kies een bedrijf:", bedrijf_opties) if bedrijf_opti
 
 if bedrijf_naam:
     bedrijf_id = gefilterde_bedrijven.loc[gefilterde_bedrijven["companyname"] == bedrijf_naam, "id"].iloc[0]
-    st.write(bedrijf_id)
-    project_id = df_projects[]
-    st.write(project_id)
-    st.write(df_projects[df_projects["company_id"] == bedrijf_id])
-    st.write(df_projectlines[df_projectlines['bedrijf_id'] == bedrijf_id])
-    st.write(df_invoicelines[df_invoicelines['project_id'] == 330])
+    st.write(f"Bedrijf ID: {bedrijf_id}")
+    
+    # Filter de factuurregels per geselecteerd bedrijf
+    factuurregels_bedrijf = df_invoicelines_merged[df_invoicelines_merged["company_id"] == bedrijf_id]
+
+    st.subheader(f"Factuurregels voor {bedrijf_naam}")
+    st.dataframe(factuurregels_bedrijf[["project_id", "companyname", "description", "amount", "sellingprice"]])
+
+
+# --- Toevoeging: Zoekbare tabel voor factuurregels per bedrijf ---
+st.subheader("Factuurregels zoeken per bedrijf – Tabeloverzicht")
+
+zoek_bedrijf_tabel = st.text_input("Zoek bedrijfsnaam in tabelweergave:")
+
+if zoek_bedrijf_tabel:
+    gefilterd_df = df_invoicelines_merged[df_invoicelines_merged["companyname"].str.contains(zoek_bedrijf_tabel, case=False, na=False)]
+else:
+    gefilterd_df = df_invoicelines_merged
+
+st.dataframe(gefilterd_df[["companyname", "project_id", "description", "amount", "sellingprice"]])
