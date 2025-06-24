@@ -422,6 +422,7 @@ def main():
     tasktypes_raw = flatten_dict_column(fetch_gripp_tasktypes())
     hours_raw = flatten_dict_column(fetch_gripp_hours_data())
     projectlines_raw = flatten_dict_column(fetch_gripp_projectlines())
+    invoicelines_raw = flatten_dict_column(fetch_gripp_invoicelines())
 
     datasets["gripp_projects"] = filter_projects(projects_raw)
     datasets["gripp_employees"] = filter_employees(employees_raw)
@@ -429,6 +430,7 @@ def main():
     datasets["gripp_tasktypes"] = filter_tasktypes(tasktypes_raw)
     datasets["gripp_hours_data"] = filter_hours(hours_raw)
     datasets["gripp_projectlines"] = projectlines_raw
+    datasets["gripp_invoicelines"] = invoicelines_raw
 
     # Verzamel alle projectlines per bedrijf
     if os.path.exists(PROJECTLINES_CACHE_PATH) and not FORCE_REFRESH:
@@ -455,8 +457,113 @@ def main():
         safe_to_sql(datasets["gripp_hours_data"].drop_duplicates(subset="id"), "urenregistratie")
     if combined_projectlines is not None:
         safe_to_sql(combined_projectlines.drop_duplicates(subset="id"), "projectlines_per_company")
+    if datasets.get("gripp_invoicelines") is not None:
+        safe_to_sql(datasets["gripp_invoicelines"].drop_duplicates(subset="id"), "invoicelines")
 
+def fetch_gripp_invoicelines():
+    def fetch():
+        if MOCK_MODE:
+            print("📦 MOCK: invoicelines geladen uit dummy bestand.")
+            return pd.read_csv("mock_data/invoices.csv")  # Pas aan als je een aparte mock hebt
+        all_rows = []
+        start = 0
+        max_results = 100
+        watchdog = 50
+        while watchdog > 0:
+            payload = [{
+                "id": 1,
+                "method": "invoiceline.get",
+                "params": [
+                    [],
+                    {"paging": {"firstresult": start, "maxresults": max_results}}
+                ]
+            }]
+            time.sleep(0.5)
+            response = requests.post(BASE_URL, headers=HEADERS, json=payload)
+            remaining = response.headers.get("X-RateLimit-Remaining")
+            if remaining is not None:
+                print(f"📉 Remaining requests: {remaining}")
+            response.raise_for_status()
+            data = response.json()
+            rows = data[0].get("result", {}).get("rows", [])
+            all_rows.extend(rows)
+            if not data[0]["result"].get("more_items_in_collection", False):
+                break
+            start = data[0]["result"].get("next_start", start + max_results)
+            watchdog -= 1
+        return pd.DataFrame(all_rows)
+    return cached_fetch("gripp_invoicelines", fetch, force_refresh=FORCE_REFRESH)
 
+# --- NIEUW: Aggregatie per bedrijf op basis van invoice lines ---
+def get_invoicelines_for_company(company_id: int, invoicelines_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Filter alle invoice lines voor een bedrijf (via project->company_id of direct als veld aanwezig).
+    Berekent totale omzet (sellingprice * amount) en totaal aantal uren (amount).
+    """
+    # Sommige invoice lines hebben mogelijk een 'project' of 'company' veld, afhankelijk van de API response
+    # Hier gaan we uit van een 'project' veld met een 'company_id' subveld, of direct 'company_id' als kolom
+    if 'company_id' in invoicelines_df.columns:
+        relevant = invoicelines_df[invoicelines_df['company_id'] == company_id].copy()
+    elif 'project_company_id' in invoicelines_df.columns:
+        relevant = invoicelines_df[invoicelines_df['project_company_id'] == company_id].copy()
+    else:
+        # Probeer te extraheren uit geneste dicts als die structuur zo is
+        if 'project' in invoicelines_df.columns:
+            relevant = invoicelines_df[invoicelines_df['project'].apply(lambda x: isinstance(x, dict) and x.get('company_id') == company_id if pd.notnull(x) else False)].copy()
+        else:
+            print(f"⚠️ Kan geen company_id vinden in invoice lines voor bedrijf {company_id}!")
+            return pd.DataFrame()
+    # Zet amount en sellingprice om naar numeriek
+    if not relevant.empty:
+        if 'amount' in relevant.columns:
+            amount_col = pd.to_numeric(relevant['amount'], errors='coerce')
+            if not isinstance(amount_col, pd.Series):
+                amount_col = pd.Series(amount_col, dtype='float', index=relevant.index)
+            relevant['amount'] = amount_col.fillna(0)
+        else:
+            relevant['amount'] = pd.Series([0.0] * len(relevant), dtype='float', index=relevant.index)
+
+        if 'sellingprice' in relevant.columns:
+            selling_col = pd.to_numeric(relevant['sellingprice'], errors='coerce')
+            if not isinstance(selling_col, pd.Series):
+                selling_col = pd.Series(selling_col, dtype='float', index=relevant.index)
+            relevant['sellingprice'] = selling_col.fillna(0)
+        else:
+            relevant['sellingprice'] = pd.Series([0.0] * len(relevant), dtype='float', index=relevant.index)
+
+        relevant['omzet'] = relevant['amount'] * relevant['sellingprice']
+        if isinstance(relevant, pd.DataFrame):
+            return relevant
+        else:
+            return pd.DataFrame(relevant)
+    else:
+        # Return lege DataFrame met juiste kolommen en correcte types
+        empty_cols = list(invoicelines_df.columns)
+        df_empty = pd.DataFrame({col: pd.Series(dtype=invoicelines_df[col].dtype) for col in empty_cols})
+        df_empty['amount'] = pd.Series(dtype='float')
+        df_empty['sellingprice'] = pd.Series(dtype='float')
+        df_empty['omzet'] = pd.Series(dtype='float')
+        return df_empty
+
+# --- NIEUW: Aggregatie helper per bedrijf ---
+def aggregate_invoicelines_per_company(invoicelines_df: pd.DataFrame, companies_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Geeft per bedrijf de totale omzet en uren op basis van invoice lines.
+    """
+    results = []
+    for _, company in companies_df.iterrows():
+        company_id = int(company['id'])
+        company_name = company.get('companyname', '')
+        relevant = get_invoicelines_for_company(company_id, invoicelines_df)
+        omzet = relevant['omzet'].sum() if not relevant.empty else 0
+        uren = relevant['amount'].sum() if not relevant.empty else 0
+        results.append({
+            'bedrijf_id': company_id,
+            'bedrijf_naam': company_name,
+            'totaal_omzet': omzet,
+            'totaal_uren': uren
+        })
+    return pd.DataFrame(results)
 
 if __name__ == "__main__":
     main()
@@ -577,3 +684,5 @@ def collect_projectlines_per_company(companies_df: pd.DataFrame, projects_df: pd
     combined_df = pd.concat(all_lines, ignore_index=True)
     print(f"✅ Samengevoegde projectlines voor {len(combined_df)} regels.")
     return combined_df
+
+
