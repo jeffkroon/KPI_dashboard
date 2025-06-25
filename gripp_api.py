@@ -4,6 +4,7 @@ import pandas as pd
 import os
 import time
 import requests
+import json
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from typing import Callable
@@ -95,7 +96,19 @@ def filter_invoices(df: pd.DataFrame) -> pd.DataFrame:
         "status_searchname", "totalinclvat", "totalexclvat",
         "company_id", "company_searchname",
         "client_id", "client_searchname",
-        "identity_searchname"
+        "identity_searchname", "totalpayed", "fase", "company", "invoicelines", "tags", "status", "isbasis", "subject", "invoicelines"
+    ]
+    cols = [c for c in keep_cols if c in df.columns]
+    return df[cols].copy()
+
+# === Toevoegen: filter_invoicelines functie (optioneel, kan worden aangepast) ===
+def filter_invoicelines(df: pd.DataFrame) -> pd.DataFrame:
+    # Kolomnamen zijn afhankelijk van Gripp API response voor invoicelines
+    # Hier nemen we een ruime selectie, pas aan indien gewenst
+    keep_cols = [
+        "id", "invoice_id", "description", "amount", "price", "total",
+        "product_id", "product_searchname",
+        "createdon_date", "updatedon_date"
     ]
     cols = [c for c in keep_cols if c in df.columns]
     return df[cols].copy()
@@ -303,6 +316,38 @@ def fetch_gripp_invoices():
         return pd.DataFrame(all_rows)
     return cached_fetch("gripp_invoices", fetch, force_refresh=FORCE_REFRESH)
 
+# === Toevoegen: fetch_gripp_invoicelines functie ===
+def fetch_gripp_invoicelines():
+    def fetch():
+        all_rows = []
+        start = 0
+        max_results = 100
+        watchdog = 50
+        while watchdog > 0:
+            payload = [{
+                "id": 1,
+                "method": "invoiceline.get",
+                "params": [
+                    [],
+                    {"paging": {"firstresult": start, "maxresults": max_results}}
+                ]
+            }]
+            time.sleep(0.5)
+            response = requests.post(BASE_URL, headers=HEADERS, json=payload)
+            remaining = response.headers.get("X-RateLimit-Remaining")
+            if remaining is not None:
+                print(f"📉 Remaining requests: {remaining}")
+            response.raise_for_status()
+            data = response.json()
+            rows = data[0].get("result", {}).get("rows", [])
+            all_rows.extend(rows)
+            if not data[0]["result"].get("more_items_in_collection", False):
+                break
+            start = data[0]["result"].get("next_start", start + max_results)
+            watchdog -= 1
+        return pd.DataFrame(all_rows)
+    return cached_fetch("gripp_invoicelines", fetch, force_refresh=FORCE_REFRESH)
+
 
 def fetch_gripp_hours_data():
     def fetch():
@@ -471,6 +516,7 @@ def main():
     hours_raw = flatten_dict_column(fetch_gripp_hours_data())
     projectlines_raw = flatten_dict_column(fetch_gripp_projectlines())
     invoices_raw = flatten_dict_column(fetch_gripp_invoices())
+    invoicelines_raw = flatten_dict_column(fetch_gripp_invoicelines())
 
     datasets["gripp_projects"] = filter_projects(projects_raw)
     datasets["gripp_employees"] = filter_employees(employees_raw)
@@ -479,7 +525,8 @@ def main():
     datasets["gripp_hours_data"] = filter_hours(hours_raw)
     datasets["gripp_projectlines"] = projectlines_raw
     datasets["gripp_invoices"] = filter_invoices(invoices_raw)
-    # Voeg invoices toe aan datasets en sla ze op in de database
+    datasets["gripp_invoicelines"] = filter_invoicelines(invoicelines_raw)
+
     # Verzamel alle projectlines per bedrijf
     if os.path.exists(PROJECTLINES_CACHE_PATH) and not FORCE_REFRESH:
         combined_projectlines = pd.read_parquet(PROJECTLINES_CACHE_PATH)
@@ -506,8 +553,25 @@ def main():
     if combined_projectlines is not None:
         safe_to_sql(combined_projectlines.drop_duplicates(subset="id"), "projectlines_per_company")
     if datasets.get("gripp_invoices") is not None:
-        safe_to_sql(datasets["gripp_invoices"].drop_duplicates(subset="id"), "invoices")
-        
+        # Zet geneste kolommen in invoices om naar JSON strings (conversie vóór database insert)
+        invoices_records = datasets["gripp_invoices"].to_dict(orient="records")
+        import json
+        for invoice in invoices_records:
+            lines = invoice.get("invoicelines", [])
+            if isinstance(lines, np.ndarray):
+                lines = lines.tolist()
+            invoice["invoicelines"] = json.dumps(lines)
+
+            tags = invoice.get("tags", [])
+            if isinstance(tags, np.ndarray):
+                tags = tags.tolist()
+            invoice["tags"] = json.dumps(tags)
+        # Maak een DataFrame van de geconverteerde records
+        invoices_df = pd.DataFrame(invoices_records)
+        safe_to_sql(invoices_df.drop_duplicates(subset="id"), "invoices")
+    if datasets.get("gripp_invoicelines") is not None:
+        safe_to_sql(datasets["gripp_invoicelines"].drop_duplicates(subset="id"), "invoicelines")
+
 if __name__ == "__main__":
     main()
 

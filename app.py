@@ -50,7 +50,7 @@ df_projects_raw = df_projects_raw.merge(
 
 # Load invoices
 df_invoices = pd.DataFrame(load_data("invoices"))
-
+df_invoices.columns
 # 🔥 pas hier filter je projecten
 df_projects = df_projects_raw[df_projects_raw["archived"] != True].copy()
 
@@ -66,7 +66,7 @@ df_projectlines = pd.DataFrame(load_data("projectlines_per_company"))
 active_project_ids = df_projects["id"].tolist()
 df_projectlines = df_projectlines[df_projectlines["offerprojectbase_id"].isin(active_project_ids)].copy()
 df_projectlines = df_projectlines[df_projectlines["rowtype_searchname"] == "NORMAAL"].copy()
-
+df_projectlines.columns
 # Numerieke kolommen netjes maken
 for col in ["amountwritten", "sellingprice"]:
     df_projectlines.loc[:, col] = pd.to_numeric(df_projectlines[col], errors="coerce")
@@ -98,12 +98,13 @@ if bedrijf_naam:
     bedrijf_id = gefilterde_bedrijven.loc[gefilterde_bedrijven["companyname"] == bedrijf_naam, "id"].iloc[0]
     st.write(f"Bedrijf ID: {bedrijf_id}")
 
-    # Filter invoices for this company
-    facturen_bedrijf = df_invoices[df_invoices["company_id"] == bedrijf_id].copy()
-    facturen_bedrijf["totalinclvat"] = pd.to_numeric(facturen_bedrijf["totalinclvat"], errors="coerce")
-
+    # Filter invoices for this company: only with fase == "Factuur" and isbasis != True
+    facturen_bedrijf = df_invoices[
+        (df_invoices["company_id"] == bedrijf_id) &
+        (df_invoices["fase"] == "Factuur").copy()]
+    facturen_bedrijf["totalpayed"] = pd.to_numeric(facturen_bedrijf["totalpayed"], errors="coerce")
     st.subheader(f"Facturen voor {bedrijf_naam}")
-    totaal_factuurbedrag = facturen_bedrijf["totalinclvat"].sum()
+    totaal_factuurbedrag = facturen_bedrijf["totalpayed"].sum()
 
     col1, col2 = st.columns(2)
     with col1:
@@ -111,7 +112,10 @@ if bedrijf_naam:
     with col2:
         st.metric("Totale gefactureerde waarde", f"€ {totaal_factuurbedrag:,.2f}")
 
-    st.dataframe(facturen_bedrijf[["company_searchname","company_id", "number", "date_date", "status_searchname", "totalinclvat"]])
+    st.dataframe(facturen_bedrijf[[
+        "id", "company_searchname", "company_id", "number", "date_date",
+        "status_searchname", "totalinclvat", "invoicelines", "tags", "fase", "totalpayed", "subject"
+    ]])
 
     factuurregels_bedrijf = pd.DataFrame()  # Geen factuurregels beschikbaar
     st.info("Factuurregels zijn niet langer beschikbaar in dit dashboard.")
