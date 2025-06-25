@@ -119,6 +119,3 @@ if bedrijf_naam:
 
     factuurregels_bedrijf = pd.DataFrame()  # Geen factuurregels beschikbaar
     st.info("Factuurregels zijn niet langer beschikbaar in dit dashboard.")
-
-# --- BONUS: unmatched facturen ---
-# (Removed per instructions)

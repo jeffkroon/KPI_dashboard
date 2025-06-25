@@ -39,6 +39,124 @@ def filter_active_projects_only(projects_df: pd.DataFrame) -> pd.DataFrame:
     """Filtert alleen niet-gearchiveerde projecten (actief)."""
     return pd.DataFrame(projects_df[projects_df["archived"] == False].copy())
 
+
+def get_projectlines_for_company(company_name: str) -> pd.DataFrame:
+    print(f"\n🔍 Projectlines ophalen voor bedrijf: '{company_name}'...")
+
+    projects_df = datasets.get("gripp_projects")
+    projectlines_df = datasets.get("gripp_projectlines")
+
+    if projects_df is None or projectlines_df is None:
+        print("❌ Vereiste datasets zijn niet geladen.")
+        return pd.DataFrame()
+
+    company_projects = projects_df[projects_df["company_searchname"] == company_name]
+    if company_projects.empty:
+        print(f"⚠️ Geen projecten gevonden voor bedrijf '{company_name}'.")
+        return pd.DataFrame()
+
+    project_ids = company_projects["id"].tolist()
+    matching_lines = projectlines_df[projectlines_df["offerprojectbase_id"].isin(project_ids)]
+
+    # Filter op definitief en normal (zonder invoicebasis)
+    matching_lines = matching_lines[
+        (matching_lines["status_searchname"] == "DEFINITIEF") &
+        (matching_lines["rowtype_searchname"] == "NORMAL")
+    ]
+
+    if matching_lines.empty:
+        print(f"⚠️ Geen projectlines gevonden voor projecten van '{company_name}'.")
+    else:
+        print(f"✅ Gevonden: {len(matching_lines)} projectlines voor {len(project_ids)} projecten.")
+        # Voor debugging: print eerste 10 regels (optioneel)
+        print(matching_lines.head(10).to_dict(orient="records"))
+
+    return matching_lines
+
+def calculate_total_costs_per_task_type(projectlines: list) -> dict:
+    # Helperfunctie voor het berekenen van totale kosten per taaktype
+    from collections import defaultdict
+    total_per_task = defaultdict(float)
+
+    for line in projectlines:
+        try:
+            if (
+                line.get("rowtype_searchname") == "NORMAL"
+                and line.get("status_searchname") == "DEFINITIEF"
+                and line.get("invoicebasis") == "FIXED"
+            ):
+                task = line.get("product_searchname", "Onbekend")
+                amount = float(line.get("amountwritten", 0))
+                price = float(line.get("sellingprice", 0))
+                total_per_task[task] += amount * price
+        except (TypeError, ValueError):
+            continue
+
+    return dict(total_per_task)
+
+
+def print_total_costs_per_tasktype_for_company(company_name: str):
+    lines = get_active_projectlines_for_company(company_name)
+    if lines.empty:
+        print("❌ Geen projectlines beschikbaar voor analyse.")
+        return
+
+    kosten_per_taak = calculate_total_costs_per_task_type(lines.to_dict(orient="records"))
+    kosten_df = pd.DataFrame([
+        {"tasktype": taak, "total_cost": round(float(kosten), 2)}
+        for taak, kosten in kosten_per_taak.items()
+    ]).sort_values(by="total_cost", ascending=False)
+
+    print(f"\n💰 Totale kosten per soort taak voor '{company_name}':")
+    print(kosten_df.to_string(index=False))
+    return kosten_df
+
+
+# Helper function for debugging unique values
+def log_unique_values(df: pd.DataFrame, columns: list):
+    for col in columns:
+        if col in df.columns:
+            print(f"Unieke waarden in '{col}': {df[col].unique()}\n")
+        else:
+            print(f"Kolom '{col}' bestaat niet in de dataset.\n")
+
+
+def collect_projectlines_per_company(companies_df: pd.DataFrame, projects_df: pd.DataFrame, projectlines_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Voor alle bedrijven: verzamel alle projectlines van hun projecten.
+    Voeg bedrijfsnaam en bedrijfs-ID toe aan elke regel.
+    """
+    all_lines = []
+
+    for _, company in companies_df.iterrows():
+        company_name = company["companyname"]
+        company_id = company["id"]
+
+        projects = projects_df[projects_df["company_id"] == company_id]
+        if projects.empty:
+            continue
+
+        project_ids = projects["id"].tolist()
+        lines = projectlines_df[projectlines_df["offerprojectbase_id"].isin(project_ids)]
+        if lines.empty:
+            continue
+
+        lines = lines.copy()
+        lines["bedrijf_id"] = company_id
+        lines["bedrijf_naam"] = company_name
+
+        all_lines.append(lines)
+
+    if not all_lines:
+        print("⚠️ Geen projectlines gevonden voor enige bedrijven.")
+        return pd.DataFrame()
+
+    combined_df = pd.concat(all_lines, ignore_index=True)
+    print(f"✅ Samengevoegde projectlines voor {len(combined_df)} regels.")
+    return combined_df
+
+
+
 def get_active_projectlines_for_company(company_name: str) -> pd.DataFrame:
     print(f"\n🔍 Actieve projectlines ophalen voor bedrijf: '{company_name}'...")
 
@@ -574,121 +692,5 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-def get_projectlines_for_company(company_name: str) -> pd.DataFrame:
-    print(f"\n🔍 Projectlines ophalen voor bedrijf: '{company_name}'...")
-
-    projects_df = datasets.get("gripp_projects")
-    projectlines_df = datasets.get("gripp_projectlines")
-
-    if projects_df is None or projectlines_df is None:
-        print("❌ Vereiste datasets zijn niet geladen.")
-        return pd.DataFrame()
-
-    company_projects = projects_df[projects_df["company_searchname"] == company_name]
-    if company_projects.empty:
-        print(f"⚠️ Geen projecten gevonden voor bedrijf '{company_name}'.")
-        return pd.DataFrame()
-
-    project_ids = company_projects["id"].tolist()
-    matching_lines = projectlines_df[projectlines_df["offerprojectbase_id"].isin(project_ids)]
-
-    # Filter op definitief en normal (zonder invoicebasis)
-    matching_lines = matching_lines[
-        (matching_lines["status_searchname"] == "DEFINITIEF") &
-        (matching_lines["rowtype_searchname"] == "NORMAL")
-    ]
-
-    if matching_lines.empty:
-        print(f"⚠️ Geen projectlines gevonden voor projecten van '{company_name}'.")
-    else:
-        print(f"✅ Gevonden: {len(matching_lines)} projectlines voor {len(project_ids)} projecten.")
-        # Voor debugging: print eerste 10 regels (optioneel)
-        print(matching_lines.head(10).to_dict(orient="records"))
-
-    return matching_lines
-
-def calculate_total_costs_per_task_type(projectlines: list) -> dict:
-    # Helperfunctie voor het berekenen van totale kosten per taaktype
-    from collections import defaultdict
-    total_per_task = defaultdict(float)
-
-    for line in projectlines:
-        try:
-            if (
-                line.get("rowtype_searchname") == "NORMAL"
-                and line.get("status_searchname") == "DEFINITIEF"
-                and line.get("invoicebasis") == "FIXED"
-            ):
-                task = line.get("product_searchname", "Onbekend")
-                amount = float(line.get("amountwritten", 0))
-                price = float(line.get("sellingprice", 0))
-                total_per_task[task] += amount * price
-        except (TypeError, ValueError):
-            continue
-
-    return dict(total_per_task)
-
-
-def print_total_costs_per_tasktype_for_company(company_name: str):
-    lines = get_active_projectlines_for_company(company_name)
-    if lines.empty:
-        print("❌ Geen projectlines beschikbaar voor analyse.")
-        return
-
-    kosten_per_taak = calculate_total_costs_per_task_type(lines.to_dict(orient="records"))
-    kosten_df = pd.DataFrame([
-        {"tasktype": taak, "total_cost": round(float(kosten), 2)}
-        for taak, kosten in kosten_per_taak.items()
-    ]).sort_values(by="total_cost", ascending=False)
-
-    print(f"\n💰 Totale kosten per soort taak voor '{company_name}':")
-    print(kosten_df.to_string(index=False))
-    return kosten_df
-
-
-# Helper function for debugging unique values
-def log_unique_values(df: pd.DataFrame, columns: list):
-    for col in columns:
-        if col in df.columns:
-            print(f"Unieke waarden in '{col}': {df[col].unique()}\n")
-        else:
-            print(f"Kolom '{col}' bestaat niet in de dataset.\n")
-
-
-def collect_projectlines_per_company(companies_df: pd.DataFrame, projects_df: pd.DataFrame, projectlines_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Voor alle bedrijven: verzamel alle projectlines van hun projecten.
-    Voeg bedrijfsnaam en bedrijfs-ID toe aan elke regel.
-    """
-    all_lines = []
-
-    for _, company in companies_df.iterrows():
-        company_name = company["companyname"]
-        company_id = company["id"]
-
-        projects = projects_df[projects_df["company_id"] == company_id]
-        if projects.empty:
-            continue
-
-        project_ids = projects["id"].tolist()
-        lines = projectlines_df[projectlines_df["offerprojectbase_id"].isin(project_ids)]
-        if lines.empty:
-            continue
-
-        lines = lines.copy()
-        lines["bedrijf_id"] = company_id
-        lines["bedrijf_naam"] = company_name
-
-        all_lines.append(lines)
-
-    if not all_lines:
-        print("⚠️ Geen projectlines gevonden voor enige bedrijven.")
-        return pd.DataFrame()
-
-    combined_df = pd.concat(all_lines, ignore_index=True)
-    print(f"✅ Samengevoegde projectlines voor {len(combined_df)} regels.")
-    return combined_df
 
 
