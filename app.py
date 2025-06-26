@@ -52,20 +52,26 @@ df_projects_raw = df_projects_raw.merge(
 df_invoices = pd.DataFrame(load_data("invoices"))
 df_invoices.columns
 # 🔥 pas hier filter je projecten
-df_projects = df_projects_raw[df_projects_raw["archived"] != True].copy()
+df_projects = df_projects_raw.copy()
 
 df_projects["totalexclvat"] = pd.to_numeric(df_projects["totalexclvat"], errors="coerce")
 df_projects["startdate_date"] = pd.to_datetime(df_projects["startdate_date"], errors="coerce")
 df_projects["enddate_date"] = pd.to_datetime(df_projects["enddate_date"], errors="coerce")
 
 df_employees = pd.DataFrame(load_data("employees"))
-df_uren = pd.DataFrame(load_data("urenregistratie"))
 df_projectlines = pd.DataFrame(load_data("projectlines_per_company"))
 
 # Filter projectlines op actieve projecten en 'NORMAAL'
 active_project_ids = df_projects["id"].tolist()
 df_projectlines = df_projectlines[df_projectlines["offerprojectbase_id"].isin(active_project_ids)].copy()
 df_projectlines = df_projectlines[df_projectlines["rowtype_searchname"] == "NORMAAL"].copy()
+df_projectlines = df_projectlines.merge(
+    df_companies,
+    left_on="bedrijf_id",
+    right_on="id",
+    how="left",
+    suffixes=("", "_bedrijf")
+)
 df_projectlines.columns
 # Numerieke kolommen netjes maken
 for col in ["amountwritten", "sellingprice"]:
@@ -81,7 +87,32 @@ aggregatie_per_bedrijf.columns = ["bedrijf_id", "totaal_uren"]
 df_projects = df_projects.merge(aggregatie_per_bedrijf, left_on="company_id", right_on="bedrijf_id", how="left").copy()
 df_projects["totaal_uren"] = df_projects["totaal_uren"].fillna(0).infer_objects(copy=False)
 
+factuurbedrag_per_bedrijf = (
+    df_invoices[df_invoices["fase"] == "Factuur"]
+    .copy()
+    .assign(totalpayed=pd.to_numeric(df_invoices["totalpayed"], errors="coerce"))
+    .groupby("company_id")[["totalpayed"]]
+    .sum()
+    .reset_index()
+)
+
+# 🔁 Merge uren en facturen
+bedrijfsstats = aggregatie_per_bedrijf.merge(
+    factuurbedrag_per_bedrijf, left_on="bedrijf_id", right_on="company_id", how="outer"
+)
+
+# 🔠 Voeg namen toe
+bedrijfsstats = bedrijfsstats.merge(
+    df_companies[["id", "companyname"]],
+    left_on="bedrijf_id",
+    right_on="id",
+    how="left"
+)
+
+
+
 # --- UI ---
+
 st.subheader("Factuurregels per bedrijf zoeken")
 
 bedrijf_zoek = st.text_input("Zoek op bedrijfsnaam:")
@@ -120,5 +151,21 @@ if bedrijf_naam:
     factuurregels_bedrijf = pd.DataFrame()  # Geen factuurregels beschikbaar
     st.info("Factuurregels zijn niet langer beschikbaar in dit dashboard.")
     
-    
     #project = number, de rest = company_id
+    
+    
+# 🎯 Final columns
+
+bedrijfsstats = bedrijfsstats[["bedrijf_id", "companyname", "totalpayed", "totaal_uren"]]
+bedrijfsstats = bedrijfsstats.fillna(0)
+
+
+# --- Zoek/filter sectie in bedrijfsstats ---
+st.subheader("Zoek in samenvattende bedrijfsdata")
+bedrijfszoek = st.text_input("Zoek bedrijfsnaam in overzicht:")
+if bedrijfszoek:
+    zoekresultaat = bedrijfsstats[bedrijfsstats["companyname"].str.contains(bedrijfszoek, case=False, na=False)]
+    st.dataframe(zoekresultaat)
+else:
+    st.dataframe(bedrijfsstats)
+
