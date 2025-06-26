@@ -687,7 +687,7 @@ def main():
     if datasets.get("gripp_tasktypes") is not None:
         safe_to_sql(datasets["gripp_tasktypes"].drop_duplicates(subset="id"), "tasktypes")
     #if datasets.get("gripp_hours_data") is not None:
-        safe_to_sql(datasets["gripp_hours_data"].drop_duplicates(subset="id"), "urenregistratie")
+        #safe_to_sql(datasets["gripp_hours_data"].drop_duplicates(subset="id"), "urenregistratie")
     if combined_projectlines is not None:
         safe_to_sql(combined_projectlines.drop_duplicates(subset="id"), "projectlines_per_company")
     if datasets.get("gripp_invoices") is not None:
