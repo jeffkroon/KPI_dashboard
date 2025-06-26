@@ -119,3 +119,6 @@ if bedrijf_naam:
 
     factuurregels_bedrijf = pd.DataFrame()  # Geen factuurregels beschikbaar
     st.info("Factuurregels zijn niet langer beschikbaar in dit dashboard.")
+    
+    
+    #project = number, de rest = company_id

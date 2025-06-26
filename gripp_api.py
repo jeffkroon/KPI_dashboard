@@ -210,11 +210,24 @@ def filter_employees(df: pd.DataFrame) -> pd.DataFrame:
 
 def filter_invoices(df: pd.DataFrame) -> pd.DataFrame:
     keep_cols = [
-        "id", "number", "description", "date_date", "duedate_date",
-        "status_searchname", "totalinclvat", "totalexclvat",
-        "company_id", "company_searchname",
-        "client_id", "client_searchname",
-        "identity_searchname", "totalpayed", "fase", "company", "invoicelines", "tags", "status", "isbasis", "subject", "invoicelines"
+        "id",
+        "number",
+        "description",
+        "date_date",
+        "status_searchname",
+        "totalinclvat",
+        "totalexclvat",
+        "company_id",
+        "company_searchname",
+        "client_id",
+        "client_searchname",
+        "identity_searchname",
+        "totalpayed",
+        "fase",
+        "company",
+        "invoicelines",
+        "tags",
+        "status"
     ]
     cols = [c for c in keep_cols if c in df.columns]
     return df[cols].copy()
@@ -224,9 +237,16 @@ def filter_invoicelines(df: pd.DataFrame) -> pd.DataFrame:
     # Kolomnamen zijn afhankelijk van Gripp API response voor invoicelines
     # Hier nemen we een ruime selectie, pas aan indien gewenst
     keep_cols = [
-        "id", "invoice_id", "description", "amount", "price", "total",
-        "product_id", "product_searchname",
-        "createdon_date", "updatedon_date"
+        "id",
+        "invoice_id",
+        "description",
+        "amount",
+        "price",
+        "total",
+        "product_id",
+        "product_searchname",
+        "createdon_date",
+        "updatedon_date"
     ]
     cols = [c for c in keep_cols if c in df.columns]
     return df[cols].copy()
@@ -634,7 +654,7 @@ def main():
     hours_raw = flatten_dict_column(fetch_gripp_hours_data())
     projectlines_raw = flatten_dict_column(fetch_gripp_projectlines())
     invoices_raw = flatten_dict_column(fetch_gripp_invoices())
-    invoicelines_raw = flatten_dict_column(fetch_gripp_invoicelines())
+    #invoicelines_raw = flatten_dict_column(fetch_gripp_invoicelines())
 
     datasets["gripp_projects"] = filter_projects(projects_raw)
     datasets["gripp_employees"] = filter_employees(employees_raw)
@@ -643,7 +663,7 @@ def main():
     datasets["gripp_hours_data"] = filter_hours(hours_raw)
     datasets["gripp_projectlines"] = projectlines_raw
     datasets["gripp_invoices"] = filter_invoices(invoices_raw)
-    datasets["gripp_invoicelines"] = filter_invoicelines(invoicelines_raw)
+    #datasets["gripp_invoicelines"] = filter_invoicelines(invoicelines_raw)
 
     # Verzamel alle projectlines per bedrijf
     if os.path.exists(PROJECTLINES_CACHE_PATH) and not FORCE_REFRESH:
@@ -687,8 +707,8 @@ def main():
         # Maak een DataFrame van de geconverteerde records
         invoices_df = pd.DataFrame(invoices_records)
         safe_to_sql(invoices_df.drop_duplicates(subset="id"), "invoices")
-    if datasets.get("gripp_invoicelines") is not None:
-        safe_to_sql(datasets["gripp_invoicelines"].drop_duplicates(subset="id"), "invoicelines")
+    #if datasets.get("gripp_invoicelines") is not None:
+        #safe_to_sql(datasets["gripp_invoicelines"].drop_duplicates(subset="id"), "invoicelines")
 
 if __name__ == "__main__":
     main()
