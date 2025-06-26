@@ -122,6 +122,52 @@ with col4:
 
 st.markdown("---")
 
+st.subheader("📈 KPI Analyse per Bedrijf")
+
+gemiddelde_tarief = bedrijfsstats["werkelijke_tarief_per_uur"].mean()
+hoogste_tarief = bedrijfsstats["werkelijke_tarief_per_uur"].max()
+laagste_tarief = bedrijfsstats["werkelijke_tarief_per_uur"].min()
+
+st.markdown(f"📊 Gemiddeld tarief per uur: **€ {gemiddelde_tarief:,.2f}**")
+st.markdown(f"🥇 Hoogste tarief per uur: **€ {hoogste_tarief:,.2f}**")
+st.markdown(f"🥶 Laagste tarief per uur: **€ {laagste_tarief:,.2f}**")
+
+topbedrijven = bedrijfsstats.copy()
+topbedrijven = topbedrijven.sort_values(by="werkelijke_tarief_per_uur", ascending=False).reset_index(drop=True)
+
+# Voeg kleurcode toe voor traffic light effect
+def kleurencode(tarief):
+    if tarief >= 75:
+        return "🟢"
+    elif tarief >= 40:
+        return "🟡"
+    else:
+        return "🔴"
+
+topbedrijven["⚡ Tariefstatus"] = topbedrijven["werkelijke_tarief_per_uur"].apply(kleurencode)
+
+display_kpis = topbedrijven[["companyname", "totalpayed", "totaal_uren", "werkelijke_tarief_per_uur", "⚡ Tariefstatus"]].copy()
+display_kpis.columns = ["Bedrijfsnaam", "Totaal Gefactureerd (€)", "Totaal Uren", "Tarief per Uur (€)", "Tariefstatus"]
+
+display_kpis["Totaal Gefactureerd (€)"] = display_kpis["Totaal Gefactureerd (€)"].apply(
+    lambda x: f"€ {float(x):,.2f}" if pd.notna(x) and x != 0 else "€ 0.00"
+)
+display_kpis["Tarief per Uur (€)"] = display_kpis["Tarief per Uur (€)"].apply(
+    lambda x: f"€ {float(x):,.2f}" if pd.notna(x) and x != 0 else "€ 0.00"
+)
+
+st.markdown("### 🔝 Top 5 bedrijven – Hoog tarief per uur")
+top5 = topbedrijven[topbedrijven["werkelijke_tarief_per_uur"] > 0].dropna(subset=["werkelijke_tarief_per_uur"]).head(5)[["companyname", "werkelijke_tarief_per_uur"]].copy()
+top5["werkelijke_tarief_per_uur"] = top5["werkelijke_tarief_per_uur"].apply(lambda x: f"€ {float(x):,.2f}")
+top5.columns = ["Bedrijfsnaam", "Tarief per Uur (€)"]
+st.dataframe(top5, use_container_width=True)
+
+st.markdown("### 📉 Bottom 5 bedrijven – Laag tarief per uur")
+bottom5 = topbedrijven[topbedrijven["werkelijke_tarief_per_uur"] > 0].dropna(subset=["werkelijke_tarief_per_uur"]).sort_values(by="werkelijke_tarief_per_uur").head(5)[["companyname", "werkelijke_tarief_per_uur"]].copy()
+bottom5["werkelijke_tarief_per_uur"] = bottom5["werkelijke_tarief_per_uur"].apply(lambda x: f"€ {float(x):,.2f}")
+bottom5.columns = ["Bedrijfsnaam", "Tarief per Uur (€)"]
+st.dataframe(bottom5, use_container_width=True)
+
 # --- UI ---
 
 st.subheader("Factuurregels per bedrijf zoeken")
@@ -172,6 +218,9 @@ if bedrijf_naam:
 
 bedrijfsstats = pd.DataFrame(bedrijfsstats[["bedrijf_id", "companyname", "totalpayed", "totaal_uren"]])
 bedrijfsstats = bedrijfsstats.fillna(0)
+bedrijfsstats = bedrijfsstats[bedrijfsstats["companyname"] != "Podobrace B.V."]
+bedrijfsstats = bedrijfsstats[bedrijfsstats["companyname"] != "Gripp.com.bv"]
+bedrijfsstats = bedrijfsstats[bedrijfsstats["companyname"].notna()]
 
 # Zorg ervoor dat companyname altijd string is
 bedrijfsstats["companyname"] = bedrijfsstats["companyname"].astype(str)
@@ -232,4 +281,3 @@ else:
     )
     
     st.dataframe(display_bedrijfsstats, use_container_width=True)
-
