@@ -486,7 +486,7 @@ def fetch_gripp_hours_data():
         all_rows = []
         start = 0
         max_results = 100
-        watchdog = 50
+        watchdog = 500
         while watchdog > 0:
             payload = [{
                 "id": 1,
@@ -658,7 +658,7 @@ def main():
     datasets["gripp_employees"] = filter_employees(employees_raw)
     datasets["gripp_companies"] = filter_companies(companies_raw)
     datasets["gripp_tasktypes"] = filter_tasktypes(tasktypes_raw)
-    #datasets["gripp_hours_data"] = filter_hours(hours_raw)
+    datasets["gripp_hours_data"] = filter_hours(hours_raw)
     datasets["gripp_projectlines"] = projectlines_raw
     datasets["gripp_invoices"] = filter_invoices(invoices_raw)
     #datasets["gripp_invoicelines"] = filter_invoicelines(invoicelines_raw)
@@ -688,8 +688,8 @@ def main():
         safe_to_sql(datasets["gripp_companies"].drop_duplicates(subset="id"), "companies")
     if datasets.get("gripp_tasktypes") is not None:
         safe_to_sql(datasets["gripp_tasktypes"].drop_duplicates(subset="id"), "tasktypes")
-    #if datasets.get("gripp_hours_data") is not None:
-        #safe_to_sql(datasets["gripp_hours_data"].drop_duplicates(subset="id"), "urenregistratie")
+    if datasets.get("gripp_hours_data") is not None:
+        safe_to_sql(datasets["gripp_hours_data"].drop_duplicates(subset="id"), "urenregistratie")
     
     if datasets.get("gripp_invoices") is not None:
         # Zet geneste kolommen in invoices om naar JSON strings (conversie vóór database insert)
