@@ -109,6 +109,14 @@ bedrijfsstats = bedrijfsstats.merge(
     how="left"
 )
 
+# Voeg deze regel toe direct NA het vullen van bedrijfsstats, VOOR selectie/rename van kolommen:
+bedrijfsstats["werkelijke_tarief_per_uur"] = bedrijfsstats.apply(
+    lambda row: row["totalpayed"] / row["totaal_uren"] if row["totaal_uren"] > 0 else 0,
+    axis=1
+)
+
+# Daarna pas kolommen selecteren of hernoemen voor presentatie
+
 # Add some basic metrics at the top
 col1, col2, col3, col4 = st.columns(4)
 with col1:
@@ -216,21 +224,6 @@ if bedrijf_naam:
 
 # 🎯 Final columns
 
-bedrijfsstats = pd.DataFrame(bedrijfsstats[["bedrijf_id", "companyname", "totalpayed", "totaal_uren"]])
-bedrijfsstats = bedrijfsstats.fillna(0)
-bedrijfsstats = bedrijfsstats[bedrijfsstats["companyname"] != "Podobrace B.V."]
-bedrijfsstats = bedrijfsstats[bedrijfsstats["companyname"] != "Gripp.com.bv"]
-bedrijfsstats = bedrijfsstats[bedrijfsstats["companyname"].notna()]
-
-# Zorg ervoor dat companyname altijd string is
-bedrijfsstats["companyname"] = bedrijfsstats["companyname"].astype(str)
-
-# Bereken werkelijke tarief per uur (totaal geld / totaal uren)
-bedrijfsstats["werkelijke_tarief_per_uur"] = bedrijfsstats.apply(
-    lambda row: row["totalpayed"] / row["totaal_uren"] if row["totaal_uren"] > 0 else 0, 
-    axis=1
-)
-
 # --- Zoek/filter sectie in bedrijfsstats ---
 st.subheader("🔍 Zoek in samenvattende bedrijfsdata")
 
@@ -250,8 +243,8 @@ if bedrijfszoek:
     if len(zoekresultaat) > 0:
         st.success(f"✅ {len(zoekresultaat)} bedrijf(en) gevonden")
         
-        # Format the display with proper column names and currency formatting
-        display_zoekresultaat = zoekresultaat.copy()
+        # Selecteer de juiste kolommen vóór het hernoemen
+        display_zoekresultaat = zoekresultaat[["bedrijf_id", "companyname", "totalpayed", "totaal_uren", "werkelijke_tarief_per_uur"]].copy()
         display_zoekresultaat.columns = ["Bedrijf ID", "Bedrijfsnaam", "Totaal Gefactureerd (€)", "Totaal Uren", "Werkelijk Tarief per Uur (€)"]
         
         # Safe formatting for currency columns
@@ -261,17 +254,14 @@ if bedrijfszoek:
         display_zoekresultaat["Werkelijk Tarief per Uur (€)"] = display_zoekresultaat["Werkelijk Tarief per Uur (€)"].apply(
             lambda x: f"€ {float(x):,.2f}" if pd.notna(x) and x != 0 else "€ 0.00"
         )
-        
         st.dataframe(display_zoekresultaat, use_container_width=True)
     else:
         st.warning("⚠️ Geen bedrijven gevonden met deze zoekterm")
 else:
     st.info("📊 Toon alle bedrijven")
-    
-    # Format the display with proper column names and currency formatting
-    display_bedrijfsstats = bedrijfsstats.copy()
+    # Selecteer de juiste kolommen vóór het hernoemen
+    display_bedrijfsstats = bedrijfsstats[["bedrijf_id", "companyname", "totalpayed", "totaal_uren", "werkelijke_tarief_per_uur"]].copy()
     display_bedrijfsstats.columns = ["Bedrijf ID", "Bedrijfsnaam", "Totaal Gefactureerd (€)", "Totaal Uren", "Werkelijk Tarief per Uur (€)"]
-    
     # Safe formatting for currency columns
     display_bedrijfsstats["Totaal Gefactureerd (€)"] = display_bedrijfsstats["Totaal Gefactureerd (€)"].apply(
         lambda x: f"€ {float(x):,.2f}" if pd.notna(x) and x != 0 else "€ 0.00"
@@ -279,5 +269,4 @@ else:
     display_bedrijfsstats["Werkelijk Tarief per Uur (€)"] = display_bedrijfsstats["Werkelijk Tarief per Uur (€)"].apply(
         lambda x: f"€ {float(x):,.2f}" if pd.notna(x) and x != 0 else "€ 0.00"
     )
-    
     st.dataframe(display_bedrijfsstats, use_container_width=True)

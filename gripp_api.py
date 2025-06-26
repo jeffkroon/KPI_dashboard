@@ -123,37 +123,28 @@ def log_unique_values(df: pd.DataFrame, columns: list):
 
 def collect_projectlines_per_company(companies_df: pd.DataFrame, projects_df: pd.DataFrame, projectlines_df: pd.DataFrame) -> pd.DataFrame:
     """
-    Voor alle bedrijven: verzamel alle projectlines van hun projecten.
-    Voeg bedrijfsnaam en bedrijfs-ID toe aan elke regel.
+    Voeg project- en bedrijfsinfo toe aan ALLE projectlines via left join, zodat geen enkele projectline verloren gaat.
     """
-    all_lines = []
-
-    for _, company in companies_df.iterrows():
-        company_name = company["companyname"]
-        company_id = company["id"]
-
-        projects = projects_df[projects_df["company_id"] == company_id]
-        if projects.empty:
-            continue
-
-        project_ids = projects["id"].tolist()
-        lines = projectlines_df[projectlines_df["offerprojectbase_id"].isin(project_ids)]
-        if lines.empty:
-            continue
-
-        lines = lines.copy()
-        lines["bedrijf_id"] = company_id
-        lines["bedrijf_naam"] = company_name
-
-        all_lines.append(lines)
-
-    if not all_lines:
-        print("⚠️ Geen projectlines gevonden voor enige bedrijven.")
-        return pd.DataFrame()
-
-    combined_df = pd.concat(all_lines, ignore_index=True)
-    print(f"✅ Samengevoegde projectlines voor {len(combined_df)} regels.")
-    return combined_df
+    print(f"🔢 [DEBUG] Projectlines vóór merge: {len(projectlines_df)}")
+    # Merge projectlines met projects (left join)
+    merged = projectlines_df.merge(
+        projects_df[["id", "company_id", "company_searchname", "number", "name"]],
+        left_on="offerprojectbase_id",
+        right_on="id",
+        how="left",
+        suffixes=("", "_project")
+    )
+    print(f"🔢 [DEBUG] Projectlines na merge met projects: {len(merged)}")
+    # Merge met companies (left join)
+    merged = merged.merge(
+        companies_df[["id", "companyname"]],
+        left_on="company_id",
+        right_on="id",
+        how="left",
+        suffixes=("", "_company")
+    )
+    print(f"🔢 [DEBUG] Projectlines na merge met companies: {len(merged)}")
+    return merged
 
 
 
@@ -230,7 +221,7 @@ def filter_invoices(df: pd.DataFrame) -> pd.DataFrame:
         "status"
     ]
     cols = [c for c in keep_cols if c in df.columns]
-    return df[cols].copy()
+    return pd.DataFrame(df[cols].copy())
 
 # === Toevoegen: filter_invoicelines functie (optioneel, kan worden aangepast) ===
 def filter_invoicelines(df: pd.DataFrame) -> pd.DataFrame:
@@ -249,7 +240,7 @@ def filter_invoicelines(df: pd.DataFrame) -> pd.DataFrame:
         "updatedon_date"
     ]
     cols = [c for c in keep_cols if c in df.columns]
-    return df[cols].copy()
+    return pd.DataFrame(df[cols].copy())
 
 
 def filter_companies(df: pd.DataFrame) -> pd.DataFrame:
@@ -600,7 +591,7 @@ def fetch_gripp_projectlines():
         all_rows = []
         start = 0
         max_results = 100
-        watchdog = 50
+        watchdog = 200
         while watchdog > 0:
             payload = [{
                 "id": 1,
@@ -631,10 +622,16 @@ def safe_to_sql(df: pd.DataFrame, table_name: str):
     insp = inspect(engine)
     if table_name in insp.get_table_names():
         print(f"🔁 Tabel '{table_name}' vervangen met {df.shape[0]} rijen.")
-        df.to_sql(table_name, con=engine, if_exists="replace", index=False, method="multi")
+        if len(df) > 500:
+            df.to_sql(table_name, con=engine, if_exists="replace", index=False, method="multi", chunksize=500)
+        else:
+            df.to_sql(table_name, con=engine, if_exists="replace", index=False, method="multi")
     else:
         print(f"🆕 Nieuwe tabel '{table_name}' aangemaakt met {df.shape[0]} rijen.")
-        df.to_sql(table_name, con=engine, if_exists="replace", index=False, method="multi")
+        if len(df) > 500:
+            df.to_sql(table_name, con=engine, if_exists="replace", index=False, method="multi", chunksize=500)
+        else:
+            df.to_sql(table_name, con=engine, if_exists="replace", index=False, method="multi")
 
 
 def main():
@@ -653,6 +650,7 @@ def main():
     tasktypes_raw = flatten_dict_column(fetch_gripp_tasktypes())
     #hours_raw = flatten_dict_column(fetch_gripp_hours_data())
     projectlines_raw = flatten_dict_column(fetch_gripp_projectlines())
+    print(f"🔢 [DEBUG] Aantal projectlines direct uit API: {len(projectlines_raw)}")
     invoices_raw = flatten_dict_column(fetch_gripp_invoices())
     #invoicelines_raw = flatten_dict_column(fetch_gripp_invoicelines())
 
@@ -674,9 +672,13 @@ def main():
             datasets["gripp_projects"],
             datasets["gripp_projectlines"]
         )
+        print(f"🔢 [DEBUG] Aantal projectlines na collect_projectlines_per_company: {len(combined_projectlines)}")
         combined_projectlines.to_parquet(PROJECTLINES_CACHE_PATH, index=False)
 
     # Upload alle datasets naar de database met veilige to_sql
+    if combined_projectlines is not None:
+        print(f"🔢 [DEBUG] Aantal projectlines die naar de database gaan: {len(combined_projectlines.drop_duplicates(subset='id'))}")
+        safe_to_sql(combined_projectlines.drop_duplicates(subset="id"), "projectlines_per_company")
     if datasets.get("gripp_projects") is not None:
         cleaned_projects = datasets["gripp_projects"].drop_duplicates(subset="id")
         safe_to_sql(cleaned_projects, "projects")
@@ -688,8 +690,7 @@ def main():
         safe_to_sql(datasets["gripp_tasktypes"].drop_duplicates(subset="id"), "tasktypes")
     #if datasets.get("gripp_hours_data") is not None:
         #safe_to_sql(datasets["gripp_hours_data"].drop_duplicates(subset="id"), "urenregistratie")
-    if combined_projectlines is not None:
-        safe_to_sql(combined_projectlines.drop_duplicates(subset="id"), "projectlines_per_company")
+    
     if datasets.get("gripp_invoices") is not None:
         # Zet geneste kolommen in invoices om naar JSON strings (conversie vóór database insert)
         invoices_records = datasets["gripp_invoices"].to_dict(orient="records")
