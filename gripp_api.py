@@ -651,7 +651,7 @@ def main():
     employees_raw = flatten_dict_column(fetch_gripp_employees())
     companies_raw = flatten_dict_column(fetch_gripp_companies())
     tasktypes_raw = flatten_dict_column(fetch_gripp_tasktypes())
-    hours_raw = flatten_dict_column(fetch_gripp_hours_data())
+    #hours_raw = flatten_dict_column(fetch_gripp_hours_data())
     projectlines_raw = flatten_dict_column(fetch_gripp_projectlines())
     invoices_raw = flatten_dict_column(fetch_gripp_invoices())
     #invoicelines_raw = flatten_dict_column(fetch_gripp_invoicelines())
@@ -660,7 +660,7 @@ def main():
     datasets["gripp_employees"] = filter_employees(employees_raw)
     datasets["gripp_companies"] = filter_companies(companies_raw)
     datasets["gripp_tasktypes"] = filter_tasktypes(tasktypes_raw)
-    datasets["gripp_hours_data"] = filter_hours(hours_raw)
+    #datasets["gripp_hours_data"] = filter_hours(hours_raw)
     datasets["gripp_projectlines"] = projectlines_raw
     datasets["gripp_invoices"] = filter_invoices(invoices_raw)
     #datasets["gripp_invoicelines"] = filter_invoicelines(invoicelines_raw)
@@ -686,7 +686,7 @@ def main():
         safe_to_sql(datasets["gripp_companies"].drop_duplicates(subset="id"), "companies")
     if datasets.get("gripp_tasktypes") is not None:
         safe_to_sql(datasets["gripp_tasktypes"].drop_duplicates(subset="id"), "tasktypes")
-    if datasets.get("gripp_hours_data") is not None:
+    #if datasets.get("gripp_hours_data") is not None:
         safe_to_sql(datasets["gripp_hours_data"].drop_duplicates(subset="id"), "urenregistratie")
     if combined_projectlines is not None:
         safe_to_sql(combined_projectlines.drop_duplicates(subset="id"), "projectlines_per_company")
