@@ -619,19 +619,29 @@ def fetch_gripp_projectlines():
 
 
 def safe_to_sql(df: pd.DataFrame, table_name: str):
-    insp = inspect(engine)
-    if table_name in insp.get_table_names():
-        print(f"🔁 Tabel '{table_name}' vervangen met {df.shape[0]} rijen.")
-        if len(df) > 500:
-            df.to_sql(table_name, con=engine, if_exists="replace", index=False, method="multi", chunksize=500)
-        else:
-            df.to_sql(table_name, con=engine, if_exists="replace", index=False, method="multi")
-    else:
-        print(f"🆕 Nieuwe tabel '{table_name}' aangemaakt met {df.shape[0]} rijen.")
-        if len(df) > 500:
-            df.to_sql(table_name, con=engine, if_exists="replace", index=False, method="multi", chunksize=500)
-        else:
-            df.to_sql(table_name, con=engine, if_exists="replace", index=False, method="multi")
+    import io
+    if df.empty:
+        print(f"⚠️ Geen data om naar '{table_name}' te schrijven. Sla over.")
+        return
+
+    print(f"🚀 Bulk insert '{table_name}' via single dedicated connection, rows: {df.shape[0]}")
+
+    with engine.begin() as conn:
+        # Drop de tabel direct zonder aparte inspectie
+        conn.execute(text(f"DROP TABLE IF EXISTS {table_name} CASCADE;"))
+        print(f"🗑️ Oude tabel '{table_name}' verwijderd.")
+
+        # Laat pandas de CREATE TABLE uitvoeren
+        df.head(0).to_sql(table_name, conn, if_exists="replace", index=False)
+
+        output = io.StringIO()
+        df.to_csv(output, sep='\t', header=False, index=False)
+        output.seek(0)
+
+        raw_conn = conn.connection
+        with raw_conn.cursor() as cursor:
+            cursor.copy_from(output, table_name, null="")
+        print(f"✅ '{table_name}' up-to-date met {df.shape[0]} rijen.")
 
 
 def main():
@@ -648,7 +658,7 @@ def main():
     employees_raw = flatten_dict_column(fetch_gripp_employees())
     companies_raw = flatten_dict_column(fetch_gripp_companies())
     tasktypes_raw = flatten_dict_column(fetch_gripp_tasktypes())
-    #hours_raw = flatten_dict_column(fetch_gripp_hours_data())
+    hours_raw = flatten_dict_column(fetch_gripp_hours_data())
     projectlines_raw = flatten_dict_column(fetch_gripp_projectlines())
     print(f"🔢 [DEBUG] Aantal projectlines direct uit API: {len(projectlines_raw)}")
     invoices_raw = flatten_dict_column(fetch_gripp_invoices())
