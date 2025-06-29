@@ -11,6 +11,7 @@ from typing import Callable
 from sqlalchemy import create_engine
 from sqlalchemy import text
 from sqlalchemy import inspect
+import tempfile
 
 # === Configuratieparameters ===
 load_dotenv()
@@ -144,7 +145,14 @@ def collect_projectlines_per_company(companies_df: pd.DataFrame, projects_df: pd
         suffixes=("", "_company")
     )
     print(f"🔢 [DEBUG] Projectlines na merge met companies: {len(merged)}")
-    return merged
+    # Zorg dat kolomnaam altijd bedrijf_id heet (consistent met staging)
+    merged = merged.rename(columns={"company_id": "bedrijf_id"})
+    # Controleer dat bedrijf_id in de DataFrame blijft
+    keep_cols = list(merged.columns)
+    if "bedrijf_id" not in keep_cols:
+        keep_cols.append("bedrijf_id")
+    result_df = merged[keep_cols]
+    return pd.DataFrame(result_df)
 
 
 
@@ -486,7 +494,7 @@ def fetch_gripp_hours_data():
         all_rows = []
         start = 0
         max_results = 100
-        watchdog = 500
+        watchdog = 50000
         while watchdog > 0:
             payload = [{
                 "id": 1,
@@ -619,29 +627,153 @@ def fetch_gripp_projectlines():
 
 
 def safe_to_sql(df: pd.DataFrame, table_name: str):
-    import io
     if df.empty:
         print(f"⚠️ Geen data om naar '{table_name}' te schrijven. Sla over.")
         return
 
-    print(f"🚀 Bulk insert '{table_name}' via single dedicated connection, rows: {df.shape[0]}")
+    # Log en verwijder rijen zonder bedrijf_id indien aanwezig
+    if "bedrijf_id" in df.columns:
+        missing_bedrijf = df[df["bedrijf_id"].isna()]
+        if not missing_bedrijf.empty:
+            print(f"⚠️ {len(missing_bedrijf)} rows missen 'bedrijf_id'. ID's: {missing_bedrijf['id'].tolist()[:10]}...")
+            df = df.dropna(subset=["bedrijf_id"])
 
-    with engine.begin() as conn:
-        # Drop de tabel direct zonder aparte inspectie
-        conn.execute(text(f"DROP TABLE IF EXISTS {table_name} CASCADE;"))
-        print(f"🗑️ Oude tabel '{table_name}' verwijderd.")
+    print(f"🚀 Bulk insert '{table_name}' via staging COPY, rows: {df.shape[0]}")
+    
+    # Gebruik een nieuwe engine voor elke operatie om SSL connection issues te voorkomen
+    # Verhoog statement_timeout naar 10 minuten (600000 ms)
+    if not POSTGRES_URL:
+        raise ValueError("POSTGRES_URL is not set")
+    temp_engine = create_engine(f"{POSTGRES_URL}?options=-c statement_timeout=600000", pool_pre_ping=True, pool_recycle=300)
+    
+    # Voor grote datasets (>10.000 records): verwerk in batches
+    batch_size = 2000  # Verkleind van 5000 naar 2000 om timeouts te voorkomen
+    if len(df) > batch_size:
+        print(f"📦 Grote dataset gedetecteerd ({len(df)} records), verwerk in batches van {batch_size}")
+        
+        # Verwerk in batches
+        for i in range(0, len(df), batch_size):
+            batch_df = df.iloc[i:i+batch_size].copy()  # Maak een echte kopie
+            print(f"📦 Verwerk batch {i//batch_size + 1}/{(len(df)-1)//batch_size + 1} ({len(batch_df)} records)")
+            _process_batch(batch_df, table_name, temp_engine)
+        
+        print(f"✅ '{table_name}' up-to-date met batch processing.")
+    else:
+        # Kleine dataset: verwerk in één keer
+        _process_batch(df, table_name, temp_engine)
+    
+    # Cleanup
+    temp_engine.dispose()
 
-        # Laat pandas de CREATE TABLE uitvoeren
-        df.head(0).to_sql(table_name, conn, if_exists="replace", index=False)
 
-        output = io.StringIO()
-        df.to_csv(output, sep='\t', header=False, index=False)
-        output.seek(0)
+def _process_batch(df: pd.DataFrame, table_name: str, temp_engine):
+    """Helper functie om een batch data te verwerken."""
+    with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv') as tmp:
+        try:
+            # ✅ Haal kolommen op uit staging table
+            with temp_engine.begin() as conn:
+                staging_table = f"{table_name}_staging"
+                # Zorg dat staging table bestaat (LIKE main table)
+                conn.execute(text(f"CREATE TABLE IF NOT EXISTS {staging_table} (LIKE {table_name} INCLUDING ALL);"))
+                try:
+                    result = conn.execute(text(f"""
+                        SELECT column_name
+                        FROM information_schema.columns
+                        WHERE table_name = '{staging_table}';
+                    """))
+                    db_columns = [row[0] for row in result]
+                except Exception as e:
+                    print(f"⚠️ Timeout bij ophalen kolomnamen van {staging_table}, gebruik DataFrame-kolommen als fallback: {e}")
+                    db_columns = list(df.columns)
 
-        raw_conn = conn.connection
-        with raw_conn.cursor() as cursor:
-            cursor.copy_from(output, table_name, null="")
-        print(f"✅ '{table_name}' up-to-date met {df.shape[0]} rijen.")
+            # Forced alignment: voeg ontbrekende db_columns toe als None
+            for col in db_columns:
+                if col not in df.columns:
+                    df[col] = None
+
+            # Veilige fallback: expliciet bedrijf_id vullen met None indien niet aanwezig
+            if "bedrijf_id" not in df.columns:
+                df.loc[:, "bedrijf_id"] = None
+
+            # Filter DataFrame kolommen
+            filtered_df = df[[col for col in df.columns if col in db_columns]]
+
+            # Export naar CSV met float_format om .0 te verwijderen
+            filtered_df.to_csv(tmp.name, index=False, header=True, float_format='%.0f')
+            tmp.flush()
+
+            # Nieuwe verbinding voor de COPY operatie
+            with temp_engine.begin() as conn:
+                # staging_table is al bepaald
+                with open(tmp.name, 'r') as f:
+                    conn.connection.cursor().copy_expert(f"COPY {staging_table} FROM STDIN WITH CSV HEADER", f)
+
+                # Check of er een unieke constraint is op de id kolom
+                has_unique_constraint = False
+                try:
+                    result = conn.execute(text(f"""
+                        SELECT COUNT(*) 
+                        FROM pg_constraint 
+                        WHERE conrelid = '{table_name}'::regclass 
+                        AND contype = 'u' 
+                        AND pg_get_constraintdef(oid) LIKE '%id%';
+                    """))
+                    constraint_count = result.scalar()
+                    has_unique_constraint = constraint_count is not None and constraint_count > 0
+                except:
+                    pass
+
+                if has_unique_constraint:
+                    # Gebruik ON CONFLICT als er een unieke constraint is
+                    columns = [col for col in filtered_df.columns if col != "id"]
+                    set_clause = ", ".join([f"{col} = EXCLUDED.{col}" for col in columns])
+                    insert_cols = ", ".join(filtered_df.columns)
+                    select_cols = ", ".join(filtered_df.columns)
+                    
+                    merge_sql = f'''
+INSERT INTO {table_name} ({insert_cols})
+SELECT {select_cols} FROM {staging_table}
+ON CONFLICT (id) DO UPDATE SET {set_clause};
+'''
+                    conn.execute(text(merge_sql))
+                    print(f"✅ '{table_name}' batch up-to-date met ON CONFLICT merge.")
+                else:
+                    # Voor zeer grote tabellen (>50k records): gebruik direct INSERT zonder CONFLICT check
+                    if table_name == "urenregistratie":
+                        insert_cols = ", ".join(filtered_df.columns)
+                        select_cols = ", ".join(filtered_df.columns)
+                        insert_sql = f'''
+INSERT INTO {table_name} ({insert_cols})
+SELECT {select_cols} FROM {staging_table};
+'''
+                        conn.execute(text(insert_sql))
+                        print(f"✅ '{table_name}' batch up-to-date met direct INSERT (grote tabel).")
+                    else:
+                        # Voor normale tabellen: gebruik INSERT IGNORE
+                        insert_cols = ", ".join(filtered_df.columns)
+                        select_cols = ", ".join(filtered_df.columns)
+                        insert_sql = f'''
+INSERT INTO {table_name} ({insert_cols})
+SELECT {select_cols} FROM {staging_table}
+ON CONFLICT DO NOTHING;
+'''
+                        conn.execute(text(insert_sql))
+                        print(f"✅ '{table_name}' batch up-to-date met INSERT IGNORE.")
+                
+                # Staging table legen na succesvolle merge
+                try:
+                    conn.execute(text(f"TRUNCATE {staging_table};"))
+                    print(f"✅ Staging table '{staging_table}' geleegd.")
+                except Exception as e:
+                    print(f"⚠️ Kon staging table niet legen: {e}")
+                    # Niet kritiek, staging wordt bij volgende run overschreven
+                
+        except Exception as e:
+            print(f"❌ Fout bij uploaden van batch voor '{table_name}': {e}")
+            raise
+        finally:
+            if os.path.exists(tmp.name):
+                os.unlink(tmp.name)
 
 
 def main():
@@ -685,7 +817,7 @@ def main():
         print(f"🔢 [DEBUG] Aantal projectlines na collect_projectlines_per_company: {len(combined_projectlines)}")
         combined_projectlines.to_parquet(PROJECTLINES_CACHE_PATH, index=False)
 
-    # Upload alle datasets naar de database met veilige to_sql
+    # Upload alle datasets naar de database met veilige to_sql (nu altijd bulk COPY)
     if combined_projectlines is not None:
         print(f"🔢 [DEBUG] Aantal projectlines die naar de database gaan: {len(combined_projectlines.drop_duplicates(subset='id'))}")
         safe_to_sql(combined_projectlines.drop_duplicates(subset="id"), "projectlines_per_company")
