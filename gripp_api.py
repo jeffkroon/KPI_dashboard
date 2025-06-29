@@ -738,7 +738,7 @@ ON CONFLICT (id) DO UPDATE SET {set_clause};
                     conn.execute(text(merge_sql))
                     print(f"✅ '{table_name}' batch up-to-date met ON CONFLICT merge.")
                 else:
-                    if table_name == "urenregistratie":
+                    if table_name == "urenregistratie" or table_name == "invoices":
                         # Direct COPY naar hoofdtabel zonder staging merge
                         with open(tmp.name, 'r') as f:
                             conn.connection.cursor().copy_expert(
