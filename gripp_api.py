@@ -224,7 +224,7 @@ def filter_invoices(df: pd.DataFrame) -> pd.DataFrame:
         "totalpayed",
         "fase",
         "company",
-        "invoicelines",
+        # "invoicelines",  # verwijderd
         "tags",
         "status"
     ]
@@ -738,16 +738,13 @@ ON CONFLICT (id) DO UPDATE SET {set_clause};
                     conn.execute(text(merge_sql))
                     print(f"✅ '{table_name}' batch up-to-date met ON CONFLICT merge.")
                 else:
-                    # Voor zeer grote tabellen (>50k records): gebruik direct INSERT zonder CONFLICT check
                     if table_name == "urenregistratie":
-                        insert_cols = ", ".join(filtered_df.columns)
-                        select_cols = ", ".join(filtered_df.columns)
-                        insert_sql = f'''
-INSERT INTO {table_name} ({insert_cols})
-SELECT {select_cols} FROM {staging_table};
-'''
-                        conn.execute(text(insert_sql))
-                        print(f"✅ '{table_name}' batch up-to-date met direct INSERT (grote tabel).")
+                        # Direct COPY naar hoofdtabel zonder staging merge
+                        with open(tmp.name, 'r') as f:
+                            conn.connection.cursor().copy_expert(
+                                f"COPY {table_name} FROM STDIN WITH CSV HEADER", f
+                            )
+                        print(f"✅ '{table_name}' batch direct geCOPY'd zonder staging merge.")
                     else:
                         # Voor normale tabellen: gebruik INSERT IGNORE
                         insert_cols = ", ".join(filtered_df.columns)
@@ -762,11 +759,18 @@ ON CONFLICT DO NOTHING;
                 
                 # Staging table legen na succesvolle merge
                 try:
-                    conn.execute(text(f"TRUNCATE {staging_table};"))
+                    # Probeer eerst TRUNCATE met timeout
+                    conn.execute(text(f"SET statement_timeout = '30s'; TRUNCATE {staging_table};"))
                     print(f"✅ Staging table '{staging_table}' geleegd.")
                 except Exception as e:
-                    print(f"⚠️ Kon staging table niet legen: {e}")
-                    # Niet kritiek, staging wordt bij volgende run overschreven
+                    print(f"⚠️ TRUNCATE faalde, probeer DELETE: {e}")
+                    try:
+                        # Fallback: DELETE met timeout
+                        conn.execute(text(f"SET statement_timeout = '30s'; DELETE FROM {staging_table};"))
+                        print(f"✅ Staging table '{staging_table}' geleegd via DELETE.")
+                    except Exception as e2:
+                        print(f"⚠️ Kon staging table niet legen (niet kritiek): {e2}")
+                        # Niet kritiek, staging wordt bij volgende run overschreven
                 
         except Exception as e:
             print(f"❌ Fout bij uploaden van batch voor '{table_name}': {e}")
@@ -834,22 +838,28 @@ def main():
         safe_to_sql(datasets["gripp_hours_data"].drop_duplicates(subset="id"), "urenregistratie")
     
     if datasets.get("gripp_invoices") is not None:
-        # Zet geneste kolommen in invoices om naar JSON strings (conversie vóór database insert)
-        invoices_records = datasets["gripp_invoices"].to_dict(orient="records")
-        import json
-        for invoice in invoices_records:
-            lines = invoice.get("invoicelines", [])
-            if isinstance(lines, np.ndarray):
-                lines = lines.tolist()
-            invoice["invoicelines"] = json.dumps(lines)
+        invoices_df = datasets["gripp_invoices"].drop_duplicates(subset="id").copy()
 
-            tags = invoice.get("tags", [])
-            if isinstance(tags, np.ndarray):
-                tags = tags.tolist()
-            invoice["tags"] = json.dumps(tags)
-        # Maak een DataFrame van de geconverteerde records
-        invoices_df = pd.DataFrame(invoices_records)
-        safe_to_sql(invoices_df.drop_duplicates(subset="id"), "invoices")
+        # Zet geneste kolommen in JSON (veilige serialisatie)
+        import numpy as np
+        json_cols = ["tags"]
+        def safe_json_serialize(x):
+            if isinstance(x, str):
+                return x
+            elif isinstance(x, np.ndarray):
+                return json.dumps(x.tolist())
+            elif isinstance(x, (dict, list)):
+                return json.dumps(x)
+            elif pd.isnull(x):
+                return None
+            else:
+                return str(x)
+        for col in json_cols:
+            if col in invoices_df.columns:
+                invoices_df[col] = invoices_df[col].apply(safe_json_serialize)
+
+        # Gebruik safe_to_sql voor consistente verwerking
+        safe_to_sql(invoices_df, "invoices")
     #if datasets.get("gripp_invoicelines") is not None:
         #safe_to_sql(datasets["gripp_invoicelines"].drop_duplicates(subset="id"), "invoicelines")
 
