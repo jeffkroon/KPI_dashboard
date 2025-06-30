@@ -122,53 +122,6 @@ def log_unique_values(df: pd.DataFrame, columns: list):
             print(f"Kolom '{col}' bestaat niet in de dataset.\n")
 
 
-def collect_projectlines_per_company(companies_df: pd.DataFrame, projects_df: pd.DataFrame, projectlines_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Voeg project- en bedrijfsinfo toe aan ALLE projectlines via left join, zodat geen enkele projectline verloren gaat.
-    """
-    print(f"🔢 [DEBUG] Projectlines vóór merge: {len(projectlines_df)}")
-    # Merge projectlines met projects (left join)
-    merged = projectlines_df.merge(
-        projects_df[["id", "company_id", "company_searchname", "number", "name"]],
-        left_on="offerprojectbase_id",
-        right_on="id",
-        how="left",
-        suffixes=("", "_project")
-    )
-    print(f"🔢 [DEBUG] Projectlines na merge met projects: {len(merged)}")
-    # Merge met companies (left join)
-    merged = merged.merge(
-        companies_df[["id", "companyname"]],
-        left_on="company_id",
-        right_on="id",
-        how="left",
-        suffixes=("", "_company")
-    )
-    print(f"🔢 [DEBUG] Projectlines na merge met companies: {len(merged)}")
-    # Zorg dat kolomnamen altijd bedrijf_id en bedrijf_naam heten (consistent met staging)
-    merged = merged.rename(columns={
-        "company_id": "bedrijf_id",
-        "companyname": "bedrijf_naam"
-    })
-    # Verwijder dubbele kolommen 'id_project' en 'id_company' als die bestaan
-    for col in ["id_project", "id_company"]:
-        if col in merged.columns:
-            merged = merged.drop(columns=[col])
-    # Controleer dat bedrijf_id en bedrijf_naam in de DataFrame blijven
-    if "bedrijf_id" not in merged.columns:
-        merged["bedrijf_id"] = None
-    if "bedrijf_naam" not in merged.columns:
-        merged["bedrijf_naam"] = None
-    # Optioneel: log ontbrekende bedrijf_id/bedrijf_naam
-    missing_bedrijf = merged[merged["bedrijf_id"].isna()]
-    if not missing_bedrijf.empty:
-        print(f"⚠️ {len(missing_bedrijf)} projectlines missen 'bedrijf_id'. Voorbeeld ID's: {missing_bedrijf['id'].tolist()[:10]}")
-    missing_bedrijf_naam = merged[merged["bedrijf_naam"].isna()]
-    if not missing_bedrijf_naam.empty:
-        print(f"⚠️ {len(missing_bedrijf_naam)} projectlines missen 'bedrijf_naam'. Voorbeeld ID's: {missing_bedrijf_naam['id'].tolist()[:10]}")
-    # Drop duplicates op basis van projectline id
-    merged = merged.drop_duplicates(subset="id")
-    return merged
 
 
 
@@ -341,7 +294,7 @@ def fetch_gripp_projects():
                     {"paging": {"firstresult": start, "maxresults": max_results}}
                 ]
             }]
-            time.sleep(0.5)
+            time.sleep(0.1)
             response = requests.post(BASE_URL, headers=HEADERS, json=payload)
             remaining = response.headers.get("X-RateLimit-Remaining")
             reset_timestamp = response.headers.get("X-RateLimit-Reset")
@@ -379,7 +332,7 @@ def fetch_gripp_employees():
                     {"paging": {"firstresult": start, "maxresults": max_results}}
                 ]
             }]
-            time.sleep(0.5)
+            time.sleep(0.1)
             response = requests.post(BASE_URL, headers=HEADERS, json=payload)
             remaining = response.headers.get("X-RateLimit-Remaining")
             reset_timestamp = response.headers.get("X-RateLimit-Reset")
@@ -417,7 +370,7 @@ def fetch_gripp_companies():
                     {"paging": {"firstresult": start, "maxresults": max_results}}
                 ]
             }]
-            time.sleep(0.5)
+            time.sleep(0.1)
             response = requests.post(BASE_URL, headers=HEADERS, json=payload)
             remaining = response.headers.get("X-RateLimit-Remaining")
             reset_timestamp = response.headers.get("X-RateLimit-Reset")
@@ -453,7 +406,7 @@ def fetch_gripp_invoices():
                     {"paging": {"firstresult": start, "maxresults": max_results}}
                 ]
             }]
-            time.sleep(0.5)
+            time.sleep(0.1)
             response = requests.post(BASE_URL, headers=HEADERS, json=payload)
             remaining = response.headers.get("X-RateLimit-Remaining")
             if remaining is not None:
@@ -485,7 +438,7 @@ def fetch_gripp_invoicelines():
                     {"paging": {"firstresult": start, "maxresults": max_results}}
                 ]
             }]
-            time.sleep(0.5)
+            time.sleep(0.1)
             response = requests.post(BASE_URL, headers=HEADERS, json=payload)
             remaining = response.headers.get("X-RateLimit-Remaining")
             if remaining is not None:
@@ -520,7 +473,7 @@ def fetch_gripp_hours_data():
                     {"paging": {"firstresult": start, "maxresults": max_results}}
                 ]
             }]
-            time.sleep(0.5)
+            time.sleep(0.1)
             response = requests.post(BASE_URL, headers=HEADERS, json=payload)
             remaining = response.headers.get("X-RateLimit-Remaining")
             reset_timestamp = response.headers.get("X-RateLimit-Reset")
@@ -558,7 +511,7 @@ def fetch_gripp_tasktypes():
                     {"paging": {"firstresult": start, "maxresults": max_results}}
                 ]
             }]
-            time.sleep(0.5)
+            time.sleep(0.1)
             response = requests.post(BASE_URL, headers=HEADERS, json=payload)
             remaining = response.headers.get("X-RateLimit-Remaining")
             reset_timestamp = response.headers.get("X-RateLimit-Reset")
@@ -625,7 +578,7 @@ def fetch_gripp_projectlines():
                     {"paging": {"firstresult": start, "maxresults": max_results}}
                 ]
             }]
-            time.sleep(0.5)
+            time.sleep(0.1)
             response = requests.post(BASE_URL, headers=HEADERS, json=payload)
             remaining = response.headers.get("X-RateLimit-Remaining")
             if remaining is not None:
@@ -638,6 +591,7 @@ def fetch_gripp_projectlines():
                 break
             start = data[0]["result"].get("next_start", start + max_results)
             watchdog -= 1
+        
         return pd.DataFrame(all_rows)
     return cached_fetch("gripp_projectlines", fetch, force_refresh=FORCE_REFRESH)
 
@@ -695,7 +649,8 @@ def _process_batch(df: pd.DataFrame, table_name: str, temp_engine):
                     result = conn.execute(text(f"""
                         SELECT column_name
                         FROM information_schema.columns
-                        WHERE table_name = '{staging_table}';
+                        WHERE table_name = '{staging_table}'
+                        ORDER BY ordinal_position;
                     """))
                     db_columns = [row[0] for row in result]
                 except Exception as e:
@@ -711,8 +666,8 @@ def _process_batch(df: pd.DataFrame, table_name: str, temp_engine):
             if "bedrijf_id" not in df.columns:
                 df.loc[:, "bedrijf_id"] = None
 
-            # Filter DataFrame kolommen
-            filtered_df = df[[col for col in df.columns if col in db_columns]]
+            # Filter DataFrame kolommen en zorg voor juiste volgorde
+            filtered_df = df[[col for col in db_columns if col in df.columns]]
 
             # Export naar CSV met float_format om .0 te verwijderen
             filtered_df.to_csv(tmp.name, index=False, header=True, float_format='%.0f')
@@ -806,36 +761,76 @@ def main():
         print("❌ Fout bij verbinden met Supabase PostgreSQL:", e)
 
     # Ophalen en sanitiseren van datasets (alle fetch en clean eerst, vóór verwerking)
-    projects_raw = flatten_dict_column(fetch_gripp_projects())
-    employees_raw = flatten_dict_column(fetch_gripp_employees())
-    companies_raw = flatten_dict_column(fetch_gripp_companies())
-    tasktypes_raw = flatten_dict_column(fetch_gripp_tasktypes())
-    hours_raw = flatten_dict_column(fetch_gripp_hours_data())
-    projectlines_raw = flatten_dict_column(fetch_gripp_projectlines())
-    print(f"🔢 [DEBUG] Aantal projectlines direct uit API: {len(projectlines_raw)}")
-    invoices_raw = flatten_dict_column(fetch_gripp_invoices())
-    #invoicelines_raw = flatten_dict_column(fetch_gripp_invoicelines())
+    projects_raw = fetch_gripp_projects()
+    employees_raw = fetch_gripp_employees()
+    companies_raw = fetch_gripp_companies()
+    tasktypes_raw = fetch_gripp_tasktypes()
+    hours_raw = fetch_gripp_hours_data()
+    invoices_raw = fetch_gripp_invoices()
+    #invoicelines_raw = fetch_gripp_invoicelines()
 
+    # Eerst datasets in dictionary plaatsen zodat fetch_gripp_projectlines er toegang toe heeft
+    # Flatten company data in projects voordat filtering
+    if not projects_raw.empty and 'company' in projects_raw.columns:
+        print("🔢 [DEBUG] Flattening company data in projects...")
+        projects_raw['company_id'] = projects_raw['company'].apply(
+            lambda x: x.get('id') if isinstance(x, dict) else x
+        )
+        projects_raw['company_searchname'] = projects_raw['company'].apply(
+            lambda x: x.get('searchname') if isinstance(x, dict) else x
+        )
+        print(f"🔢 [DEBUG] Sample company_id's: {projects_raw['company_id'].head(5).tolist()}")
+        print(f"🔢 [DEBUG] Sample company_searchname's: {projects_raw['company_searchname'].head(5).tolist()}")
+    
     datasets["gripp_projects"] = filter_projects(projects_raw)
     datasets["gripp_employees"] = filter_employees(employees_raw)
     datasets["gripp_companies"] = filter_companies(companies_raw)
     datasets["gripp_tasktypes"] = filter_tasktypes(tasktypes_raw)
     datasets["gripp_hours_data"] = filter_hours(hours_raw)
-    datasets["gripp_projectlines"] = projectlines_raw
     datasets["gripp_invoices"] = filter_invoices(invoices_raw)
+    
+    # Nu projectlines ophalen (nadat projects beschikbaar zijn)
+    projectlines_raw = fetch_gripp_projectlines()
+    print(f"🔢 [DEBUG] Aantal projectlines direct uit API: {len(projectlines_raw)}")
+    
+    # Voeg bedrijfsinformatie toe aan projectlines
+    if not projectlines_raw.empty:
+        print(f"🔢 [DEBUG] Projectlines kolommen: {projectlines_raw.columns.tolist()}")
+        
+        # Gebruik offerprojectbase kolom (bevat dictionaries met ID's)
+        if 'offerprojectbase' in projectlines_raw.columns:
+            print(f"🔢 [DEBUG] Sample offerprojectbase waarden: {projectlines_raw['offerprojectbase'].head(5).tolist()}")
+            
+            # Extraheer ID's uit de dictionaries
+            projectlines_raw['offerprojectbase_id'] = projectlines_raw['offerprojectbase'].apply(
+                lambda x: x.get('id') if isinstance(x, dict) else x
+            )
+            print(f"🔢 [DEBUG] Sample offerprojectbase_id waarden: {projectlines_raw['offerprojectbase_id'].head(5).tolist()}")
+            
+            projectlines_raw = projectlines_raw.merge(
+                datasets["gripp_projects"][["id", "company_id", "company_searchname"]],
+                left_on="offerprojectbase_id",
+                right_on="id",
+                how="left",
+                suffixes=("", "_project")
+            )
+            projectlines_raw = projectlines_raw.drop(columns=["id_project"])
+            
+            # Hernoem kolommen voor consistentie met database
+            projectlines_raw = projectlines_raw.rename(columns={
+                "company_id": "bedrijf_id",
+                "company_searchname": "bedrijf_naam"
+            })
+            print(f"🔢 [DEBUG] Aantal projectlines na merge met bedrijfsinformatie: {len(projectlines_raw)}")
+            print(f"🔢 [DEBUG] Sample bedrijf_id's: {projectlines_raw['bedrijf_id'].head(5).tolist()}")
+        else:
+            print("⚠️ offerprojectbase kolom niet gevonden")
+    
+    datasets["gripp_projectlines"] = projectlines_raw
     #datasets["gripp_invoicelines"] = filter_invoicelines(invoicelines_raw)
 
-    # Verzamel alle projectlines per bedrijf
-    if os.path.exists(PROJECTLINES_CACHE_PATH) and not FORCE_REFRESH:
-        combined_projectlines = pd.read_parquet(PROJECTLINES_CACHE_PATH)
-    else:
-        combined_projectlines = collect_projectlines_per_company(
-            datasets["gripp_companies"],
-            datasets["gripp_projects"],
-            datasets["gripp_projectlines"]
-        )
-        print(f"🔢 [DEBUG] Aantal projectlines na collect_projectlines_per_company: {len(combined_projectlines)}")
-        combined_projectlines.to_parquet(PROJECTLINES_CACHE_PATH, index=False)
+    # Gebruik direct de verrijkte projectlines uit de fetch
+    combined_projectlines = datasets["gripp_projectlines"]
 
     # Upload alle datasets naar de database met veilige to_sql (nu altijd bulk COPY)
     if combined_projectlines is not None:
