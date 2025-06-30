@@ -145,14 +145,30 @@ def collect_projectlines_per_company(companies_df: pd.DataFrame, projects_df: pd
         suffixes=("", "_company")
     )
     print(f"🔢 [DEBUG] Projectlines na merge met companies: {len(merged)}")
-    # Zorg dat kolomnaam altijd bedrijf_id heet (consistent met staging)
-    merged = merged.rename(columns={"company_id": "bedrijf_id"})
-    # Controleer dat bedrijf_id in de DataFrame blijft
-    keep_cols = list(merged.columns)
-    if "bedrijf_id" not in keep_cols:
-        keep_cols.append("bedrijf_id")
-    result_df = merged[keep_cols]
-    return pd.DataFrame(result_df)
+    # Zorg dat kolomnamen altijd bedrijf_id en bedrijf_naam heten (consistent met staging)
+    merged = merged.rename(columns={
+        "company_id": "bedrijf_id",
+        "companyname": "bedrijf_naam"
+    })
+    # Verwijder dubbele kolommen 'id_project' en 'id_company' als die bestaan
+    for col in ["id_project", "id_company"]:
+        if col in merged.columns:
+            merged = merged.drop(columns=[col])
+    # Controleer dat bedrijf_id en bedrijf_naam in de DataFrame blijven
+    if "bedrijf_id" not in merged.columns:
+        merged["bedrijf_id"] = None
+    if "bedrijf_naam" not in merged.columns:
+        merged["bedrijf_naam"] = None
+    # Optioneel: log ontbrekende bedrijf_id/bedrijf_naam
+    missing_bedrijf = merged[merged["bedrijf_id"].isna()]
+    if not missing_bedrijf.empty:
+        print(f"⚠️ {len(missing_bedrijf)} projectlines missen 'bedrijf_id'. Voorbeeld ID's: {missing_bedrijf['id'].tolist()[:10]}")
+    missing_bedrijf_naam = merged[merged["bedrijf_naam"].isna()]
+    if not missing_bedrijf_naam.empty:
+        print(f"⚠️ {len(missing_bedrijf_naam)} projectlines missen 'bedrijf_naam'. Voorbeeld ID's: {missing_bedrijf_naam['id'].tolist()[:10]}")
+    # Drop duplicates op basis van projectline id
+    merged = merged.drop_duplicates(subset="id")
+    return merged
 
 
 

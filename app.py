@@ -60,7 +60,13 @@ df_projects["enddate_date"] = pd.to_datetime(df_projects["enddate_date"], errors
 
 df_employees: pd.DataFrame = pd.DataFrame(load_data("employees"))
 df_projectlines: pd.DataFrame = pd.DataFrame(load_data("projectlines_per_company"))
-
+# Debug info
+print("df_projects columns:", df_projects.columns.tolist())
+print("df_projects dtypes:\n", df_projects.dtypes)
+print("df_companies columns:", df_companies.columns.tolist())
+print("df_companies dtypes:\n", df_companies.dtypes)
+print("df_projectlines columns:", df_projectlines.columns.tolist())
+print("df_projectlines dtypes:\n", df_projectlines.dtypes)
 # Filter projectlines op actieve projecten en 'NORMAAL'
 active_project_ids = df_projects["id"].tolist()
 df_projectlines = cast(pd.DataFrame, df_projectlines[df_projectlines["offerprojectbase_id"].isin(active_project_ids)].copy())
@@ -84,7 +90,8 @@ aggregatie_per_bedrijf = pd.DataFrame(df_projectlines.groupby("bedrijf_id").agg(
 aggregatie_per_bedrijf.columns = ["bedrijf_id", "totaal_uren"]
 
 # Merge in projecten
-df_projects = df_projects.merge(aggregatie_per_bedrijf, left_on="company_id", right_on="bedrijf_id", how="left").copy()
+
+df_projects = df_projects.merge(aggregatie_per_bedrijf, left_on="id_bedrijf", right_on="bedrijf_id", how="left").copy()
 df_projects["totaal_uren"] = df_projects["totaal_uren"].fillna(0).infer_objects(copy=False)
 
 factuurbedrag_per_bedrijf = (
@@ -270,3 +277,8 @@ else:
         lambda x: f"€ {float(x):,.2f}" if pd.notna(x) and x != 0 else "€ 0.00"
     )
     st.dataframe(display_bedrijfsstats, use_container_width=True)
+
+df_projectlines["bedrijf_id"] = df_projectlines["bedrijf_id"].astype("Int64")
+df_companies["id"] = df_companies["id"].astype("Int64")
+
+
