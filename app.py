@@ -89,6 +89,52 @@ bedrijfsstats["totaal_uren"] = bedrijfsstats["totaal_uren"].fillna(0)
 bedrijfsstats["totalpayed"] = bedrijfsstats["totalpayed"].fillna(0)
 bedrijfsstats["werkelijk_tarief_per_uur"] = bedrijfsstats["totalpayed"].div(bedrijfsstats["totaal_uren"].replace(0, pd.NA)).fillna(0)
 
+# --- SIMPELE KPI'S & LEUKE INZICHTEN ---
+st.markdown("""
+<style>
+.element-container .stMetric label, .element-container .stMetric div {
+    font-size: 0.55em !important;
+}
+.element-container .stMetric span {
+    font-size: 1em !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+    overflow: visible !important;
+    text-overflow: unset !important;
+    display: block !important;
+    max-width: 100% !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+colA, colB = st.columns(2)
+
+# Hoogste werkelijk tarief per uur (bedrijf)
+if isinstance(bedrijfsstats, pd.DataFrame) and "werkelijk_tarief_per_uur" in bedrijfsstats.columns:
+    df_tarief = bedrijfsstats[bedrijfsstats["werkelijk_tarief_per_uur"] > 0]
+    if not df_tarief.empty:
+        hoogste = df_tarief.sort_values(by="werkelijk_tarief_per_uur", ascending=False).iloc[0]  # type: ignore
+        naam_hoog = str(hoogste["companyname"]) if pd.notna(hoogste["companyname"]) else "-"
+        tarief_hoog = float(hoogste["werkelijk_tarief_per_uur"]) if pd.notna(hoogste["werkelijk_tarief_per_uur"]) else 0
+        colA.metric("Hoogste werkelijk tarief (bedrijf)", naam_hoog, f"€ {tarief_hoog:.2f}")
+    else:
+        colA.metric("Hoogste werkelijk tarief (bedrijf)", "-", "€ 0.00")
+else:
+    colA.metric("Hoogste werkelijk tarief (bedrijf)", "-", "€ 0.00")
+
+# Laagste werkelijk tarief per uur (bedrijf)
+if isinstance(bedrijfsstats, pd.DataFrame) and "werkelijk_tarief_per_uur" in bedrijfsstats.columns:
+    df_tarief = bedrijfsstats[bedrijfsstats["werkelijk_tarief_per_uur"] > 0]
+    if not df_tarief.empty:
+        laagste = df_tarief.sort_values(by="werkelijk_tarief_per_uur", ascending=True).iloc[0]  # type: ignore
+        naam_laag = str(laagste["companyname"]) if pd.notna(laagste["companyname"]) else "-"
+        tarief_laag = float(laagste["werkelijk_tarief_per_uur"]) if pd.notna(laagste["werkelijk_tarief_per_uur"]) else 0
+        colB.metric("Laagste werkelijk tarief (bedrijf)", naam_laag, f"€ {tarief_laag:.2f}")
+    else:
+        colB.metric("Laagste werkelijk tarief (bedrijf)", "-", "€ 0.00")
+else:
+    colB.metric("Laagste werkelijk tarief (bedrijf)", "-", "€ 0.00")
+
 # --- BAR CHART ---
 st.subheader("📊 Werkelijk tarief per uur per bedrijf")
 if not isinstance(bedrijfsstats, pd.DataFrame):
