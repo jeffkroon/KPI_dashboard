@@ -839,6 +839,16 @@ def main():
     tasktypes_raw = fetch_gripp_tasktypes()
     hours_raw = fetch_gripp_hours_data()
     invoices_raw = fetch_gripp_invoices()
+    # Forceer flatten voor alle kolommen die dicts kunnen bevatten
+    for col in invoices_raw.columns:
+        if invoices_raw[col].apply(lambda x: isinstance(x, dict)).any():
+            expanded = invoices_raw[col].apply(pd.Series)
+            expanded.columns = [f"{col}_{subcol}" for subcol in expanded.columns]
+            invoices_raw = invoices_raw.drop(columns=[col]).join(expanded)
+    # Kopieer date_date zoals voorheen
+    if not invoices_raw.empty and 'date' in invoices_raw.columns:
+        invoices_raw['date_date'] = invoices_raw['date']
+        invoices_raw['date_date'] = pd.to_datetime(invoices_raw['date_date'], errors='coerce').dt.date
     #invoicelines_raw = fetch_gripp_invoicelines()
 
     # Eerst datasets in dictionary plaatsen zodat fetch_gripp_projectlines er toegang toe heeft
