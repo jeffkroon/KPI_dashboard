@@ -96,7 +96,7 @@ if not isinstance(bedrijfsstats, pd.DataFrame):
 else:
     chart_data = bedrijfsstats.copy()
 assert isinstance(chart_data, pd.DataFrame), "chart_data moet een DataFrame zijn"
-chart_data = chart_data[chart_data["werkelijk_tarief_per_uur"] > 0].sort_values(by="werkelijk_tarief_per_uur", ascending=True)  # type: ignore
+chart_data = chart_data[chart_data["werkelijk_tarief_per_uur"] > 0].sort_values(by="werkelijk_tarief_per_uur", ascending=False)  # type: ignore
 fig = px.bar(
     chart_data,
     x="companyname",
@@ -146,7 +146,7 @@ if bedrijf_naam_selectie:
 st.markdown("---")
 st.subheader("📄 Facturen van geselecteerd bedrijf")
 if bedrijf_naam_selectie and bedrijf_id_selectie is not None:
-    facturen_bedrijf = df_invoices[df_invoices["company_id"] == bedrijf_id_selectie].copy()
+    facturen_bedrijf = df_invoices[(df_invoices["company_id"] == bedrijf_id_selectie) & (df_invoices["status_searchname"] == "Verzonden")].copy()
     if not facturen_bedrijf.empty:
         facturen_bedrijf["totalpayed"] = pd.to_numeric(facturen_bedrijf["totalpayed"], errors="coerce")
         display_columns = ["number", "date_date", "status_searchname", "totalpayed", "subject"]
