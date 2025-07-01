@@ -94,7 +94,7 @@ bedrijfsstats["werkelijk_tarief_per_uur"] = bedrijfsstats["totalpayed"].div(bedr
 st.markdown("""
 <style>
 .element-container .stMetric label, .element-container .stMetric div {
-    font-size: 0.55em !important;
+    font-size: 1.05em !important;
 }
 .element-container .stMetric span {
     font-size: 1em !important;
@@ -193,7 +193,7 @@ if bedrijf_naam_selectie:
 st.markdown("---")
 st.subheader("📄 Facturen van geselecteerd bedrijf")
 if bedrijf_naam_selectie and bedrijf_id_selectie is not None:
-    facturen_bedrijf = df_invoices[(df_invoices["company_id"] == bedrijf_id_selectie) & (df_invoices["status_searchname"] == "Verzonden")].copy()
+    facturen_bedrijf = df_invoices[(df_invoices["company_id"] == bedrijf_id_selectie) & (df_invoices["status_searchname"] == "Verzondenffont")].copy()
     if not facturen_bedrijf.empty:
         facturen_bedrijf["totalpayed"] = pd.to_numeric(facturen_bedrijf["totalpayed"], errors="coerce")
         display_columns = ["number", "date_date", "status_searchname", "totalpayed", "subject"]
