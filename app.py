@@ -203,7 +203,7 @@ if bedrijf_naam_selectie:
 st.markdown("---")
 st.subheader("📄 Facturen van geselecteerd bedrijf")
 if bedrijf_naam_selectie and bedrijf_id_selectie is not None:
-    facturen_bedrijf = df_invoices[(df_invoices["company_id"] == bedrijf_id_selectie) & (df_invoices["status_searchname"] == "Verzondenffont")].copy()
+    facturen_bedrijf = df_invoices[(df_invoices["company_id"] == bedrijf_id_selectie) & (df_invoices["status_searchname"] == "Verzonden")].copy()
     if not facturen_bedrijf.empty:
         facturen_bedrijf["totalpayed"] = pd.to_numeric(facturen_bedrijf["totalpayed"], errors="coerce")
         display_columns = ["number", "date_date", "status_searchname", "totalpayed", "subject"]
