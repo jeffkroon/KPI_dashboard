@@ -25,6 +25,8 @@ def load_data(table_name, start_date=None, end_date=None, limit=5000):
         if start_date and end_date:
             query += f" AND date_date::timestamp BETWEEN '{start_date}' AND '{end_date}'"
         query += f" LIMIT {limit}"
+    elif table_name == "employees":
+        query = f"SELECT * FROM {table_name};"  # GEEN LIMIT voor employees
     else:
         query = f"SELECT * FROM {table_name} LIMIT {limit};"
     return pd.read_sql(query, con=engine)
@@ -141,8 +143,9 @@ else:
 
 # Optionele filter op medewerkers binnen geselecteerde projecten
 st.subheader("Filter medewerkers binnen geselecteerde projecten")
-medewerker_opties = df_medewerkers_filtered['fullname'].tolist() if aantal_medewerkers > 0 else []
-selected_medewerkers = st.multiselect("Selecteer medewerkers (optioneel)", options=medewerker_opties)
+medewerkers = df_employees['firstname'].unique()
+selected_medewerkers = st.multiselect("Selecteer medewerker(s)", medewerkers)
+medewerker_ids_filter = df_employees[df_employees['firstname'].isin(selected_medewerkers)]['id']
 
 # Visualisaties
 st.subheader("📊 Visualisaties")
@@ -150,7 +153,6 @@ st.subheader("📊 Visualisaties")
 if aantal_medewerkers > 0:
     df_vis = df_uren_filtered.copy()
     if selected_medewerkers:
-        medewerker_ids_filter = df_employees[df_employees['fullname'].isin(selected_medewerkers)]['id']
         df_vis = df_vis[df_vis['employee_id'].isin(medewerker_ids_filter)]
     
     # Uren per medewerker bar chart
