@@ -717,16 +717,31 @@ ON CONFLICT (id) DO UPDATE SET {set_clause};
                             )
                         print(f"✅ '{table_name}' batch direct geCOPY'd zonder staging merge.")
                     else:
-                        # Voor normale tabellen: gebruik INSERT IGNORE
-                        insert_cols = ", ".join(filtered_df.columns)
-                        select_cols = ", ".join(filtered_df.columns)
-                        insert_sql = f'''
+                        # Voor normale tabellen: gebruik INSERT IGNORE, behalve voor projectlines_per_company
+                        if table_name == "projectlines_per_company":
+                            # Voor projectlines: overschrijf bestaande rijen met nieuwe company info
+                            columns = [col for col in filtered_df.columns if col != "id"]
+                            set_clause = ", ".join([f"{col} = EXCLUDED.{col}" for col in columns])
+                            insert_cols = ", ".join(filtered_df.columns)
+                            select_cols = ", ".join(filtered_df.columns)
+                            insert_sql = f'''
+INSERT INTO {table_name} ({insert_cols})
+SELECT {select_cols} FROM {staging_table}
+ON CONFLICT (id) DO UPDATE SET {set_clause};
+'''
+                            conn.execute(text(insert_sql))
+                            print(f"✅ '{table_name}' batch up-to-date met ON CONFLICT UPDATE.")
+                        else:
+                            # Voor andere tabellen: gebruik INSERT IGNORE
+                            insert_cols = ", ".join(filtered_df.columns)
+                            select_cols = ", ".join(filtered_df.columns)
+                            insert_sql = f'''
 INSERT INTO {table_name} ({insert_cols})
 SELECT {select_cols} FROM {staging_table}
 ON CONFLICT DO NOTHING;
 '''
-                        conn.execute(text(insert_sql))
-                        print(f"✅ '{table_name}' batch up-to-date met INSERT IGNORE.")
+                            conn.execute(text(insert_sql))
+                            print(f"✅ '{table_name}' batch up-to-date met INSERT IGNORE.")
                 
                 # Staging table legen na succesvolle merge
                 try:
