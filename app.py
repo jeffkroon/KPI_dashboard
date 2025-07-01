@@ -109,14 +109,14 @@ fig.update_layout(xaxis_tickangle=-45, margin=dict(l=40, r=20, t=60, b=120))
 st.plotly_chart(fig, use_container_width=True)
 
 # --- TOP 5 & BOTTOM 5 ---
-st.markdown("### 🔝 Top 5 bedrijven – Hoog tarief per uur")
-top5 = chart_data.head(5)[["companyname", "werkelijk_tarief_per_uur"]].copy()
+st.markdown("### 🔝 Top 10 bedrijven – Hoog tarief per uur")
+top5 = chart_data.head(10)[["companyname", "werkelijk_tarief_per_uur"]].copy()
 top5["werkelijk_tarief_per_uur"] = pd.Series(top5["werkelijk_tarief_per_uur"]).apply(lambda x: f"€ {float(x):,.2f}")
 top5.columns = ["Bedrijfsnaam", "Tarief per Uur (€)"]
 st.dataframe(top5, use_container_width=True)
 
-st.markdown("### 📉 Bottom 5 bedrijven – Laag tarief per uur")
-bottom5 = chart_data.sort_values(by="werkelijk_tarief_per_uur").head(5)[["companyname", "werkelijk_tarief_per_uur"]].copy()
+st.markdown("### 📉 Bottom 10 bedrijven – Laag tarief per uur")
+bottom5 = chart_data.sort_values(by="werkelijk_tarief_per_uur").head(10)[["companyname", "werkelijk_tarief_per_uur"]].copy()
 bottom5["werkelijk_tarief_per_uur"] = pd.Series(bottom5["werkelijk_tarief_per_uur"]).apply(lambda x: f"€ {float(x):,.2f}")
 bottom5.columns = ["Bedrijfsnaam", "Tarief per Uur (€)"]
 st.dataframe(bottom5, use_container_width=True)
