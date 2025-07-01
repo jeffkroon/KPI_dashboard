@@ -6,6 +6,7 @@ import os
 from dotenv import load_dotenv
 from datetime import datetime
 from typing import cast
+import plotly.graph_objects as go
 
 st.set_page_config(
     page_title="Dunion KPI Dashboard",
@@ -206,3 +207,24 @@ if bedrijf_naam_selectie and bedrijf_id_selectie is not None:
 
 # --- FOOTER ---
 st.markdown("""<div style='text-align: right; color: #888; font-size: 0.9em;'>Dunion Dashboard &copy; 2024</div>""", unsafe_allow_html=True)
+
+# --- WHALES PIE CHART: OMZETVERDELING PER BEDRIJF ---
+st.markdown("---")
+st.subheader("🐋 Onze 'whales': bedrijven met het grootste deel van de omzet")
+
+# Top 10 bedrijven qua omzet, rest als 'Overig'
+omzet_per_bedrijf = bedrijfsstats[["companyname", "totalpayed"]].copy()
+omzet_per_bedrijf = omzet_per_bedrijf.groupby("companyname", dropna=False)["totalpayed"].sum().reset_index()
+omzet_per_bedrijf = omzet_per_bedrijf.sort_values(by="totalpayed", ascending=False)
+top10 = omzet_per_bedrijf.head(10)
+rest = omzet_per_bedrijf[10:]["totalpayed"].sum()
+
+labels = top10["companyname"].tolist()
+values = top10["totalpayed"].tolist()
+if rest > 0:
+    labels.append("Overig")
+    values.append(rest)
+
+fig_pie = go.Figure(data=[go.Pie(labels=labels, values=values, hole=0.4, textinfo='label+percent', hovertemplate='%{label}: €%{value:,.0f}<extra></extra>')])
+fig_pie.update_layout(title="Omzetverdeling: top 10 bedrijven vs. rest", height=400, margin=dict(l=40, r=20, t=60, b=40))
+st.plotly_chart(fig_pie, use_container_width=True)
