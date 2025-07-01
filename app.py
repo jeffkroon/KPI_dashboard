@@ -93,19 +93,19 @@ bedrijfsstats["werkelijk_tarief_per_uur"] = bedrijfsstats["totalpayed"].div(bedr
 # --- SIMPELE KPI'S & LEUKE INZICHTEN ---
 st.markdown("""
 <style>
-.element-container .stMetric label, .element-container .stMetric div {
-    font-size: 1em !important;
-}
-.element-container .stMetric span {
-    font-size: 1.5em !important;
-    white-space: normal !important;
-    word-break: break-word !important;
-    overflow: visible !important;
-    text-overflow: unset !important;
-    display: block !important;
-    max-width: 100% !important;
-}
-</style>
+   .element-container .stMetric label, .element-container .stMetric div {
+       font-size: 1em !important;
+   }
+   .element-container .stMetric span {
+       font-size: 1.5em !important;
+       white-space: normal !important;
+       word-break: break-word !important;
+       overflow: visible !important;
+       text-overflow: unset !important;
+       display: block !important;
+       max-width: 100% !important;
+   }
+   </style>
 """, unsafe_allow_html=True)
 
 colA, colB = st.columns(2)
