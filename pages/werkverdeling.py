@@ -19,20 +19,27 @@ load_dotenv()
 POSTGRES_URL = os.getenv("POSTGRES_URL")
 engine = create_engine(POSTGRES_URL)
 
-@st.cache_data(ttl=3600)
-def load_data(table_name):
-    if table_name == "urenregistratie":
-        query = f"SELECT * FROM {table_name} WHERE date_date >= NOW() - INTERVAL '3 months';"
+@st.cache_data(ttl=600)
+def load_data(table_name, project_ids=None, start_date=None, end_date=None):
+    if table_name == "urenregistratie" and project_ids and start_date and end_date:
+        placeholders = ", ".join(["%s"] * len(project_ids))
+        query = f"""
+            SELECT id, employee_id, amount, date_date, offerprojectbase_id
+            FROM {table_name}
+            WHERE offerprojectbase_id IN ({placeholders})
+              AND date_date BETWEEN %s AND %s
+        """
+        params = tuple(project_ids + [start_date, end_date])
+        return pd.read_sql(query, con=engine, params=params)
     else:
         query = f"SELECT * FROM {table_name};"
-    return pd.read_sql(query, con=engine)
+        return pd.read_sql(query, con=engine)
 
 # Datasets laden
 df_employees = load_data("employees")
 df_employees['fullname'] = df_employees['firstname'] + " " + df_employees['lastname']
 df_projects = load_data("projects")
 df_companies = load_data("companies")
-df_uren = load_data("urenregistratie")
 
 # Filter niet-gearchiveerde projecten
 df_projects = df_projects[df_projects["archived"] != True]
@@ -44,6 +51,16 @@ df_projects["totalexclvat"] = pd.to_numeric(df_projects["totalexclvat"], errors=
 df_projects = df_projects.merge(
     df_companies[['id', 'companyname']], left_on='company_id', right_on='id', how='left', suffixes=('', '_company')
 )
+
+# Bepaal min_date en max_date voor urenregistratie op basis van projecten
+# Gebruik placeholders als er nog geen uren zijn ingeladen
+min_date = pd.Timestamp("2000-01-01")
+max_date = pd.Timestamp("2100-01-01")
+
+df_uren = load_data("urenregistratie",
+                    project_ids=df_projects['id'].tolist(),
+                    start_date=min_date,
+                    end_date=max_date)
 
 # Pagina titel
 st.title("📋 Project Overzicht met Medewerker Uren")
