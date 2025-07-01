@@ -94,7 +94,7 @@ bedrijfsstats["werkelijk_tarief_per_uur"] = bedrijfsstats["totalpayed"].div(bedr
 st.markdown("""
 <style>
    .element-container .stMetric label, .element-container .stMetric div {
-       font-size: 1.5em !important;
+       font-size: 1.3em !important;
    }
    .element-container .stMetric span {
        font-size: 1.5em !important;
