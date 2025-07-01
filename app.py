@@ -228,3 +228,23 @@ if rest > 0:
 fig_pie = go.Figure(data=[go.Pie(labels=labels, values=values, hole=0.4, textinfo='label+percent', hovertemplate='%{label}: €%{value:,.0f}<extra></extra>')])
 fig_pie.update_layout(title="Omzetverdeling: top 10 bedrijven vs. rest", height=400, margin=dict(l=40, r=20, t=60, b=40))
 st.plotly_chart(fig_pie, use_container_width=True)
+
+# --- BEDRIJVEN MET MEESTE UREN: BAR CHART ---
+st.markdown("---")
+st.subheader("⏰ Bedrijven waar de meeste uren aan zijn geschreven")
+
+uren_per_bedrijf = bedrijfsstats[["companyname", "totaal_uren"]].copy()
+uren_per_bedrijf = uren_per_bedrijf.groupby("companyname", dropna=False)["totaal_uren"].sum().reset_index()
+uren_per_bedrijf = uren_per_bedrijf.sort_values(by="totaal_uren", ascending=False)
+top10_uren = uren_per_bedrijf.head(10)
+
+fig_uren = px.bar(
+    top10_uren,
+    x="totaal_uren",
+    y="companyname",
+    orientation="h",
+    labels={"totaal_uren": "Totaal Uren", "companyname": "Bedrijf"},
+    title="Top 10 bedrijven met meeste geschreven uren"
+)
+fig_uren.update_layout(yaxis={'categoryorder':'total ascending'}, height=400, margin=dict(l=40, r=20, t=60, b=40))
+st.plotly_chart(fig_uren, use_container_width=True)
