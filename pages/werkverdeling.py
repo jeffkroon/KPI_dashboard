@@ -21,7 +21,10 @@ engine = create_engine(POSTGRES_URL)
 
 @st.cache_data(ttl=3600)
 def load_data(table_name):
-    query = f"SELECT * FROM {table_name};"
+    if table_name == "urenregistratie":
+        query = f"SELECT * FROM {table_name} WHERE date_date >= NOW() - INTERVAL '3 months';"
+    else:
+        query = f"SELECT * FROM {table_name};"
     return pd.read_sql(query, con=engine)
 
 # Datasets laden
