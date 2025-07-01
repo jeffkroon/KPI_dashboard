@@ -18,6 +18,16 @@ st.set_page_config(
 st.logo("images/dunion-logo-def_donker-06.png")
 st.title("Dunion KPI Dashboard – Overzicht")
 
+st.markdown("""
+<style>
+h1 {
+    font-size: 2.5em !important;
+    font-weight: 800 !important;
+    margin-bottom: 0.5em !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 @st.cache_data
 def load_data(table_name):
     query = f"SELECT * FROM {table_name};"
@@ -93,19 +103,19 @@ bedrijfsstats["werkelijk_tarief_per_uur"] = bedrijfsstats["totalpayed"].div(bedr
 # --- SIMPELE KPI'S & LEUKE INZICHTEN ---
 st.markdown("""
 <style>
-   .element-container .stMetric label, .element-container .stMetric div {
-       font-size: 1.3em !important;
-   }
-   .element-container .stMetric span {
-       font-size: 1.6em !important;
-       white-space: normal !important;
-       word-break: break-word !important;
-       overflow: visible !important;
-       text-overflow: unset !important;
-       display: block !important;
-       max-width: 100% !important;
-   }
-   </style>
+/* Label boven de waarde */
+.element-container .stMetric label, [data-testid="stMetric"] label {
+    font-size: 1.6em !important;
+}
+/* Waarde (het getal) */
+.element-container .stMetric span, [data-testid="stMetricValue"] {
+    font-size: 2.5em !important;
+}
+/* Delta (optioneel, onder het getal) */
+[data-testid="stMetricDelta"] {
+    font-size: 1.2em !important;
+}
+</style>
 """, unsafe_allow_html=True)
 
 colA, colB = st.columns(2)
