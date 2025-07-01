@@ -87,22 +87,22 @@ bedrijfsstats = bedrijfsstats.merge(df_companies[["id", "companyname"]], left_on
 bedrijfsstats = bedrijfsstats.drop(columns=[col for col in ['id'] if col in bedrijfsstats.columns])
 bedrijfsstats["totaal_uren"] = bedrijfsstats["totaal_uren"].fillna(0)
 bedrijfsstats["totalpayed"] = bedrijfsstats["totalpayed"].fillna(0)
-bedrijfsstats["werkelijke_tarief_per_uur"] = bedrijfsstats["totalpayed"].div(bedrijfsstats["totaal_uren"].replace(0, pd.NA)).fillna(0)
+bedrijfsstats["werkelijk_tarief_per_uur"] = bedrijfsstats["totalpayed"].div(bedrijfsstats["totaal_uren"].replace(0, pd.NA)).fillna(0)
 
 # --- BAR CHART ---
-st.subheader("📊 Tarief per uur per bedrijf")
+st.subheader("📊 Werkelijk tarief per uur per bedrijf")
 if not isinstance(bedrijfsstats, pd.DataFrame):
     chart_data = pd.DataFrame(bedrijfsstats)
 else:
     chart_data = bedrijfsstats.copy()
 assert isinstance(chart_data, pd.DataFrame), "chart_data moet een DataFrame zijn"
-chart_data = chart_data[chart_data["werkelijke_tarief_per_uur"] > 0].sort_values(by="werkelijke_tarief_per_uur", ascending=False)
+chart_data = chart_data[chart_data["werkelijk_tarief_per_uur"] > 0].sort_values(by="werkelijk_tarief_per_uur", ascending=True)  # type: ignore
 fig = px.bar(
     chart_data,
     x="companyname",
-    y="werkelijke_tarief_per_uur",
-    labels={"companyname": "Bedrijf", "werkelijke_tarief_per_uur": "Tarief per uur (€)"},
-    title="Tarief per uur per bedrijf",
+    y="werkelijk_tarief_per_uur",
+    labels={"companyname": "Bedrijf", "werkelijk_tarief_per_uur": "Werkelijk tarief per uur (€)"},
+    title="Werkelijk tarief per uur per bedrijf",
     height=400
 )
 fig.update_layout(xaxis_tickangle=-45, margin=dict(l=40, r=20, t=60, b=120))
@@ -110,14 +110,14 @@ st.plotly_chart(fig, use_container_width=True)
 
 # --- TOP 5 & BOTTOM 5 ---
 st.markdown("### 🔝 Top 5 bedrijven – Hoog tarief per uur")
-top5 = chart_data.head(5)[["companyname", "werkelijke_tarief_per_uur"]].copy()
-top5["werkelijke_tarief_per_uur"] = pd.Series(top5["werkelijke_tarief_per_uur"]).apply(lambda x: f"€ {float(x):,.2f}")
+top5 = chart_data.head(5)[["companyname", "werkelijk_tarief_per_uur"]].copy()
+top5["werkelijk_tarief_per_uur"] = pd.Series(top5["werkelijk_tarief_per_uur"]).apply(lambda x: f"€ {float(x):,.2f}")
 top5.columns = ["Bedrijfsnaam", "Tarief per Uur (€)"]
 st.dataframe(top5, use_container_width=True)
 
 st.markdown("### 📉 Bottom 5 bedrijven – Laag tarief per uur")
-bottom5 = chart_data.sort_values(by="werkelijke_tarief_per_uur").head(5)[["companyname", "werkelijke_tarief_per_uur"]].copy()
-bottom5["werkelijke_tarief_per_uur"] = pd.Series(bottom5["werkelijke_tarief_per_uur"]).apply(lambda x: f"€ {float(x):,.2f}")
+bottom5 = chart_data.sort_values(by="werkelijk_tarief_per_uur").head(5)[["companyname", "werkelijk_tarief_per_uur"]].copy()
+bottom5["werkelijk_tarief_per_uur"] = pd.Series(bottom5["werkelijk_tarief_per_uur"]).apply(lambda x: f"€ {float(x):,.2f}")
 bottom5.columns = ["Bedrijfsnaam", "Tarief per Uur (€)"]
 st.dataframe(bottom5, use_container_width=True)
 
@@ -129,17 +129,17 @@ bedrijf_naam_selectie = st.selectbox("Kies een bedrijf:", bedrijf_opties)
 bedrijf_id_selectie = bedrijfsstats.loc[bedrijfsstats["companyname"] == bedrijf_naam_selectie, "bedrijf_id"].iloc[0] if bedrijf_naam_selectie else None
 
 if bedrijf_naam_selectie:
-    display_df = bedrijfsstats[bedrijfsstats["companyname"] == bedrijf_naam_selectie][["bedrijf_id", "companyname", "totalpayed", "totaal_uren", "werkelijke_tarief_per_uur"]].copy()
+    display_df = bedrijfsstats[bedrijfsstats["companyname"] == bedrijf_naam_selectie][["bedrijf_id", "companyname", "totalpayed", "totaal_uren", "werkelijk_tarief_per_uur"]].copy()
     assert isinstance(display_df, pd.DataFrame), "display_df moet een DataFrame zijn"
     display_df = display_df.rename(columns={
         "bedrijf_id": "Bedrijf ID",
         "companyname": "Bedrijfsnaam",
         "totalpayed": "Totaal Gefactureerd (€)",
         "totaal_uren": "Totaal Uren",
-        "werkelijke_tarief_per_uur": "Tarief per Uur (€)"
+        "werkelijk_tarief_per_uur": "Werkelijk tarief per Uur (€)"
     })
     display_df["Totaal Gefactureerd (€)"] = display_df["Totaal Gefactureerd (€)"].apply(lambda x: f"€ {float(x):,.2f}")
-    display_df["Tarief per Uur (€)"] = display_df["Tarief per Uur (€)"].apply(lambda x: f"€ {float(x):,.2f}")
+    display_df["Werkelijk tarief per Uur (€)"] = display_df["Werkelijk tarief per Uur (€)"].apply(lambda x: f"€ {float(x):,.2f}")
     st.dataframe(display_df, use_container_width=True)
 
 # --- FACTUREN PER BEDRIJF ---
