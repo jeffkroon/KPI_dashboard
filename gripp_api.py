@@ -2,10 +2,10 @@ import sys
 import numpy as np
 import pandas as pd
 import os
-import time
+import time as pytime
 import requests
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time
 from dotenv import load_dotenv
 from typing import Callable
 from sqlalchemy import create_engine
@@ -276,6 +276,52 @@ def cached_fetch(name: str, fetch_fn: Callable[[], pd.DataFrame], force_refresh=
     df.to_parquet(cache_path, index=False)
     return df
 
+def post_with_rate_limit_handling(*args, **kwargs):
+    """
+    Doet een requests.post, checkt op rate limit headers en status 429, en pauzeert indien nodig tot tokens zijn hersteld.
+    """
+    while True:
+        response = requests.post(*args, **kwargs)
+        if response.status_code == 429:
+            # Altijd wachten bij 429, ook als headers ontbreken
+            reset_timestamp = response.headers.get("X-RateLimit-Reset")
+            if reset_timestamp:
+                reset_time = datetime.fromtimestamp(int(reset_timestamp))
+                now = datetime.now()
+                wait_seconds = (reset_time - now).total_seconds()
+                if wait_seconds > 0:
+                    print(f"⏸️ 429 Too Many Requests: wacht {int(wait_seconds)} seconden tot {reset_time.strftime('%H:%M:%S')}")
+                    pytime.sleep(wait_seconds + 1)
+                else:
+                    print("⏸️ 429 Too Many Requests: reset tijd verstreken, probeer opnieuw...")
+                    pytime.sleep(2)
+            else:
+                print("⏸️ 429 Too Many Requests: geen reset header, wacht 300 seconden (5 minuten) uit voorzorg...")
+                pytime.sleep(300)
+            continue  # Probeer opnieuw na wachten
+        # Normale rate limit check (voorzichtigheidshalve)
+        remaining = response.headers.get("X-RateLimit-Remaining")
+        reset_timestamp = response.headers.get("X-RateLimit-Reset")
+        if remaining is not None:
+            try:
+                remaining_int = int(remaining)
+            except Exception:
+                remaining_int = 1
+        else:
+            remaining_int = 1
+        if remaining_int == 0 and reset_timestamp is not None:
+            reset_time = datetime.fromtimestamp(int(reset_timestamp))
+            now = datetime.now()
+            wait_seconds = (reset_time - now).total_seconds()
+            if wait_seconds > 0:
+                print(f"⏸️ Rate limit bereikt, wacht {int(wait_seconds)} seconden tot {reset_time.strftime('%H:%M:%S')}...")
+                pytime.sleep(wait_seconds + 1)
+            else:
+                print("⏸️ Rate limit bereikt, maar reset tijd is verstreken. Probeer opnieuw...")
+                pytime.sleep(2)
+            continue  # Probeer opnieuw na wachten
+        return response
+
 def fetch_gripp_projects():
     def fetch():
         if MOCK_MODE:
@@ -294,8 +340,8 @@ def fetch_gripp_projects():
                     {"paging": {"firstresult": start, "maxresults": max_results}}
                 ]
             }]
-            time.sleep(0.1)
-            response = requests.post(BASE_URL, headers=HEADERS, json=payload)
+            pytime.sleep(0.1)
+            response = post_with_rate_limit_handling(BASE_URL, headers=HEADERS, json=payload)
             remaining = response.headers.get("X-RateLimit-Remaining")
             reset_timestamp = response.headers.get("X-RateLimit-Reset")
             if reset_timestamp:
@@ -332,8 +378,8 @@ def fetch_gripp_employees():
                     {"paging": {"firstresult": start, "maxresults": max_results}}
                 ]
             }]
-            time.sleep(0.1)
-            response = requests.post(BASE_URL, headers=HEADERS, json=payload)
+            pytime.sleep(0.1)
+            response = post_with_rate_limit_handling(BASE_URL, headers=HEADERS, json=payload)
             remaining = response.headers.get("X-RateLimit-Remaining")
             reset_timestamp = response.headers.get("X-RateLimit-Reset")
             if reset_timestamp:
@@ -370,8 +416,8 @@ def fetch_gripp_companies():
                     {"paging": {"firstresult": start, "maxresults": max_results}}
                 ]
             }]
-            time.sleep(0.1)
-            response = requests.post(BASE_URL, headers=HEADERS, json=payload)
+            pytime.sleep(0.1)
+            response = post_with_rate_limit_handling(BASE_URL, headers=HEADERS, json=payload)
             remaining = response.headers.get("X-RateLimit-Remaining")
             reset_timestamp = response.headers.get("X-RateLimit-Reset")
             if reset_timestamp:
@@ -406,8 +452,8 @@ def fetch_gripp_invoices():
                     {"paging": {"firstresult": start, "maxresults": max_results}}
                 ]
             }]
-            time.sleep(0.1)
-            response = requests.post(BASE_URL, headers=HEADERS, json=payload)
+            pytime.sleep(0.1)
+            response = post_with_rate_limit_handling(BASE_URL, headers=HEADERS, json=payload)
             remaining = response.headers.get("X-RateLimit-Remaining")
             if remaining is not None:
                 print(f"📉 Remaining requests: {remaining}")
@@ -438,8 +484,8 @@ def fetch_gripp_invoicelines():
                     {"paging": {"firstresult": start, "maxresults": max_results}}
                 ]
             }]
-            time.sleep(0.1)
-            response = requests.post(BASE_URL, headers=HEADERS, json=payload)
+            pytime.sleep(0.1)
+            response = post_with_rate_limit_handling(BASE_URL, headers=HEADERS, json=payload)
             remaining = response.headers.get("X-RateLimit-Remaining")
             if remaining is not None:
                 print(f"📉 Remaining requests: {remaining}")
@@ -458,12 +504,12 @@ def fetch_gripp_invoicelines():
 def fetch_gripp_hours_data():
     def fetch():
         if MOCK_MODE:
-            print("📦 MOCK: hours data geladen uit dummy bestand.")
+            print("📦 MOCK: hours geladen uit dummy bestand.")
             return pd.read_csv("mock_data/hours.csv")
         all_rows = []
         start = 0
         max_results = 100
-        watchdog = 50000
+        watchdog = 50
         while watchdog > 0:
             payload = [{
                 "id": 1,
@@ -473,8 +519,8 @@ def fetch_gripp_hours_data():
                     {"paging": {"firstresult": start, "maxresults": max_results}}
                 ]
             }]
-            time.sleep(0.1)
-            response = requests.post(BASE_URL, headers=HEADERS, json=payload)
+            pytime.sleep(0.1)
+            response = post_with_rate_limit_handling(BASE_URL, headers=HEADERS, json=payload)
             remaining = response.headers.get("X-RateLimit-Remaining")
             reset_timestamp = response.headers.get("X-RateLimit-Reset")
             if reset_timestamp:
@@ -511,8 +557,8 @@ def fetch_gripp_tasktypes():
                     {"paging": {"firstresult": start, "maxresults": max_results}}
                 ]
             }]
-            time.sleep(0.1)
-            response = requests.post(BASE_URL, headers=HEADERS, json=payload)
+            pytime.sleep(0.1)
+            response = post_with_rate_limit_handling(BASE_URL, headers=HEADERS, json=payload)
             remaining = response.headers.get("X-RateLimit-Remaining")
             reset_timestamp = response.headers.get("X-RateLimit-Reset")
             if reset_timestamp:
@@ -578,8 +624,8 @@ def fetch_gripp_projectlines():
                     {"paging": {"firstresult": start, "maxresults": max_results}}
                 ]
             }]
-            time.sleep(0.1)
-            response = requests.post(BASE_URL, headers=HEADERS, json=payload)
+            pytime.sleep(0.1)
+            response = post_with_rate_limit_handling(BASE_URL, headers=HEADERS, json=payload)
             remaining = response.headers.get("X-RateLimit-Remaining")
             if remaining is not None:
                 print(f"📉 Remaining requests: {remaining}")
@@ -638,6 +684,10 @@ def safe_to_sql(df: pd.DataFrame, table_name: str):
 
 def _process_batch(df: pd.DataFrame, table_name: str, temp_engine):
     """Helper functie om een batch data te verwerken."""
+    # Forceer alle *_date kolommen naar datetime.date vóór export (geen string conversie)
+    for col in df.columns:
+        if col.endswith('_date') or col.endswith('on_date'):
+            df[col] = pd.to_datetime(df[col], errors='coerce').dt.date
     with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.csv') as tmp:
         try:
             # ✅ Haal kolommen op uit staging table
@@ -694,8 +744,8 @@ def _process_batch(df: pd.DataFrame, table_name: str, temp_engine):
                 except:
                     pass
 
-                if has_unique_constraint:
-                    # Gebruik ON CONFLICT als er een unieke constraint is
+                if has_unique_constraint or table_name in ["invoices", "urenregistratie"]:
+                    # Gebruik ON CONFLICT als er een unieke constraint is of voor expliciet genoemde tabellen
                     columns = [col for col in filtered_df.columns if col != "id"]
                     set_clause = ", ".join([f"{col} = EXCLUDED.{col}" for col in columns])
                     insert_cols = ", ".join(filtered_df.columns)
@@ -765,6 +815,13 @@ ON CONFLICT DO NOTHING;
             if os.path.exists(tmp.name):
                 os.unlink(tmp.name)
 
+def convert_date_columns(df):
+    for col in df.columns:
+        if col.endswith('_date') or col.endswith('on_date'):
+            df[col] = pd.to_datetime(df[col], errors='coerce')
+            # Zet altijd om naar date (alleen de datum-component)
+            df[col] = df[col].dt.date
+    return df
 
 def main():
     # Test PostgreSQL-verbinding
@@ -847,8 +904,9 @@ def main():
     # Gebruik direct de verrijkte projectlines uit de fetch
     combined_projectlines = datasets["gripp_projectlines"]
 
-    # Upload alle datasets naar de database met veilige to_sql (nu altijd bulk COPY)
+    # Converteer date kolommen vóór database-write
     if combined_projectlines is not None:
+        combined_projectlines = convert_date_columns(combined_projectlines)
         print(f"🔢 [DEBUG] Aantal projectlines die naar de database gaan: {len(combined_projectlines.drop_duplicates(subset='id'))}")
         safe_to_sql(combined_projectlines.drop_duplicates(subset="id"), "projectlines_per_company")
     if datasets.get("gripp_projects") is not None:
@@ -861,7 +919,8 @@ def main():
     if datasets.get("gripp_tasktypes") is not None:
         safe_to_sql(datasets["gripp_tasktypes"].drop_duplicates(subset="id"), "tasktypes")
     if datasets.get("gripp_hours_data") is not None:
-        safe_to_sql(datasets["gripp_hours_data"].drop_duplicates(subset="id"), "urenregistratie")
+        hours_data = convert_date_columns(datasets["gripp_hours_data"].drop_duplicates(subset="id"))
+        safe_to_sql(hours_data, "urenregistratie")
     
     if datasets.get("gripp_invoices") is not None:
         invoices_df = datasets["gripp_invoices"].drop_duplicates(subset="id").copy()
