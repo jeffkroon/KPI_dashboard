@@ -21,7 +21,7 @@ st.title("Dunion KPI Dashboard – Overzicht")
 st.markdown("""
 <style>
 h1 {
-    font-size: 2.5em !important;
+    font-size: 4em !important;
     font-weight: 800 !important;
     margin-bottom: 0.5em !important;
 }
