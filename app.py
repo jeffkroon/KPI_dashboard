@@ -94,7 +94,7 @@ bedrijfsstats["werkelijk_tarief_per_uur"] = bedrijfsstats["totalpayed"].div(bedr
 st.markdown("""
 <style>
    .element-container .stMetric label, .element-container .stMetric div {
-       font-size: 1em !important;
+       font-size: 1.5em !important;
    }
    .element-container .stMetric span {
        font-size: 1.5em !important;
@@ -148,7 +148,7 @@ fig = px.bar(
     chart_data,
     x="companyname",
     y="werkelijk_tarief_per_uur",
-    labels={"companyname": "Bedrijf", "werkelijk_tarief_per_uur": "Werkelijk tarief per uur (€)"},
+    labels={"companyname": "Bedrijf", "werkelijk_tarief_per_uur": "Werkelijk tarief per uur"},
     title="Werkelijk tarief per uur per bedrijf",
     height=400
 )
