@@ -28,6 +28,7 @@ def load_data(table_name, project_ids=None, start_date=None, end_date=None):
             FROM {table_name}
             WHERE offerprojectbase_id IN ({placeholders})
               AND date_date BETWEEN %s AND %s
+              AND status_searchname = 'Gefiatteerd'
         """
         params = tuple(project_ids + [start_date, end_date])
         return pd.read_sql(query, con=engine, params=params)
