@@ -383,21 +383,28 @@ def maak_kpi_overzicht(df_projects, df_companies, df_invoices, df_projectlines):
     return overzicht
 
 def process_user_input(user_input, analyse_df=None):
-    # Geef de agent expliciet de opdracht om SQL te gebruiken voor data-analyses
+    # Voeg de laatste 5 berichten uit de chatgeschiedenis toe als context
+    MAX_HISTORY = 5
+    recent_history = st.session_state.chat_history[-MAX_HISTORY:] if 'chat_history' in st.session_state else []
+    context = "\n".join([f"{msg['agent']}: {msg['content']}" for msg in recent_history])
     instructie = (
         "Beantwoord de volgende vraag door, indien relevant, een SQL-query uit te voeren op de volledige database. "
         "Gebruik je SQL-tool voor alle data-analyses, zodat je altijd met alle data werkt. "
         "Geef het resultaat helder en gestructureerd terug.\n\n"
         "Licht in je antwoord ook altijd kort toe welke datasets/dataframes je hebt gebruikt en welke stappen je hebt genomen om tot het resultaat te komen.\n\n"
     )
+    prompt = f"{context}\n\n{instructie}{user_input}"
     dynamic_task = Task(
-        description=f"{instructie}{user_input}",
+        description=prompt,
         expected_output="Een helder, gestructureerd antwoord van het team, met indien nodig een rapport, analyse, visualisatie of actie.",
         agent=analist_agent
     )
     with st.spinner("Het team is aan het werk..."):
         chat_crew.tasks = [dynamic_task]
-        result = chat_crew.kickoff()
+        try:
+            result = chat_crew.kickoff()
+        except Exception as e:
+            result = f"Er trad een fout op bij het verwerken van je vraag: {e}"
     return result
 
 # --- CHATGESCHIEDENIS ---
