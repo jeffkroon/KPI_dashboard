@@ -390,13 +390,25 @@ def process_user_input(user_input, analyse_df=None):
     MAX_HISTORY = 5
     recent_history = st.session_state.chat_history[-MAX_HISTORY:] if 'chat_history' in st.session_state else []
     context = "\n".join([f"{msg['agent']}: {msg['content']}" for msg in recent_history])
+
+    # Log kolomnamen en shape van de belangrijkste dataframes
+    print(f"df_projects columns: {list(df_projects.columns)} shape: {df_projects.shape}")
+    print(f"df_projectlines columns: {list(df_projectlines.columns)} shape: {df_projectlines.shape}")
+    print(f"df_invoices columns: {list(df_invoices.columns)} shape: {df_invoices.shape}")
+
+    kolommen_info = (
+        f"Beschikbare kolommen in df_projects: {list(df_projects.columns)}\n"
+        f"Beschikbare kolommen in df_projectlines: {list(df_projectlines.columns)}\n"
+        f"Beschikbare kolommen in df_invoices: {list(df_invoices.columns)}\n"
+    )
+
     instructie = (
         "Beantwoord de volgende vraag door, indien relevant, een SQL-query uit te voeren op de volledige database. "
         "Gebruik je SQL-tool voor alle data-analyses, zodat je altijd met alle data werkt. "
         "Geef het resultaat helder en gestructureerd terug.\n\n"
         "Licht in je antwoord ook altijd kort toe welke datasets/dataframes je hebt gebruikt en welke stappen je hebt genomen om tot het resultaat te komen.\n\n"
     )
-    prompt = f"{context}\n\n{instructie}{user_input}"
+    prompt = f"{kolommen_info}\n{context}\n\n{instructie}{user_input}"
     dynamic_task = Task(
         description=prompt,
         expected_output="Een helder, gestructureerd antwoord van het team, met indien nodig een rapport, analyse, visualisatie of actie.",
