@@ -205,10 +205,17 @@ with st.sidebar.expander("📁 Data upload (optioneel)", expanded=True):
 # --- DATA UIT DATABASE LADEN ---
 try:
     df_projects = load_data("projects")
+    # Verwijder ongewenste kolommen
+    for col in ["totalinclvat", "totalexclvat"]:
+        if col in df_projects.columns:
+            df_projects = df_projects.drop(columns=[col])
     df_companies = load_data("companies")
     df_employees = load_data("employees")
     df_invoices = load_data("invoices")
     df_projectlines = load_data("projectlines_per_company")
+    for col in ["amount", "sellingprice"]:
+        if col in df_projectlines.columns:
+            df_projectlines = df_projectlines.drop(columns=[col])
     # Geef de dataframes door aan de PythonExecutionTool van de analist_agent
     from agents.analist_agent import python_tool
     import agents.analist_agent as analist_mod
