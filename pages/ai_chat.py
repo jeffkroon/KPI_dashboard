@@ -2,6 +2,10 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 import re
+import sys
+import sys
+import pysqlite3
+sys.modules["sqlite3"] = pysqlite3
 from crewai import Task, Crew, Process
 from agents.analist_agent import analist_agent
 from agents.consultant_agent import consultant_agent, forecaster_agent
