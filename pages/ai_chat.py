@@ -7,7 +7,7 @@ from agents.analist_agent import analist_agent
 from agents.consultant_agent import consultant_agent, forecaster_agent
 from agents.rapporteur_agent import rapporteur_agent
 from agents.redacteur_agent import redacteur_agent
-from agents.verstuurder_agent import verstuurder_agent, email_tool
+from agents.verstuurder_agent import verstuurder_agent
 import time
 import uuid
 import io
@@ -17,6 +17,11 @@ import threading
 from sqlalchemy import create_engine
 import os
 from dotenv import load_dotenv
+import base64
+import matplotlib.pyplot as plt
+import openai
+import json
+import yaml
 
 # --- DATABASE SETUP EN DATA LAADFUNCTIE ---
 load_dotenv()
@@ -222,21 +227,132 @@ chat_crew = Crew(
     verbose=False,
 )
 
-# --- KPI OVERZICHT FUNCTIE ---
-def maak_kpi_overzicht(df_projects, df_companies, df_invoices, df_projectlines):
+# --- VISUALISATIE FUNCTIE ---
+def generate_visualization_base64():
+    fig, ax = plt.subplots()
+    ax.plot([1, 2, 3], [4, 5, 6], label="Voorbeeldlijn")
+    ax.set_title("Voorbeeld visualisatie")
+    ax.set_xlabel("X-as")
+    ax.set_ylabel("Y-as")
+    ax.legend()
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png')
+    buf.seek(0)
+    img_bytes = buf.read()
+    img_b64 = base64.b64encode(img_bytes).decode('utf-8')
+    plt.close(fig)
+    return img_b64
+
+# --- RAPPORT GENERATIE EN VERSTUREN ---
+def genereer_en_verstuur_rapport(user_prompt, to_email, analyse_df, df_projects, df_companies, df_invoices, df_projectlines, download_pdf):
+    # 1. Maak de taken aan
+    analyse_task = Task(
+        description=f"Analyseer de volgende vraag en data: {user_prompt}\nDATA: {analyse_df.head(20).to_dict()}",
+        expected_output="Een diepgaande analyse van de data, met inzichten en opvallende punten.",
+        agent=analist_agent
+    )
+    advies_task = Task(
+        description=f"Geef een concreet advies op basis van deze analyse.",
+        expected_output="Een kort, krachtig advies voor het management.",
+        agent=consultant_agent
+    )
+    rapport_task = Task(
+        description=f"Vat de analyse en het advies samen in zakelijke managementtaal.",
+        expected_output="Een zakelijke, heldere samenvatting voor het rapport.",
+        agent=rapporteur_agent
+    )
+    redactie_task = Task(
+        description=f"Maak de samenvatting professioneel, helder en in de juiste tone-of-voice.",
+        expected_output="Een professioneel geredigeerde tekst.",
+        agent=redacteur_agent
+    )
+    # 2. Crew voor rapportage
+    rapport_crew = Crew(
+        agents=[analist_agent, consultant_agent, rapporteur_agent, redacteur_agent],
+        tasks=[analyse_task, advies_task, rapport_task, redactie_task],
+        process=Process.sequential,
+        verbose=False,
+    )
+    results = rapport_crew.kickoff()
+    analyse_result = results[0] if isinstance(results, list) and len(results) > 0 else "-"
+    advies_result = results[1] if isinstance(results, list) and len(results) > 1 else "-"
+    rapport_result = results[2] if isinstance(results, list) and len(results) > 2 else "-"
+    redactie_result = results[3] if isinstance(results, list) and len(results) > 3 else "-"
+    # 3. Visualisatie (optioneel)
+    img_b64 = generate_visualization_base64()
+    visualisatie_html = '<img src="cid:visualisatie1" style="max-width:500px; margin:20px 0;">'
+    attachments = [{
+        "filename": "visualisatie.png",
+        "data": img_b64,
+        "type": "image/png",
+        "cid": "visualisatie1"
+    }]
+    # 4. KPI-tabel
     n_bedrijven = len(df_companies) if not df_companies.empty else 0
     n_projecten = len(df_projects) if not df_projects.empty else 0
-    totaal_omzet = df_invoices["totalpayed"].sum() if (not df_invoices.empty and "totalpayed" in df_invoices) else 0
-    totaal_uren = df_projectlines["amountwritten"].sum() if (not df_projectlines.empty and "amountwritten" in df_projectlines) else 0
-    # Hoogste omzet bedrijf
+    totaal_omzet = float(pd.to_numeric(df_invoices["totalpayed"], errors="coerce").sum()) if (not df_invoices.empty and "totalpayed" in df_invoices) else 0.0  # type: ignore
+    totaal_uren = float(pd.to_numeric(df_projectlines["amountwritten"], errors="coerce").sum()) if (not df_projectlines.empty and "amountwritten" in df_projectlines) else 0.0  # type: ignore
     hoogste_bedrijf_naam = "-"
     hoogste_omzet = 0
     if not df_invoices.empty and "company_id" in df_invoices and "totalpayed" in df_invoices and not df_companies.empty and "id" in df_companies and "companyname" in df_companies:
+        df_invoices["totalpayed"] = pd.to_numeric(df_invoices["totalpayed"], errors="coerce")
         omzet_per_bedrijf = df_invoices.groupby("company_id")["totalpayed"].sum()
         if not omzet_per_bedrijf.empty:
             hoogste_bedrijf_id = omzet_per_bedrijf.idxmax()
             hoogste_bedrijf_naam = df_companies.loc[df_companies["id"] == hoogste_bedrijf_id, "companyname"].values[0] if hoogste_bedrijf_id in df_companies["id"].values else "-"
-            hoogste_omzet = omzet_per_bedrijf.max()
+            hoogste_omzet = float(omzet_per_bedrijf.max())
+    kpi_html = f"""
+    <table style="border-collapse:collapse; margin:20px 0;">
+      <tr><th style="text-align:left;">KPI</th><th>Waarde</th></tr>
+      <tr><td>Aantal bedrijven</td><td>{n_bedrijven}</td></tr>
+      <tr><td>Aantal projecten</td><td>{n_projecten}</td></tr>
+      <tr><td>Totaal gefactureerd</td><td>€{totaal_omzet:,.2f}</td></tr>
+      <tr><td>Totaal geschreven uren</td><td>{totaal_uren:,.1f}</td></tr>
+      <tr><td>Hoogste omzet bedrijf</td><td>{hoogste_bedrijf_naam} (€{hoogste_omzet:,.2f})</td></tr>
+    </table>
+    """
+    # 5. Combineer alles tot een rijk HTML-rapport
+    rapport_html = f"""
+    <html>
+    <body style="font-family:Inter,Arial,sans-serif; color:#222;">
+      <h1 style="color:#0a84ff;">AI Management Rapport</h1>
+      <h2>Samenvatting</h2>
+      <div style="margin-bottom:20px;">{redactie_result}</div>
+      <h2>KPI Overzicht</h2>
+      {kpi_html}
+      <h2>Visualisatie</h2>
+      {visualisatie_html}
+      <h2>Volledige Analyse</h2>
+      <div style="background:#f7f9fa; border-radius:8px; padding:16px;">{analyse_result}</div>
+      <h2>Advies</h2>
+      <div style="background:#f7f9fa; border-radius:8px; padding:16px;">{advies_result}</div>
+    </body>
+    </html>
+    """
+    subject = "AI Management Rapport"
+    verstuurder_agent.tools[0]._run(
+        subject=subject,
+        body=rapport_html,
+        to=to_email,
+        attachments=attachments
+    )
+
+# --- KPI OVERZICHT FUNCTIE ---
+def maak_kpi_overzicht(df_projects, df_companies, df_invoices, df_projectlines):
+    n_bedrijven = len(df_companies) if not df_companies.empty else 0
+    n_projecten = len(df_projects) if not df_projects.empty else 0
+    totaal_omzet = float(pd.to_numeric(df_invoices["totalpayed"], errors="coerce").sum()) if (not df_invoices.empty and "totalpayed" in df_invoices) else 0.0  # type: ignore
+    totaal_uren = float(pd.to_numeric(df_projectlines["amountwritten"], errors="coerce").sum()) if (not df_projectlines.empty and "amountwritten" in df_projectlines) else 0.0  # type: ignore
+    # Hoogste omzet bedrijf
+    hoogste_bedrijf_naam = "-"
+    hoogste_omzet = 0
+    if not df_invoices.empty and "company_id" in df_invoices and "totalpayed" in df_invoices and not df_companies.empty and "id" in df_companies and "companyname" in df_companies:
+        df_invoices["totalpayed"] = pd.to_numeric(df_invoices["totalpayed"], errors="coerce")
+        omzet_per_bedrijf = df_invoices.groupby("company_id")["totalpayed"].sum()
+        if not omzet_per_bedrijf.empty:
+            hoogste_bedrijf_id = omzet_per_bedrijf.idxmax()
+            hoogste_bedrijf_naam = df_companies.loc[df_companies["id"] == hoogste_bedrijf_id, "companyname"].values[0] if hoogste_bedrijf_id in df_companies["id"].values else "-"
+            hoogste_omzet = float(omzet_per_bedrijf.max())
     overzicht = f"""
 **KPI Overzicht**
 - Aantal bedrijven: {n_bedrijven}
@@ -307,19 +423,164 @@ with st.expander("💡 Voorbeeldvragen (klik om te gebruiken)"):
                 "content": result
             })
 
+# --- ALIAS MAPPING UIT YAML ---
+def load_alias_mapping():
+    try:
+        with open("alias_mapping.yaml", "r") as f:
+            return yaml.safe_load(f) or {}
+    except Exception:
+        return {}
+
+def save_alias_mapping(mapping):
+    with open("alias_mapping.yaml", "w") as f:
+        yaml.safe_dump(mapping, f)
+
+EMAIL_ALIASES = load_alias_mapping()
+
+# --- SIDEBAR UI VOOR ALIAS MANAGEMENT ---
+with st.sidebar.expander("🔗 E-mail aliassen beheren", expanded=False):
+    st.markdown("**Alias → E-mailadres**")
+    for alias, email in EMAIL_ALIASES.items():
+        col1, col2, col3 = st.columns([3,5,1])
+        with col1:
+            new_alias = st.text_input(f"Alias_{alias}", value=alias, key=f"alias_{alias}")
+        with col2:
+            new_email = st.text_input(f"Email_{alias}", value=email, key=f"email_{alias}")
+        with col3:
+            if st.button("❌", key=f"del_{alias}"):
+                EMAIL_ALIASES.pop(alias)
+                save_alias_mapping(EMAIL_ALIASES)
+                st.experimental_rerun()  # type: ignore[attr-defined]
+        if new_alias != alias or new_email != email:
+            EMAIL_ALIASES.pop(alias)
+            EMAIL_ALIASES[new_alias] = new_email
+            save_alias_mapping(EMAIL_ALIASES)
+            st.experimental_rerun()  # type: ignore[attr-defined]
+    st.markdown("---")
+    new_alias = st.text_input("Nieuwe alias", key="new_alias")
+    new_email = st.text_input("Nieuw e-mailadres", key="new_email")
+    if st.button("Alias toevoegen"):
+        if new_alias and new_email:
+            EMAIL_ALIASES[new_alias] = new_email
+            save_alias_mapping(EMAIL_ALIASES)
+            st.experimental_rerun()  # type: ignore[attr-defined]
+
+# --- EMAIL MASKING ---
+def mask_email(email):
+    if not email or "@" not in email:
+        return email
+    name, domain = email.split("@", 1)
+    if len(name) <= 1:
+        masked = "*" + "@" + domain
+    else:
+        masked = name[0] + "***@" + domain
+    return masked
+
+# --- VERBETERDE SYSTEM PROMPT EN PARSER ---
+client = openai.OpenAI()  # gebruikt automatisch je OPENAI_API_KEY env var
+
+def parse_user_command(user_input):
+    system_prompt = (
+        "Je bent een command parser voor een AI-dashboard. "
+        "Geef ALTIJD een geldige JSON terug met de volgende structuur. "
+        "Herken de intentie van de gebruiker: mailen, downloaden als PDF, tonen in dashboard, bookmarken. "
+        "Voorbeelden:\n"
+        "Input: 'Mail een KPI-rapport naar jeff@dunion.nl'\n"
+        '{"rapport_type": "KPI", "mailen": true, "email": "jeff@dunion.nl", "download_pdf": false, "toon_dashboard": false, "bookmark": false, "opdracht": "Mail een KPI-rapport"}\n'
+        "Input: 'Download een analyse van project X als PDF'\n"
+        '{"rapport_type": "analyse", "mailen": false, "email": null, "download_pdf": true, "toon_dashboard": false, "bookmark": false, "opdracht": "Download een analyse van project X"}\n'
+        "Input: 'Bookmark dit rapport'\n"
+        '{"rapport_type": null, "mailen": false, "email": null, "download_pdf": false, "toon_dashboard": false, "bookmark": true, "opdracht": "Bookmark dit rapport"}\n'
+        "Input: 'Toon het KPI-overzicht in het dashboard'\n"
+        '{"rapport_type": "KPI", "mailen": false, "email": null, "download_pdf": false, "toon_dashboard": true, "bookmark": false, "opdracht": "Toon het KPI-overzicht"}\n'
+        f"Input: {user_input}\n"
+        "Let op: Zet onbekende velden op null of false."
+    )
+    try:
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "system", "content": system_prompt}]
+        )
+        content = response.choices[0].message.content
+        if content is not None:
+            content = content.replace("'", '"')
+            result = json.loads(content)
+        else:
+            st.error("LLM gaf geen antwoord terug.")
+            result = {"rapport_type": None, "mailen": False, "email": None, "download_pdf": False, "toon_dashboard": False, "bookmark": False, "opdracht": user_input}
+    except Exception as e:
+        st.error(f"Kon de opdracht niet goed begrijpen. Probeer het anders te formuleren. ({e})")
+        result = {"rapport_type": None, "mailen": False, "email": None, "download_pdf": False, "toon_dashboard": False, "bookmark": False, "opdracht": user_input}
+    # Alias-mapping
+    if result.get("email") and result["email"] in EMAIL_ALIASES:
+        result["email"] = EMAIL_ALIASES[result["email"]]
+    return result
+
 # --- VERWERK GEBRUIKERSCHAT ---
 if user_input:
-    st.session_state.chat_history.append({
-        "role": "user",
-        "agent": "Gebruiker",
-        "content": user_input
-    })
-    result = process_user_input(user_input, analyse_df)
-    st.session_state.chat_history.append({
-        "role": "assistant",
-        "agent": "AI Team",
-        "content": result
-    })
+    parsed = parse_user_command(user_input)
+    to_email = parsed.get("email")
+    mailen = parsed.get("mailen", False)
+    opdracht = parsed.get("opdracht", user_input)
+    download_pdf = parsed.get("download_pdf", False)
+    toon_dashboard = parsed.get("toon_dashboard", False)
+    bookmark = parsed.get("bookmark", False)
+    if mailen and to_email:
+        st.session_state.chat_history.append({
+            "role": "user",
+            "agent": "Gebruiker",
+            "content": user_input
+        })
+        st.info(f"AI-rapport wordt verstuurd naar {mask_email(to_email)} ...")
+        genereer_en_verstuur_rapport(
+            user_prompt=opdracht,
+            to_email=to_email,
+            analyse_df=analyse_df,
+            df_projects=df_projects,
+            df_companies=df_companies,
+            df_invoices=df_invoices,
+            df_projectlines=df_projectlines,
+            download_pdf=download_pdf
+        )
+        st.success(f"Het rapport is verstuurd naar {mask_email(to_email)}.")
+        st.session_state.chat_history.append({
+            "role": "assistant",
+            "agent": "AI Team",
+            "content": f"Het rapport is verstuurd naar {mask_email(to_email)}."
+        })
+    elif mailen and not to_email:
+        st.session_state.chat_history.append({
+            "role": "user",
+            "agent": "Gebruiker",
+            "content": user_input
+        })
+        st.warning("Naar welk e-mailadres moet het rapport worden gestuurd?")
+        st.session_state.chat_history.append({
+            "role": "assistant",
+            "agent": "AI Team",
+            "content": "Naar welk e-mailadres moet het rapport worden gestuurd?"
+        })
+    elif download_pdf:
+        st.success("Download als PDF wordt binnenkort ondersteund!")
+        # Hier kun je de PDF-download logica toevoegen
+    elif toon_dashboard:
+        st.success("Rapport wordt in het dashboard getoond!")
+        # Hier kun je logica toevoegen om het rapport in het dashboard te tonen
+    elif bookmark:
+        st.session_state.bookmarks.append({"agent": "AI Team", "content": opdracht})
+        st.success("Rapport is gebookmarkt!")
+    else:
+        st.session_state.chat_history.append({
+            "role": "user",
+            "agent": "Gebruiker",
+            "content": user_input
+        })
+        result = process_user_input(opdracht, analyse_df)
+        st.session_state.chat_history.append({
+            "role": "assistant",
+            "agent": "AI Team",
+            "content": result
+        })
 
 # --- TOON CHATGESCHIEDENIS ---
 for msg in st.session_state.chat_history:
@@ -329,7 +590,7 @@ for msg in st.session_state.chat_history:
 # --- RAPPORTAGE DOWNLOAD ---
 if st.session_state.get("last_report"):
     excel_buffer = io.BytesIO()
-    with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
+    with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:  # type: ignore
         pd.DataFrame({"rapport": [st.session_state.last_report]}).to_excel(writer, index=False)
     excel_buffer.seek(0)
     st.download_button(
@@ -391,4 +652,4 @@ with st.expander('⚡ Automatische rapportage instellen'):
             st.error('Vul een geldig e-mailadres in.')
         else:
             start_scheduler(selected_frequency, report_time.strftime('%H:%M'), to_email)
-            st.success(f'Automatische rapportage geactiveerd voor {selected_frequency} om {report_time.strftime("%H:%M")}, naar {to_email}.') 
+            st.success(f'Automatische rapportage geactiveerd voor {selected_frequency} om {report_time.strftime("%H:%M")}, naar {to_email}.')

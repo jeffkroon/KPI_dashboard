@@ -43,7 +43,18 @@ class PandasAnalysisTool(BaseTool):
             else:
                 analysis_type = "summary"
         try:
-            df = pd.DataFrame(data)
+            if all(not isinstance(v, (list, dict, tuple, set)) for v in data.values()):
+                # Alle waarden zijn scalars: maak een DataFrame met één rij
+                df = pd.DataFrame([data])
+            else:
+                df = pd.DataFrame(data)
+            # Kolom-check: filter features/target op bestaande kolommen
+            if features:
+                features = [f for f in features if f in df.columns]
+                if not features:
+                    return "Geen van de gevraagde features bestaat in de data."
+            if target and target not in df.columns:
+                return f"Target '{target}' bestaat niet in de data."
             if analysis_type == "summary":
                 return df.describe().to_dict()
             elif analysis_type == "trend":
