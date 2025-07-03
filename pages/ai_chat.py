@@ -205,6 +205,14 @@ try:
     df_employees = load_data("employees")
     df_invoices = load_data("invoices")
     df_projectlines = load_data("projectlines_per_company")
+    # Geef de dataframes door aan de PythonExecutionTool van de analist_agent
+    from agents.analist_agent import python_tool
+    import agents.analist_agent as analist_mod
+    analist_mod.df_projects = df_projects
+    analist_mod.df_companies = df_companies
+    analist_mod.df_employees = df_employees
+    analist_mod.df_invoices = df_invoices
+    analist_mod.df_projectlines = df_projectlines
 except Exception as e:
     st.error(f"Kon database-data niet laden: {e}")
     df_projects = df_companies = df_employees = df_invoices = df_projectlines = pd.DataFrame()
@@ -247,7 +255,7 @@ def generate_visualization_base64():
 def genereer_en_verstuur_rapport(user_prompt, to_email, analyse_df, df_projects, df_companies, df_invoices, df_projectlines, download_pdf):
     # 1. Maak de taken aan
     analyse_task = Task(
-        description=f"Analyseer de volgende vraag en data: {user_prompt}\nDATA: {analyse_df.head(20).to_dict()}",
+        description=f"Analyseer de volgende vraag. Gebruik de volledige dataframes en tools voor je analyse: {user_prompt}",
         expected_output="Een diepgaande analyse van de data, met inzichten en opvallende punten.",
         agent=analist_agent
     )
@@ -364,13 +372,15 @@ def maak_kpi_overzicht(df_projects, df_companies, df_invoices, df_projectlines):
     return overzicht
 
 def process_user_input(user_input, analyse_df=None):
-    if user_input.strip().lower() in ["toon het kpi-overzicht.", "kpi overzicht", "kpi-overzicht", "toon kpi overzicht", "toon het kpi overzicht"]:
-        return maak_kpi_overzicht(df_projects, df_companies, df_invoices, df_projectlines)
-    context = ""
-    if analyse_df is not None and not analyse_df.empty:
-        context += f"DATA_AS_DICT: {analyse_df.head(20).to_dict()}\n"
+    # Geef de agent expliciet de opdracht om SQL te gebruiken voor data-analyses
+    instructie = (
+        "Beantwoord de volgende vraag door, indien relevant, een SQL-query uit te voeren op de volledige database. "
+        "Gebruik je SQL-tool voor alle data-analyses, zodat je altijd met alle data werkt. "
+        "Geef het resultaat helder en gestructureerd terug.\n\n"
+        "Licht in je antwoord ook altijd kort toe welke datasets/dataframes je hebt gebruikt en welke stappen je hebt genomen om tot het resultaat te komen.\n\n"
+    )
     dynamic_task = Task(
-        description=f"{user_input}\n\n{context}",
+        description=f"{instructie}{user_input}",
         expected_output="Een helder, gestructureerd antwoord van het team, met indien nodig een rapport, analyse, visualisatie of actie.",
         agent=analist_agent
     )
