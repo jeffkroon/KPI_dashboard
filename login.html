@@ -1,26 +1,45 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Login met Google (Supabase)</title>
+  <title>Login met Google of e-mail (Supabase)</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
 </head>
 <body>
-  <h2>Login met Google</h2>
-  <button id="login-btn">Log in met Google</button>
+  <h2>Login</h2>
+  <button id="login-google">Log in met Google</button>
+  <hr style="margin: 2em 0; width: 200px;">
+  <div>
+    <input type="email" id="email" placeholder="Vul je e-mailadres in" />
+    <button id="login-email">Stuur magic link</button>
+    <div id="status"></div>
+  </div>
   <script>
-    // Zet je Supabase keys direct in de JS (alleen anon public key!)
-    const SUPABASE_URL = "https://suyflmfqkqgmelvcmoya.supabase.co"; // <-- Vervang door jouw Supabase URL
-    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN1eWZsbWZxa3FnbWVsdmNtb3lhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg5Mzk3ODEsImV4cCI6MjA2NDUxNTc4MX0.NR50KSHOZbKF5V9JeGftzSqlGUccQ7k_XgasJsByAB4"; // <-- Vervang door jouw anon public key
+    const SUPABASE_URL = "https://suyflmfqkqgmelvcmoya.supabase.co";
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN1eWZsbWZxa3FnbWVsdmNtb3lhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg5Mzk3ODEsImV4cCI6MjA2NDUxNTc4MX0.NR50KSHOZbKF5V9JeGftzSqlGUccQ7k_XgasJsByAB4";
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    document.getElementById('login-btn').onclick = async function() {
-      const { data, error } = await supabaseClient.auth.signInWithOAuth({
+    document.getElementById('login-google').onclick = async function() {
+      await supabaseClient.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo: window.location.origin + '/oauth-redirect.html'
         }
       });
-      // Je wordt automatisch doorgestuurd door Supabase
+    };
+
+    document.getElementById('login-email').onclick = async function() {
+      const email = document.getElementById('email').value;
+      const { error } = await supabaseClient.auth.signInWithOtp({
+        email: email,
+        options: {
+          emailRedirectTo: window.location.origin + '/oauth-redirect.html'
+        }
+      });
+      if (error) {
+        document.getElementById('status').innerText = 'Fout: ' + error.message;
+      } else {
+        document.getElementById('status').innerText = 'Check je e-mail voor de login-link!';
+      }
     };
   </script>
 </body>
