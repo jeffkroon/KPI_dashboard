@@ -445,7 +445,29 @@ if "feedback" not in st.session_state:
     st.session_state.feedback = []
 
 # --- CHATINTERFACE ---
-user_input = st.chat_input("Stel je vraag aan het AI-team...")
+user_input = st.chat_input("Stel je vraag aan de Chatbot...")
+
+# --- ANALYSE KNOP EN INPUT ---
+with st.sidebar.expander("📊 Analyse/rapport maken", expanded=False):
+    if 'show_analyse_input' not in st.session_state:
+        st.session_state.show_analyse_input = False
+    if st.button("Maak een analyse of rapport", key="analyse_btn"):
+        st.session_state.show_analyse_input = True
+    if st.session_state.show_analyse_input:
+        analyse_input = st.text_area("Wat wil je dat het AI Team analyseert?", key="analyse_input")
+        if st.button("Start analyse", key="analyse_start") and analyse_input:
+            st.session_state.chat_history.append({
+                "role": "user",
+                "agent": "Gebruiker",
+                "content": f"[Analyse aanvraag] {analyse_input}"
+            })
+            result = process_user_input(analyse_input, analyse_df)
+            st.session_state.chat_history.append({
+                "role": "assistant",
+                "agent": "AI Team",
+                "content": result
+            })
+            st.session_state.show_analyse_input = False
 
 # --- VOORBEELDVRAAG-BUTTONS ---
 voorbeeldvragen = [
@@ -529,20 +551,23 @@ client = openai.OpenAI()  # gebruikt automatisch je OPENAI_API_KEY env var
 
 def parse_user_command(user_input):
     system_prompt = (
-        "Je bent een command parser voor een AI-dashboard. "
-        "Geef ALTIJD een geldige JSON terug met de volgende structuur. "
-        "Herken de intentie van de gebruiker: mailen, downloaden als PDF, tonen in dashboard, bookmarken. "
-        "Voorbeelden:\n"
-        "Input: 'Mail een KPI-rapport naar jeff@dunion.nl'\n"
-        '{"rapport_type": "KPI", "mailen": true, "email": "jeff@dunion.nl", "download_pdf": false, "toon_dashboard": false, "bookmark": false, "opdracht": "Mail een KPI-rapport"}\n'
-        "Input: 'Download een analyse van project X als PDF'\n"
-        '{"rapport_type": "analyse", "mailen": false, "email": null, "download_pdf": true, "toon_dashboard": false, "bookmark": false, "opdracht": "Download een analyse van project X"}\n'
-        "Input: 'Bookmark dit rapport'\n"
-        '{"rapport_type": null, "mailen": false, "email": null, "download_pdf": false, "toon_dashboard": false, "bookmark": true, "opdracht": "Bookmark dit rapport"}\n'
-        "Input: 'Toon het KPI-overzicht in het dashboard'\n"
-        '{"rapport_type": "KPI", "mailen": false, "email": null, "download_pdf": false, "toon_dashboard": true, "bookmark": false, "opdracht": "Toon het KPI-overzicht"}\n'
-        f"Input: {user_input}\n"
-        "Let op: Zet onbekende velden op null of false."
+        f"""
+Je bent een command parser voor een AI-dashboard. 
+Geef ALTIJD een geldige JSON terug met de volgende structuur. 
+Herken de intentie van de gebruiker: mailen, downloaden als PDF, tonen in dashboard, bookmarken. 
+Voorbeelden:
+
+Input: 'Mail een KPI-rapport naar jeff@dunion.nl'
+{{"rapport_type": "KPI", "mailen": true, "email": "jeff@dunion.nl", "download_pdf": false, "toon_dashboard": false, "bookmark": false, "opdracht": "Mail een KPI-rapport"}}
+Input: 'Download een analyse van project X als PDF'
+{{"rapport_type": "analyse", "mailen": false, "email": null, "download_pdf": true, "toon_dashboard": false, "bookmark": false, "opdracht": "Download een analyse van project X"}}
+Input: 'Bookmark dit rapport'
+{{"rapport_type": null, "mailen": false, "email": null, "download_pdf": false, "toon_dashboard": false, "bookmark": true, "opdracht": "Bookmark dit rapport"}}
+Input: 'Toon het KPI-overzicht in het dashboard'
+{{"rapport_type": "KPI", "mailen": false, "email": null, "download_pdf": false, "toon_dashboard": true, "bookmark": false, "opdracht": "Toon het KPI-overzicht"}}
+Input: {user_input}
+Let op: Zet onbekende velden op null of false.
+"""
     )
     try:
         response = client.chat.completions.create(
@@ -601,9 +626,8 @@ if user_input:
     download_pdf = parsed.get("download_pdf", False)
     toon_dashboard = parsed.get("toon_dashboard", False)
     bookmark = parsed.get("bookmark", False)
-    # --- HYBRIDE CHAT: crew alleen bij analyse/rapport, anders snelle chat ---
-    ANALYSE_KEYWORDS = ["analyse", "rapport", "kpi", "advies", "trend", "overzicht"]
-    is_analytisch = any(kw in (opdracht.lower() if opdracht else "") for kw in ANALYSE_KEYWORDS)
+    rapport_type = parsed.get("rapport_type")
+    # --- PROFESSIONELE ROUTER: Chatbot voor gewone vragen, AI Team voor analyse ---
     if mailen and to_email:
         st.session_state.chat_history.append({
             "role": "user",
@@ -643,8 +667,12 @@ if user_input:
         st.success("Download als PDF wordt binnenkort ondersteund!")
         # Hier kun je de PDF-download logica toevoegen
     elif toon_dashboard:
-        st.success("Rapport wordt in het dashboard getoond!")
-        # Hier kun je logica toevoegen om het rapport in het dashboard te tonen
+        # Toon het KPI-overzicht daadwerkelijk in de chat
+        st.session_state.chat_history.append({
+            "role": "assistant",
+            "agent": "AI Team",
+            "content": maak_kpi_overzicht(df_projects, df_companies, df_invoices, df_projectlines)
+        })
     elif bookmark:
         st.session_state.bookmarks.append({"agent": "AI Team", "content": opdracht})
         st.success("Rapport is gebookmarkt!")
@@ -654,13 +682,11 @@ if user_input:
             "agent": "Gebruiker",
             "content": user_input
         })
-        if is_analytisch:
-            result = process_user_input(opdracht, analyse_df)
-        else:
-            result = simple_openai_chat(opdracht)
+        # Alleen gewone chat via Chatbot, analyse via aparte knop
+        result = simple_openai_chat(opdracht)
         st.session_state.chat_history.append({
             "role": "assistant",
-            "agent": "AI Team",
+            "agent": "Chatbot",
             "content": result
         })
 
@@ -668,6 +694,11 @@ if user_input:
 for msg in st.session_state.chat_history:
     with st.chat_message(msg["role"]):
         st.markdown(f"**{msg['agent']}**: {msg['content']}")
+        # Optioneel: geef visueel onderscheid tussen Chatbot en AI Team
+        if msg["agent"] == "Chatbot":
+            st.caption(":speech_balloon: Dit antwoord is van de Chatbot (snelle AI)")
+        elif msg["agent"] == "AI Team":
+            st.caption(":busts_in_silhouette: Dit antwoord is van het AI Team (data-analyse)")
 
 # --- RAPPORTAGE DOWNLOAD ---
 if st.session_state.get("last_report"):
