@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 from datetime import datetime
 from typing import cast
 import plotly.graph_objects as go
+from utils.auth import require_login
 
 st.set_page_config(
     page_title="Dunion KPI Dashboard",
@@ -14,6 +15,18 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# --- AUTHENTICATIE ---
+require_login()  # Blokkeert toegang tot dashboard als je niet bent ingelogd
+
+# --- LOGOUT IN SIDEBAR ---
+if "access_token" in st.session_state:
+    st.sidebar.write(f"Ingelogd als: {st.session_state.get('user_email', '')}")
+    if st.sidebar.button("Logout"):
+        st.session_state.clear()
+        st.rerun()
+
+# --- REST VAN DASHBOARD PAS NA LOGIN ---
 
 st.logo("images/dunion-logo-def_donker-06.png")
 st.title("Dunion KPI Dashboard – Overzicht")

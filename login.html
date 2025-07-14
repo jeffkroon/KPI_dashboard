@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Login met Google (Supabase)</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+</head>
+<body>
+  <h2>Login met Google</h2>
+  <button id="login-btn">Log in met Google</button>
+  <script>
+    // Zet je Supabase keys direct in de JS (alleen anon public key!)
+    const SUPABASE_URL = "https://suyflmfqkqgmelvcmoya.supabase.co"; // <-- Vervang door jouw Supabase URL
+    const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN1eWZsbWZxa3FnbWVsdmNtb3lhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDg5Mzk3ODEsImV4cCI6MjA2NDUxNTc4MX0.NR50KSHOZbKF5V9JeGftzSqlGUccQ7k_XgasJsByAB4"; // <-- Vervang door jouw anon public key
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    document.getElementById('login-btn').onclick = async function() {
+      const { data, error } = await supabaseClient.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin + '/oauth-redirect.html'
+        }
+      });
+      // Je wordt automatisch doorgestuurd door Supabase
+    };
+  </script>
+</body>
+</html> 

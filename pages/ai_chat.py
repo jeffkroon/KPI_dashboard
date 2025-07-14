@@ -29,6 +29,17 @@ import matplotlib.pyplot as plt
 import openai
 import json
 import yaml
+from utils.auth import require_login
+
+st.set_page_config(page_title="AI Team Chat", page_icon="🤖")
+
+require_login()
+st.title("🤖 AI Team Chat – Praat met je digitale collega's")
+if "access_token" in st.session_state:
+    st.sidebar.write(f"Ingelogd als: {st.session_state.get('user_email', '')}")
+    if st.sidebar.button("Logout"):
+        st.session_state.clear()
+        st.rerun()
 
 # --- DATABASE SETUP EN DATA LAADFUNCTIE ---
 load_dotenv()
@@ -41,8 +52,6 @@ def load_data(table_name):
     query = f"SELECT * FROM {table_name};"
     return pd.read_sql(query, con=engine)
 
-st.set_page_config(page_title="AI Team Chat", page_icon="🤖")
-st.title("🤖 AI Team Chat – Praat met je digitale collega's")
 
 # Toon het Podobrace-logo alleen in de sidebar, niet op de mainpage
 LOGO_URL = "images/dunion-logo-def_donker-06.png"

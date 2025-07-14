@@ -5,15 +5,25 @@ from sqlalchemy import create_engine
 from dotenv import load_dotenv
 import plotly.express as px
 import numpy as np
+from utils.auth import require_login
 
-
-st.logo("images/dunion-logo-def_donker-06.png")
 st.set_page_config(
     page_title="Werkverdeling",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+require_login()
+
+if "access_token" in st.session_state:
+    st.sidebar.write(f"Ingelogd als: {st.session_state.get('user_email', '')}")
+    if st.sidebar.button("Logout"):
+        st.session_state.clear()
+        st.rerun()
+
+
+st.logo("images/dunion-logo-def_donker-06.png")
 
 # Data & omgeving setup
 load_dotenv()
