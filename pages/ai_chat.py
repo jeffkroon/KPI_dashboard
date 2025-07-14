@@ -597,14 +597,14 @@ def simple_openai_chat(user_input):
     MAX_HISTORY = 5
     recent_history = st.session_state.chat_history[-MAX_HISTORY:] if 'chat_history' in st.session_state else []
     messages = []
-    # Voeg de chatgeschiedenis toe als context
+    # Voeg de chatgeschiedenis toe als context, alleen als content een string is
     for msg in recent_history:
-        if msg["role"] == "user":
+        if msg["role"] == "user" and isinstance(msg["content"], str):
             messages.append({"role": "user", "content": msg["content"]})
-        elif msg["role"] == "assistant":
+        elif msg["role"] == "assistant" and isinstance(msg["content"], str):
             messages.append({"role": "assistant", "content": msg["content"]})
     # Voeg de nieuwe gebruikersvraag toe
-    messages.append({"role": "user", "content": user_input})
+    messages.append({"role": "user", "content": str(user_input)})
     try:
         response = client.chat.completions.create(
             model="gpt-3.5-turbo-0125",  # Sneller en goedkoper dan standaard turbo
