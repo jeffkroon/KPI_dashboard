@@ -29,17 +29,13 @@ import matplotlib.pyplot as plt
 import openai
 import json
 import yaml
-from utils.auth import require_login
+from utils.auth import require_login, require_email_whitelist
+from utils.allowed_emails import ALLOWED_EMAILS
 
 st.set_page_config(page_title="AI Team Chat", page_icon="🤖")
 
 require_login()
-st.title("🤖 AI Team Chat – Praat met je digitale collega's")
-if "access_token" in st.session_state:
-    st.sidebar.write(f"Ingelogd als: {st.session_state.get('user_email', '')}")
-    if st.sidebar.button("Logout"):
-        st.session_state.clear()
-        st.rerun()
+require_email_whitelist(ALLOWED_EMAILS)
 
 # --- DATABASE SETUP EN DATA LAADFUNCTIE ---
 load_dotenv()

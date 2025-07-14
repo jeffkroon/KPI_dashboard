@@ -7,7 +7,8 @@ from dotenv import load_dotenv
 from datetime import datetime
 from typing import cast
 import plotly.graph_objects as go
-from utils.auth import require_login
+from utils.auth import require_login, require_email_whitelist
+from utils.allowed_emails import ALLOWED_EMAILS
 
 st.set_page_config(
     page_title="Dunion KPI Dashboard",
@@ -17,7 +18,8 @@ st.set_page_config(
 )
 
 # --- AUTHENTICATIE ---
-require_login()  # Blokkeert toegang tot dashboard als je niet bent ingelogd
+require_login()
+require_email_whitelist(ALLOWED_EMAILS)
 
 # --- LOGOUT IN SIDEBAR ---
 if "access_token" in st.session_state:

@@ -5,7 +5,8 @@ from sqlalchemy import create_engine
 from dotenv import load_dotenv
 import plotly.express as px
 import numpy as np
-from utils.auth import require_login
+from utils.auth import require_login, require_email_whitelist
+from utils.allowed_emails import ALLOWED_EMAILS
 
 st.set_page_config(
     page_title="Werkverdeling",
@@ -15,6 +16,7 @@ st.set_page_config(
 )
 
 require_login()
+require_email_whitelist(ALLOWED_EMAILS)
 
 if "access_token" in st.session_state:
     st.sidebar.write(f"Ingelogd als: {st.session_state.get('user_email', '')}")

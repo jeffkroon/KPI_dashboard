@@ -39,4 +39,11 @@ def require_login():
             st.stop()
     else:
         st.warning("Log in via de loginpagina: [login.html](http://localhost:8000/login.html)")
+        st.stop()
+
+def require_email_whitelist(allowed_emails):
+    import streamlit as st
+    user_email = st.session_state.get("user_email", "")
+    if user_email not in allowed_emails:
+        st.error("Je hebt geen toegang tot dit dashboard.")
         st.stop() 

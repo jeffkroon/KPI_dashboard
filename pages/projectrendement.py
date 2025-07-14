@@ -12,7 +12,8 @@ from sklearn.metrics import silhouette_score
 from sklearn.ensemble import RandomForestRegressor
 import matplotlib.pyplot as plt
 from dotenv import load_dotenv
-from utils.auth import require_login
+from utils.auth import require_login, require_email_whitelist
+from utils.allowed_emails import ALLOWED_EMAILS
 
 st.set_page_config(
     page_title="Customer-analysis",
@@ -22,7 +23,8 @@ st.set_page_config(
 )
 
 # --- AUTHENTICATIE ---
-require_login()  # Blokkeert toegang tot dashboard als je niet bent ingelogd
+require_login()
+require_email_whitelist(ALLOWED_EMAILS)
 
 # --- LOGOUT IN SIDEBAR ---
 if "access_token" in st.session_state:
