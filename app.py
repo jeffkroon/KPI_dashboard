@@ -229,7 +229,7 @@ if bedrijf_naam_selectie and bedrijf_id_selectie is not None:
         st.info(f"Geen facturen gevonden voor {bedrijf_naam_selectie}.")
 
 # --- FOOTER ---
-st.markdown("""<div style='text-align: right; color: #888; font-size: 0.9em;'>Dunion Dashboard &copy; 2024</div>""", unsafe_allow_html=True)
+
 
 # --- WHALES PIE CHART: OMZETVERDELING PER BEDRIJF ---
 st.markdown("---")
@@ -271,3 +271,11 @@ fig_uren = px.bar(
 )
 fig_uren.update_layout(yaxis={'categoryorder':'total ascending'}, height=400, margin=dict(l=40, r=20, t=60, b=40))
 st.plotly_chart(fig_uren, use_container_width=True)
+
+
+st.markdown("""
+<hr style="margin-top: 2em; margin-bottom: 0.5em; border: none; border-top: 1px solid #eee;" />
+<div style="text-align: center; color: #888; font-size: 1em; margin-bottom: 0.5em;">
+    Dunion Dashboard © 2024
+</div>
+""", unsafe_allow_html=True)

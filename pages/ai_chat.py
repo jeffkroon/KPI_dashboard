@@ -705,3 +705,10 @@ with st.expander('⚡ Automatische rapportage instellen'):
         else:
             start_scheduler(selected_frequency, report_time.strftime('%H:%M'), to_email)
             st.success(f'Automatische rapportage geactiveerd voor {selected_frequency} om {report_time.strftime("%H:%M")}, naar {to_email}.')
+
+st.markdown("""
+<hr style="margin-top: 2em; margin-bottom: 0.5em; border: none; border-top: 1px solid #eee;" />
+<div style="text-align: center; color: #888; font-size: 1em; margin-bottom: 0.5em;">
+    Dunion Dashboard © 2024
+</div>
+""", unsafe_allow_html=True)
