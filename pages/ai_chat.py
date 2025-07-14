@@ -564,15 +564,46 @@ def parse_user_command(user_input):
         result["email"] = EMAIL_ALIASES[result["email"]]
     return result
 
+def simple_openai_chat(user_input):
+    """
+    Simpele OpenAI chatfunctie voor gewone vragen, zonder Crew/agents.
+    Gebruikt de laatste 5 berichten als context.
+    """
+    MAX_HISTORY = 5
+    recent_history = st.session_state.chat_history[-MAX_HISTORY:] if 'chat_history' in st.session_state else []
+    messages = []
+    # Voeg de chatgeschiedenis toe als context
+    for msg in recent_history:
+        if msg["role"] == "user":
+            messages.append({"role": "user", "content": msg["content"]})
+        elif msg["role"] == "assistant":
+            messages.append({"role": "assistant", "content": msg["content"]})
+    # Voeg de nieuwe gebruikersvraag toe
+    messages.append({"role": "user", "content": user_input})
+    try:
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo-0125",  # Sneller en goedkoper dan standaard turbo
+            messages=messages,
+            temperature=0.7,
+            max_tokens=512
+        )
+        content = response.choices[0].message.content
+        return content
+    except Exception as e:
+        return f"Er ging iets mis met de snelle chat: {e}"
+
 # --- VERWERK GEBRUIKERSCHAT ---
 if user_input:
     parsed = parse_user_command(user_input)
     to_email = parsed.get("email")
     mailen = parsed.get("mailen", False)
-    opdracht = parsed.get("opdracht", user_input)
+    opdracht = parsed.get("opdracht", user_input) or user_input
     download_pdf = parsed.get("download_pdf", False)
     toon_dashboard = parsed.get("toon_dashboard", False)
     bookmark = parsed.get("bookmark", False)
+    # --- HYBRIDE CHAT: crew alleen bij analyse/rapport, anders snelle chat ---
+    ANALYSE_KEYWORDS = ["analyse", "rapport", "kpi", "advies", "trend", "overzicht"]
+    is_analytisch = any(kw in (opdracht.lower() if opdracht else "") for kw in ANALYSE_KEYWORDS)
     if mailen and to_email:
         st.session_state.chat_history.append({
             "role": "user",
@@ -623,7 +654,10 @@ if user_input:
             "agent": "Gebruiker",
             "content": user_input
         })
-        result = process_user_input(opdracht, analyse_df)
+        if is_analytisch:
+            result = process_user_input(opdracht, analyse_df)
+        else:
+            result = simple_openai_chat(opdracht)
         st.session_state.chat_history.append({
             "role": "assistant",
             "agent": "AI Team",
