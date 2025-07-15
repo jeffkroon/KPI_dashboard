@@ -82,6 +82,12 @@ uren_per_bedrijf.columns = ["bedrijf_id", "totaal_uren"]
 factuurbedrag_per_bedrijf = load_data_df("invoices", columns=["company_id", "SUM(CAST(totalpayed AS FLOAT)) as totalpayed"], where="fase = 'Factuur'", group_by="company_id")
 factuurbedrag_per_bedrijf = factuurbedrag_per_bedrijf.rename(columns={"company_id": "bedrijf_id"})
 
+# Zorg dat beide DataFrames een kolom 'bedrijf_id' hebben vóór de merge
+if 'company_id' in uren_per_bedrijf.columns:
+    uren_per_bedrijf = uren_per_bedrijf.rename(columns={'company_id': 'bedrijf_id'})
+if 'company_id' in factuurbedrag_per_bedrijf.columns:
+    factuurbedrag_per_bedrijf = factuurbedrag_per_bedrijf.rename(columns={'company_id': 'bedrijf_id'})
+
 # Combineer stats per bedrijf
 bedrijfsstats = uren_per_bedrijf.merge(factuurbedrag_per_bedrijf, on="bedrijf_id", how="outer")
 bedrijfsstats = bedrijfsstats.merge(df_companies[["id", "companyname"]], left_on="bedrijf_id", right_on="id", how="left")
