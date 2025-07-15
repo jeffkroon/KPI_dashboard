@@ -20,3 +20,4 @@ SQLAlchemy==2.0.41
 streamlit==1.45.1
 supabase==2.16.0
 psycopg2-binary
+streamlit-extras
