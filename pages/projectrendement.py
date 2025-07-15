@@ -177,9 +177,14 @@ fig = px.bar(
 )
 fig.update_layout(yaxis={'categoryorder': 'total ascending'}, margin={'l': 150})
 
+# --- Volledige rendementstabel met zoekfunctie ---
 st.markdown("### 🧾 Volledige rendementstabel")
+bedrijf_zoek = st.text_input("🔎 Zoek op bedrijfsnaam in de rendementstabel")
+df_rend_filtered = df_rend.copy()
+if bedrijf_zoek:
+    df_rend_filtered = df_rend_filtered[df_rend_filtered["companyname"].str.contains(bedrijf_zoek, case=False, na=False)]
 # Alleen afronden bij presentatie, niet in data!
-st.dataframe(df_rend.style.format({
+st.dataframe(df_rend_filtered.style.format({
     "totaal_uren": "{:.1f}",
     "totalpayed": "€ {:.2f}",
     "rendement_per_uur": "€ {:.2f}"
