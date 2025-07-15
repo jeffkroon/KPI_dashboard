@@ -3,9 +3,40 @@ from typing import Callable
 import os
 from pathlib import Path
 import time
+from sqlalchemy import create_engine
+from dotenv import load_dotenv
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data_cache"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
+
+_engine = None
+
+def get_engine():
+    global _engine
+    if _engine is None:
+        load_dotenv()
+        POSTGRES_URL = os.getenv("POSTGRES_URL")
+        if not POSTGRES_URL:
+            raise ValueError("POSTGRES_URL is not set in the environment.")
+        # Gebruik connection pooling
+        _engine = create_engine(POSTGRES_URL, pool_pre_ping=True, pool_size=5, max_overflow=10)
+    return _engine
+
+# Universele data loader met kolomselectie en optionele query
+# Gebruik deze in alle scripts
+
+def load_data(table_name, columns=None, where=None, limit=None):
+    engine = get_engine()
+    if columns:
+        col_str = ", ".join(columns)
+    else:
+        col_str = "*"
+    query = f"SELECT {col_str} FROM {table_name}"
+    if where:
+        query += f" WHERE {where}"
+    if limit:
+        query += f" LIMIT {limit}"
+    return pd.read_sql(query, con=engine)
 
 def save_to_parquet(df: pd.DataFrame, name: str):
     """Sla een DataFrame op als Parquet-bestand in de cachefolder."""

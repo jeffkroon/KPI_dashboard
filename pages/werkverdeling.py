@@ -7,6 +7,7 @@ import plotly.express as px
 import numpy as np
 from utils.auth import require_login, require_email_whitelist
 from utils.allowed_emails import ALLOWED_EMAILS
+from utils.data_loaders import load_data
 
 st.set_page_config(
     page_title="Werkverdeling",
@@ -35,23 +36,11 @@ if not POSTGRES_URL:
     st.stop()
 engine = create_engine(POSTGRES_URL)
 
-def load_data(table_name, start_date=None, end_date=None, limit=5000):
-    if table_name == "urenregistratie":
-        query = f"SELECT * FROM {table_name} WHERE status_searchname = 'Gefiatteerd'"
-        if start_date and end_date:
-            query += f" AND date_date::timestamp BETWEEN '{start_date}' AND '{end_date}'"
-        query += f" LIMIT {limit}"
-    elif table_name == "employees":
-        query = f"SELECT * FROM {table_name};"  # GEEN LIMIT voor employees
-    else:
-        query = f"SELECT * FROM {table_name} LIMIT {limit};"
-    return pd.read_sql(query, con=engine)
-
 # Datasets laden
-df_employees = load_data("employees")
+df_employees = load_data("employees", columns=["id", "firstname", "lastname", "function"])
 df_employees['fullname'] = df_employees['firstname'] + " " + df_employees['lastname']
-df_projects = load_data("projects")
-df_companies = load_data("companies")
+df_projects = load_data("projects", columns=["id", "name", "company_id", "archived", "totalexclvat"])
+df_companies = load_data("companies", columns=["id", "companyname"])
 
 # Filter niet-gearchiveerde projecten
 df_projects = df_projects[df_projects["archived"] != True]
@@ -75,9 +64,9 @@ else:
 
 # Data ophalen met filters
 # Voor urenregistratie:
-df_uren = load_data("urenregistratie", start_date, end_date)
+df_uren = load_data("urenregistratie", columns=["id", "offerprojectbase_id", "employee_id", "amount", "task_searchname", "date_date", "status_searchname"], where=f"status_searchname = 'Gefiatteerd' AND date_date::timestamp BETWEEN '{start_date}' AND '{end_date}'")
 # Voor andere tabellen:
-df_employees = load_data("employees")
+# df_employees = load_data("employees") # This line is removed as df_employees is now loaded globally
 
 # Pagina titel
 st.title("📋 Project Overzicht met Medewerker Uren")

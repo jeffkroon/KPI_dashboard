@@ -3,13 +3,16 @@ import pandas as pd
 import altair as alt
 import re
 import sys
+# Verplaats optionele imports naar binnen in try/except zodat linter niet faalt
 try:
     import pysqlite3
     sys.modules["sqlite3"] = pysqlite3
 except ImportError:
-    # pysqlite3 is niet beschikbaar, gebruik standaard sqlite3
     pass
-from crewai import Task, Crew, Process
+try:
+    from crewai import Task, Crew, Process
+except ImportError:
+    pass
 from agents.analist_agent import analist_agent
 from agents.consultant_agent import consultant_agent, forecaster_agent
 from agents.rapporteur_agent import rapporteur_agent
@@ -31,6 +34,7 @@ import json
 import yaml
 from utils.auth import require_login, require_email_whitelist
 from utils.allowed_emails import ALLOWED_EMAILS
+from utils.data_loaders import load_data
 
 st.set_page_config(page_title="AI Team Chat", page_icon="🤖")
 
@@ -44,8 +48,18 @@ if not POSTGRES_URL:
     raise ValueError("POSTGRES_URL is not set in the environment.")
 engine = create_engine(POSTGRES_URL)
 
-def load_data(table_name):
-    query = f"SELECT * FROM {table_name};"
+def load_data(table_name, columns=None, where=None, limit=None):
+    query = f"SELECT "
+    if columns:
+        query += ", ".join(columns)
+    else:
+        query += "*"
+    query += f" FROM {table_name}"
+    if where:
+        query += f" WHERE {where}"
+    if limit:
+        query += f" LIMIT {limit}"
+    query += ";"
     return pd.read_sql(query, con=engine)
 
 
@@ -212,15 +226,15 @@ with st.sidebar.expander("📁 Data upload (optioneel)", expanded=True):
 
 # --- DATA UIT DATABASE LADEN ---
 try:
-    df_projects = load_data("projects")
+    df_projects = load_data("projects", columns=["id", "company_id", "archived"])
     # Verwijder ongewenste kolommen
     for col in ["totalinclvat", "totalexclvat"]:
         if col in df_projects.columns:
             df_projects = df_projects.drop(columns=[col])
-    df_companies = load_data("companies")
-    df_employees = load_data("employees")
-    df_invoices = load_data("invoices")
-    df_projectlines = load_data("projectlines_per_company")
+    df_companies = load_data("companies", columns=["id", "companyname"])
+    df_employees = load_data("employees", columns=["id", "firstname", "lastname"])
+    df_invoices = load_data("invoices", columns=["id", "company_id", "fase", "totalpayed", "status_searchname", "number", "date_date", "subject"])
+    df_projectlines = load_data("projectlines_per_company", columns=["id", "bedrijf_id", "company_id", "amountwritten", "sellingprice", "amount"])
     for col in ["amount", "sellingprice"]:
         if col in df_projectlines.columns:
             df_projectlines = df_projectlines.drop(columns=[col])

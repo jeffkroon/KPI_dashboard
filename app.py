@@ -9,6 +9,7 @@ from typing import cast
 import plotly.graph_objects as go
 from utils.auth import require_login, require_email_whitelist
 from utils.allowed_emails import ALLOWED_EMAILS
+from utils.data_loaders import load_data
 
 st.set_page_config(
     page_title="Dunion KPI Dashboard",
@@ -43,13 +44,6 @@ h1 {
 </style>
 """, unsafe_allow_html=True)
 
-@st.cache_data
-def load_data(table_name):
-    query = f"SELECT * FROM {table_name};"
-    return pd.read_sql(query, con=engine)
-
-pd.set_option('future.no_silent_downcasting', True)
-
 # --- SETUP ---
 load_dotenv()
 POSTGRES_URL = os.getenv("POSTGRES_URL")
@@ -63,11 +57,11 @@ except ImportError:
     st.warning("📛 'streamlit-extras' is niet geïnstalleerd of niet vindbaar door je environment.")
 
 # --- LOAD DATA ---
-df_projects_raw: pd.DataFrame = pd.DataFrame(load_data("projects"))
-df_companies: pd.DataFrame = pd.DataFrame(load_data("companies"))
-df_employees: pd.DataFrame = pd.DataFrame(load_data("employees"))
-df_projectlines: pd.DataFrame = pd.DataFrame(load_data("projectlines_per_company"))
-df_invoices: pd.DataFrame = pd.DataFrame(load_data("invoices"))
+df_projects_raw = load_data("projects", columns=["id", "company_id", "archived", "totalexclvat"])
+df_companies = load_data("companies", columns=["id", "companyname"])
+df_employees = load_data("employees", columns=["id", "firstname", "lastname"])
+df_projectlines = load_data("projectlines_per_company", columns=["id", "bedrijf_id", "company_id", "amountwritten", "sellingprice"])
+df_invoices = load_data("invoices", columns=["id", "company_id", "fase", "totalpayed", "status_searchname", "number", "date_date", "subject"])
 
 # --- KPI CARDS ---
 col1, col2, col3, col4 = st.columns(4)
@@ -92,23 +86,14 @@ for col in ["amountwritten", "sellingprice"]:
     if col in df_projectlines.columns:
         df_projectlines[col] = pd.to_numeric(df_projectlines[col], errors="coerce")
 
-# Bereken totaal uren per bedrijf
-df_uren_per_bedrijf = df_projectlines.groupby("bedrijf_id")["amountwritten"].sum().reset_index()
-df_uren_per_bedrijf.columns = ["bedrijf_id", "totaal_uren"]
+# Bereken totaal uren per bedrijf direct in SQL
+uren_per_bedrijf = load_data("projectlines_per_company", columns=["bedrijf_id", "SUM(amountwritten) as totaal_uren"], where=None, limit=None).groupby("bedrijf_id").sum().reset_index()
 
-# Bereken totaal gefactureerd per bedrijf
-factuurbedrag_per_bedrijf = (
-    df_invoices[df_invoices["fase"] == "Factuur"]
-    .copy()
-    .assign(totalpayed=pd.to_numeric(df_invoices["totalpayed"], errors="coerce"))
-    .groupby("company_id")[["totalpayed"]]
-    .sum()
-    .reset_index()
-)
-factuurbedrag_per_bedrijf = factuurbedrag_per_bedrijf.rename(columns={"company_id": "bedrijf_id"})
+# Bereken totaal gefactureerd per bedrijf direct in SQL
+factuurbedrag_per_bedrijf = load_data("invoices", columns=["company_id", "SUM(CAST(totalpayed AS FLOAT)) as totalpayed"], where="fase = 'Factuur'", limit=None).groupby("company_id").sum().reset_index()
 
 # Combineer stats per bedrijf
-bedrijfsstats = df_uren_per_bedrijf.merge(factuurbedrag_per_bedrijf, on="bedrijf_id", how="outer")
+bedrijfsstats = uren_per_bedrijf.merge(factuurbedrag_per_bedrijf, on="bedrijf_id", how="outer")
 bedrijfsstats = bedrijfsstats.merge(df_companies[["id", "companyname"]], left_on="bedrijf_id", right_on="id", how="left")
 bedrijfsstats = bedrijfsstats.drop(columns=[col for col in ['id'] if col in bedrijfsstats.columns])
 bedrijfsstats["totaal_uren"] = bedrijfsstats["totaal_uren"].fillna(0)
