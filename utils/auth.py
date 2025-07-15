@@ -39,7 +39,7 @@ def require_login():
             st.stop()
     else:
         st.markdown(
-            '[Log in via de loginpagina](https://kpi-dashboard-1-ty04.onrender.com/login.html)'
+            '[Log in via de loginpagina](https://kpi-dashboard-1-bmk5.onrender.com/login.html)'
         )
         st.stop()
 
