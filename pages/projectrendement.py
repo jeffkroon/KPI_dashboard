@@ -185,11 +185,23 @@ bedrijf_zoek = st.text_input("🔎 Zoek op bedrijfsnaam in de tarieftabel")
 df_rend_filtered = df_rend.copy()
 if bedrijf_zoek:
     df_rend_filtered = df_rend_filtered[df_rend_filtered["companyname"].str.contains(bedrijf_zoek, case=False, na=False)]
-st.dataframe(df_rend_filtered.style.format({
-    "totaal_uren": "{:.1f}",
-    "totalpayed": "€ {:.2f}",
-    "werkelijk uurtarief": "€ {:.2f}"
-}), use_container_width=True)
+# Hernoem de kolom voor presentatie alleen als het een DataFrame is
+if isinstance(df_rend_filtered, pd.DataFrame) and "rendement_per_uur" in df_rend_filtered.columns:
+    df_rend_filtered = df_rend_filtered.rename(columns={"rendement_per_uur": "Werkelijk uurtarief"})
+# Selecteer alleen de gewenste kolommen als ze bestaan
+kolommen = [col for col in ["companyname", "totaal_uren", "totalpayed", "Werkelijk uurtarief"] if col in df_rend_filtered.columns]
+df_rend_present = df_rend_filtered[kolommen].copy()
+if isinstance(df_rend_present, pd.DataFrame):
+    df_rend_present = df_rend_present.rename(columns={
+        "companyname": "Bedrijf",
+        "totaal_uren": "Totaal Uren",
+        "totalpayed": "Opbrengst"
+    })
+    st.dataframe(df_rend_present.style.format({
+        "Totaal Uren": "{:.1f}",
+        "Opbrengst": "€ {:.2f}",
+        "Werkelijk uurtarief": "€ {:.2f}"
+    }), use_container_width=True)
 
 # === VISUELE PLOT VAN RISICOCATEGORIEËN ===
 # Removed visual risk analysis section per instructions
