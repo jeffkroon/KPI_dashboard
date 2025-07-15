@@ -139,6 +139,8 @@ for i, (_, row) in enumerate(df_rend.head(3).iterrows()):
 # KPI-cards: bottom 10 bedrijven met laagste rendement per uur
 st.markdown("### 🛑 Bottom 10 bedrijven op basis van werkelijk uurtarief")
 df_bottom_10 = df_rend.nsmallest(10, "rendement_per_uur")[["companyname", "totaal_uren", "totalpayed", "rendement_per_uur"]]
+# Voor tabellen waar kolomnamen worden toegewezen
+# Bijvoorbeeld:
 df_bottom_10.columns = ["Bedrijf", "Totaal Uren", "Opbrengst", "Werkelijk uurtarief"]
 # Alleen afronden in presentatie, niet in data!
 st.dataframe(df_bottom_10.style.format({
@@ -186,7 +188,7 @@ if bedrijf_zoek:
 st.dataframe(df_rend_filtered.style.format({
     "totaal_uren": "{:.1f}",
     "totalpayed": "€ {:.2f}",
-    "rendement_per_uur": "€ {:.2f}"
+    "werkelijk uurtarief": "€ {:.2f}"
 }), use_container_width=True)
 
 # === VISUELE PLOT VAN RISICOCATEGORIEËN ===
@@ -203,7 +205,7 @@ fig_scatter = px.scatter(
     x="totaal_uren",
     y="totalpayed",
     hover_name="companyname",
-    hover_data={"rendement_per_uur": True},
+    hover_data={"Werkelijk uurtarief": df_rend_clean["rendement_per_uur"]},
     size="rendement_per_uur",
     color="rendement_per_uur",
     color_continuous_scale="Viridis",
@@ -226,7 +228,7 @@ fig_treemap = px.treemap(
     path=["companyname"],
     values="totaal_uren",
     color="totalpayed",
-    hover_data={"rendement_per_uur": True},
+    hover_data={"Werkelijk uurtarief": df_rend_clean["rendement_per_uur"]},
     color_continuous_scale="RdYlGn",
     title="Treemap: tijdsinvestering (grootte) vs opbrengst (kleur) per bedrijf",
     labels={
@@ -589,7 +591,7 @@ Je bent een zakelijke AI-consultant. Geef beknopt maar concreet advies voor het 
 - Werkelijke opbrengst: {werkelijke_opbrengst_str}
 - Verwachte opbrengst: {verwachte_opbrengst_str}
 - realisatie-ratio: {realisatie_ratio_str}
-- Rendement per uur: {rendement_per_uur_str}
+- Werketlijk uurtarief: {rendement_per_uur_str}
 - % tijdsbesteding: {tijdsbesteding_str}
 
 Geef suggesties over klantprioriteit, verbeterpotentieel, tariefoptimalisatie of workloadplanning. Houd het zakelijk en feitelijk.
