@@ -1,5 +1,5 @@
 import pandas as pd
-from typing import Callable
+from typing import Callable, Union, Generator, Iterator
 import os
 from pathlib import Path
 import time
@@ -25,7 +25,7 @@ def get_engine():
 # Universele data loader met kolomselectie en optionele query
 # Gebruik deze in alle scripts
 
-def load_data(table_name, columns=None, where=None, limit=None):
+def load_data(table_name, columns=None, where=None, limit=None, streaming: bool = False, chunksize: int = 10000) -> Union[pd.DataFrame, Iterator[pd.DataFrame]]:
     engine = get_engine()
     if columns:
         col_str = ", ".join(columns)
@@ -36,6 +36,8 @@ def load_data(table_name, columns=None, where=None, limit=None):
         query += f" WHERE {where}"
     if limit:
         query += f" LIMIT {limit}"
+    if streaming:
+        return pd.read_sql(query, con=engine, chunksize=chunksize)
     return pd.read_sql(query, con=engine)
 
 def save_to_parquet(df: pd.DataFrame, name: str):
