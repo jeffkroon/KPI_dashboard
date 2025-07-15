@@ -603,7 +603,7 @@ Je bent een zakelijke AI-consultant. Geef beknopt maar concreet advies voor het 
 - Werkelijke opbrengst: {werkelijke_opbrengst_str}
 - Verwachte opbrengst: {verwachte_opbrengst_str}
 - realisatie-ratio: {realisatie_ratio_str}
-- Werketlijk uurtarief: {rendement_per_uur_str}
+- Werketlijk uurtarief (wat we echt verdienen per uur, vereleken met onze vastgestelde prijs per uur): {rendement_per_uur_str}
 - % tijdsbesteding: {tijdsbesteding_str}
 
 Geef suggesties over klantprioriteit, verbeterpotentieel, tariefoptimalisatie of workloadplanning. Houd het zakelijk en feitelijk.
