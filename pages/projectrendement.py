@@ -75,7 +75,7 @@ for col in ["amountwritten", "sellingprice"]:
         df_projectlines[col] = pd.to_numeric(df_projectlines[col], errors="coerce")
 
 # Bereken totaal uren per bedrijf direct in SQL
-uren_per_bedrijf = load_data_df("projectlines_per_company", columns=["bedrijf_id", "SUM(amountwritten) as totaal_uren"]).groupby("bedrijf_id").sum().reset_index()
+uren_per_bedrijf = load_data_df("projectlines_per_company", columns=["bedrijf_id", "SUM(CAST(amountwritten AS FLOAT)) as totaal_uren"]).groupby("bedrijf_id").sum().reset_index()
 uren_per_bedrijf.columns = ["bedrijf_id", "totaal_uren"]
 
 # Bereken totaal gefactureerd per bedrijf direct in SQL
