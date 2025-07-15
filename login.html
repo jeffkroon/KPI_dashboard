@@ -22,7 +22,7 @@
       await supabaseClient.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: window.location.origin + '/oauth-redirect.html'
+          redirectTo: "https://kpi-dashboard-hc4e.onrender.com/oauth-redirect.html"
         }
       });
     };
@@ -32,7 +32,7 @@
       const { error } = await supabaseClient.auth.signInWithOtp({
         email: email,
         options: {
-          emailRedirectTo: window.location.origin + '/oauth-redirect.html'
+          emailRedirectTo: "https://kpi-dashboard-hc4e.onrender.com/oauth-redirect.html"
         }
       });
       if (error) {

@@ -38,7 +38,19 @@ def require_login():
             st.session_state.clear()
             st.stop()
     else:
-        st.warning("Log in via de loginpagina: [login.html](http://localhost:8000/login.html)")
+        # --- Supabase OAuth login knop ---
+        SUPABASE_PROJECT = "suyflmfqkqgmelvcmoya"  # Jouw Supabase projectnaam
+        RENDER_URL = "https://kpi-dashboard-hc4e.onrender.com"  # Publieke URL van je Streamlit-app
+        st.markdown(
+            f'''
+            <a href="https://{SUPABASE_PROJECT}.supabase.co/auth/v1/authorize?provider=google&redirect_to={RENDER_URL}" target="_self">
+                <button style="font-size:1.2em;padding:0.5em 1em;">Log in met Google</button>
+            </a>
+            <br><br>
+            <span style="color:#888;">Let op: na inloggen word je automatisch teruggestuurd naar het dashboard.</span>
+            ''',
+            unsafe_allow_html=True,
+        )
         st.stop()
 
 def require_email_whitelist(allowed_emails):
