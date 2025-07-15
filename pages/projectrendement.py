@@ -52,12 +52,12 @@ if not POSTGRES_URL:
 df_projects_raw = load_data("projects", columns=["id", "company_id", "archived", "totalexclvat"])
 df_companies = load_data("companies", columns=["id", "companyname"])
 df_employees = load_data("employees", columns=["id", "firstname", "lastname"])
-df_projectlines = load_data("projectlines_per_company", columns=["id", "bedrijf_id", "company_id", "amountwritten", "sellingprice", "amount"])
+df_projectlines = load_data("projectlines_per_company", columns=["id", "bedrijf_id", "amountwritten", "sellingprice", "amount"])
 df_invoices = load_data("invoices", columns=["id", "company_id", "fase", "totalpayed", "status_searchname", "number", "date_date", "subject"])
 
 # Kolomhernoemingen en numerieke conversies
-if 'bedrijf_id' not in df_projectlines.columns and 'company_id' in df_projectlines.columns:
-    df_projectlines = df_projectlines.rename(columns={'company_id': 'bedrijf_id'})
+if 'bedrijf_id' not in df_projectlines.columns and 'bedrijf_id' in df_projectlines.columns:
+    df_projectlines = df_projectlines.rename(columns={'bedrijf_id': 'bedrijf_id'})
 if 'companyname' not in df_companies.columns and 'bedrijf_naam' in df_companies.columns:
     df_companies = df_companies.rename(columns={'bedrijf_naam': 'companyname'})
 for col in ["amountwritten", "sellingprice"]:
