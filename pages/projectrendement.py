@@ -267,7 +267,7 @@ st.markdown("### 🧮 Extra KPI's")
 # Topbedrijf op basis van hoogste realisatie-ratio
 taggr = bedrijfsstats.copy()
 taggr["realisatie_ratio"] = taggr["totalpayed"] / taggr["verwachte_opbrengst"] if "verwachte_opbrengst" in taggr.columns and "totalpayed" in taggr.columns else None
-st.write("bedrijfsstats na berekening realisatie_ratio:", taggr.head())
+
 
 # Vóór gebruik van .iloc[0] (bijvoorbeeld top_realisatie)
 if not bedrijfsstats.empty and "realisatie_ratio" in bedrijfsstats.columns:
