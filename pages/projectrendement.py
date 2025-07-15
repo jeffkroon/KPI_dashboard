@@ -127,7 +127,7 @@ df_rend = df_rend.sort_values("rendement_per_uur", ascending=False).copy()  # ty
 # Removed categoriseer_risico function and its apply call per instructions
 
 # KPI-cards: top 3 bedrijven met hoogste rendement per uur
-st.markdown("### 🥇 Top 3 bedrijven op basis van rendement per uur")
+st.markdown("### 🥇 Top 3 bedrijven op basis van werkelijk uurtarief")
 cols = st.columns(3)
 # Let op: afronden alleen bij presentatie, niet in berekening!
 for i, (_, row) in enumerate(df_rend.head(3).iterrows()):
@@ -137,14 +137,14 @@ for i, (_, row) in enumerate(df_rend.head(3).iterrows()):
     )
 
 # KPI-cards: bottom 10 bedrijven met laagste rendement per uur
-st.markdown("### 🛑 Bottom 10 bedrijven op basis van rendement per uur")
+st.markdown("### 🛑 Bottom 10 bedrijven op basis van werkelijk uurtarief")
 df_bottom_10 = df_rend.nsmallest(10, "rendement_per_uur")[["companyname", "totaal_uren", "totalpayed", "rendement_per_uur"]]
-df_bottom_10.columns = ["Bedrijf", "Totaal Uren", "Opbrengst", "Rendement per Uur"]
+df_bottom_10.columns = ["Bedrijf", "Totaal Uren", "Opbrengst", "Werkelijk uurtarief"]
 # Alleen afronden in presentatie, niet in data!
 st.dataframe(df_bottom_10.style.format({
     "Totaal Uren": "{:.1f}",
     "Opbrengst": "€ {:.2f}",
-    "Rendement per Uur": "€ {:.2f}"
+    "Werkelijk uurtarief": "€ {:.2f}"
 }), use_container_width=True)
 
 # Extra inzichten: gemiddeld rendement, mediaan, en aantal bedrijven onder drempel
@@ -153,11 +153,11 @@ mediaan_rendement = df_rend["rendement_per_uur"].median()
 ondergrens = 75  # drempelrendement, aanpasbaar
 aantal_slecht = (df_rend["rendement_per_uur"] < ondergrens).sum()
 
-st.markdown("### 📌 Extra Inzichten over Bedrijfsrendement")
+st.markdown("### 📌 Extra Inzichten over Werkelijk Uurtarief")
 col1, col2, col3 = st.columns(3)
 # Alleen afronden bij presentatie, niet in berekening!
-col1.metric("Gemiddeld rendement per uur", f"€ {gemiddeld_rendement:.2f}")
-col2.metric("Mediaan rendement per uur", f"€ {mediaan_rendement:.2f}")
+col1.metric("Gemiddeld werkelijk uurtarief", f"€ {gemiddeld_rendement:.2f}")
+col2.metric("Mediaan werkelijk uurtarief", f"€ {mediaan_rendement:.2f}")
 col3.metric(f"Aantal bedrijven < €{ondergrens}", f"{aantal_slecht}")
 
 # Horizontale bar chart van rendement per uur per bedrijf
@@ -166,9 +166,9 @@ fig = px.bar(
     x="rendement_per_uur",
     y="companyname",
     orientation="h",
-    title="Rendement per uur per bedrijf",
+    title="Werkelijk uurtarief per bedrijf",
     labels={
-        "rendement_per_uur": "Rendement per Uur",
+        "rendement_per_uur": "Werkelijk uurtarief",
         "companyname": "Bedrijf",
         "totaal_uren": "Totaal Uren",
         "totalpayed": "Werkelijke Opbrengst"
@@ -178,7 +178,7 @@ fig = px.bar(
 fig.update_layout(yaxis={'categoryorder': 'total ascending'}, margin={'l': 150})
 
 # --- Volledige tabel: Werkelijk tarief per uur ---
-st.markdown("### 🧾 Volledige tabel: Werkelijk tarief per uur")
+st.markdown("### 🧾 Volledige tabel: Werkelijk uurtarief")
 bedrijf_zoek = st.text_input("🔎 Zoek op bedrijfsnaam in de tarieftabel")
 df_rend_filtered = df_rend.copy()
 if bedrijf_zoek:
@@ -211,7 +211,7 @@ fig_scatter = px.scatter(
     labels={
         "totaal_uren": "Totaal Uren",
         "totalpayed": "Werkelijke Opbrengst",
-        "rendement_per_uur": "Rendement per Uur",
+        "rendement_per_uur": "Werkelijk uurtarief",
         "companyname": "Bedrijf"
     }
 )
@@ -233,7 +233,7 @@ fig_treemap = px.treemap(
         "companyname": "Bedrijf",
         "totaal_uren": "Totaal Uren",
         "totalpayed": "Werkelijke Opbrengst",
-        "rendement_per_uur": "Rendement per Uur"
+        "rendement_per_uur": "Werkelijk uurtarief"
     }
 )
 st.plotly_chart(fig_treemap, use_container_width=True)
@@ -300,11 +300,11 @@ if not bedrijfsstats.empty and "rendement_per_uur" in bedrijfsstats.columns:
     sorted_rendement = pd.DataFrame(bedrijfsstats).sort_values(by="rendement_per_uur", ascending=False)
     if not sorted_rendement.empty:
         top_rendement = sorted_rendement.iloc[0]
-        st.metric("⚙️ Hoogste rendement per uur", f"€ {top_rendement['rendement_per_uur']:.2f}", help=f"{top_rendement['companyname']}")
+        st.metric("⚙️ Hoogste werkelijk uurtarief", f"€ {top_rendement['rendement_per_uur']:.2f}", help=f"{top_rendement['companyname']}")
     else:
-        st.warning("Geen data beschikbaar voor hoogste rendement per uur.")
+        st.warning("Geen data beschikbaar voor hoogste werkelijk uurtarief.")
 else:
-    st.warning("Geen data beschikbaar voor hoogste rendement per uur.")
+    st.warning("Geen data beschikbaar voor hoogste werkelijk uurtarief.")
 
 # Uitleg over de realisatie-ratio in een expander
 with st.expander("ℹ️ Wat is de realisatie-ratio?"):
@@ -551,7 +551,7 @@ fig_cluster = px.scatter_3d(
     labels={
         "totaal_uren": "Totaal Uren",
         "totalpayed": "Werkelijke Opbrengst",
-        "rendement_per_uur": "Rendement per Uur",
+        "rendement_per_uur": "Werkelijk uurtarief",
         "cluster": "Cluster"
     }
 )
