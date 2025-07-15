@@ -96,6 +96,11 @@ bedrijfsstats["totaal_uren"] = bedrijfsstats["totaal_uren"].fillna(0)
 bedrijfsstats["totalpayed"] = bedrijfsstats["totalpayed"].fillna(0)
 bedrijfsstats["werkelijk_tarief_per_uur"] = bedrijfsstats["totalpayed"].div(bedrijfsstats["totaal_uren"].replace(0, pd.NA)).fillna(0)
 
+# Bereken gemiddeld tarief per klant (bedrijf)
+gemiddeld_tarief_per_klant = df_projectlines.groupby('bedrijf_id')["sellingprice"].mean().reset_index()
+gemiddeld_tarief_per_klant.columns = ["bedrijf_id", "gemiddeld_tarief"]
+bedrijfsstats = bedrijfsstats.merge(gemiddeld_tarief_per_klant, on="bedrijf_id", how="left")
+
 # Nu kun je bedrijfsstats gebruiken voor verdere analyses en visualisaties, net als in app.py
 # De rest van de analyses en visualisaties kun je nu baseren op bedrijfsstats
 # ... bestaande analyses en visualisaties ...
@@ -593,8 +598,9 @@ if bedrijf_info is not None:
     realisatie_ratio_str = f"{bedrijf_info['realisatie_ratio']:.2f}" if 'realisatie_ratio' in bedrijf_info else '-'
     rendement_per_uur_str = f"€{bedrijf_info['rendement_per_uur']:.2f}" if 'rendement_per_uur' in bedrijf_info else '-'
     tijdsbesteding_str = f"{bedrijf_info['% tijdsbesteding']:.1f}%" if '% tijdsbesteding' in bedrijf_info else '-'
+    gemiddeld_tarief_str = f"€{bedrijf_info['gemiddeld_tarief']:.2f}" if 'gemiddeld_tarief' in bedrijf_info and pd.notnull(bedrijf_info['gemiddeld_tarief']) else '-'
 else:
-    totaal_uren_str = werkelijke_opbrengst_str = verwachte_opbrengst_str = realisatie_ratio_str = rendement_per_uur_str = tijdsbesteding_str = '-'
+    totaal_uren_str = werkelijke_opbrengst_str = verwachte_opbrengst_str = realisatie_ratio_str = rendement_per_uur_str = tijdsbesteding_str = gemiddeld_tarief_str = '-'
 
 advies_prompt = f"""
 Je bent een zakelijke AI-consultant. Geef beknopt maar concreet advies voor het volgende bedrijf:
@@ -602,8 +608,9 @@ Je bent een zakelijke AI-consultant. Geef beknopt maar concreet advies voor het 
 - Totaal bestede uren: {totaal_uren_str}
 - Werkelijke opbrengst: {werkelijke_opbrengst_str}
 - Verwachte opbrengst: {verwachte_opbrengst_str}
-- realisatie-ratio: {realisatie_ratio_str}
+- Gemiddeld tarief per uur (op basis van alle taken): {gemiddeld_tarief_str}
 - Werketlijk uurtarief (wat we echt verdienen per uur, vereleken met onze vastgestelde prijs per uur): {rendement_per_uur_str}
+- realisatie-ratio: {realisatie_ratio_str}
 - % tijdsbesteding: {tijdsbesteding_str}
 
 Geef suggesties over klantprioriteit, verbeterpotentieel, tariefoptimalisatie of workloadplanning. Houd het zakelijk en feitelijk.
