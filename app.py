@@ -9,7 +9,7 @@ from typing import cast
 import plotly.graph_objects as go
 from utils.auth import require_login, require_email_whitelist
 from utils.allowed_emails import ALLOWED_EMAILS
-from utils.data_loaders import load_data
+from utils.data_loaders import load_data, load_data_df
 
 st.set_page_config(
     page_title="Dunion KPI Dashboard",
@@ -57,11 +57,21 @@ except ImportError:
     st.warning("📛 'streamlit-extras' is niet geïnstalleerd of niet vindbaar door je environment.")
 
 # --- LOAD DATA ---
-df_projects_raw = load_data("projects", columns=["id", "company_id", "archived", "totalexclvat"])
-df_companies = load_data("companies", columns=["id", "companyname"])
-df_employees = load_data("employees", columns=["id", "firstname", "lastname"])
-df_projectlines = load_data("projectlines_per_company", columns=["id", "bedrijf_id", "company_id", "amountwritten", "sellingprice"])
-df_invoices = load_data("invoices", columns=["id", "company_id", "fase", "totalpayed", "status_searchname", "number", "date_date", "subject"])
+df_projects_raw = load_data_df("projects", columns=["id", "company_id", "archived", "totalexclvat"])
+if not isinstance(df_projects_raw, pd.DataFrame):
+    df_projects_raw = pd.concat(list(df_projects_raw), ignore_index=True)
+df_companies = load_data_df("companies", columns=["id", "companyname"])
+if not isinstance(df_companies, pd.DataFrame):
+    df_companies = pd.concat(list(df_companies), ignore_index=True)
+df_employees = load_data_df("employees", columns=["id", "firstname", "lastname"])
+if not isinstance(df_employees, pd.DataFrame):
+    df_employees = pd.concat(list(df_employees), ignore_index=True)
+df_projectlines = load_data_df("projectlines_per_company", columns=["id", "bedrijf_id", "company_id", "amountwritten", "sellingprice"])
+if not isinstance(df_projectlines, pd.DataFrame):
+    df_projectlines = pd.concat(list(df_projectlines), ignore_index=True)
+df_invoices = load_data_df("invoices", columns=["id", "company_id", "fase", "totalpayed", "status_searchname", "number", "date_date", "subject"])
+if not isinstance(df_invoices, pd.DataFrame):
+    df_invoices = pd.concat(list(df_invoices), ignore_index=True)
 
 # --- KPI CARDS ---
 col1, col2, col3, col4 = st.columns(4)
@@ -87,10 +97,10 @@ for col in ["amountwritten", "sellingprice"]:
         df_projectlines[col] = pd.to_numeric(df_projectlines[col], errors="coerce")
 
 # Bereken totaal uren per bedrijf direct in SQL
-uren_per_bedrijf = load_data("projectlines_per_company", columns=["bedrijf_id", "SUM(amountwritten) as totaal_uren"], where=None, limit=None).groupby("bedrijf_id").sum().reset_index()
+uren_per_bedrijf = load_data_df("projectlines_per_company", columns=["bedrijf_id", "SUM(amountwritten) as totaal_uren"], where=None, limit=None).groupby("bedrijf_id").sum().reset_index()
 
 # Bereken totaal gefactureerd per bedrijf direct in SQL
-factuurbedrag_per_bedrijf = load_data("invoices", columns=["company_id", "SUM(CAST(totalpayed AS FLOAT)) as totalpayed"], where="fase = 'Factuur'", limit=None).groupby("company_id").sum().reset_index()
+factuurbedrag_per_bedrijf = load_data_df("invoices", columns=["company_id", "SUM(CAST(totalpayed AS FLOAT)) as totalpayed"], where="fase = 'Factuur'", limit=None).groupby("company_id").sum().reset_index()
 
 # Combineer stats per bedrijf
 bedrijfsstats = uren_per_bedrijf.merge(factuurbedrag_per_bedrijf, on="bedrijf_id", how="outer")

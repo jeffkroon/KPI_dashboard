@@ -7,7 +7,7 @@ import plotly.express as px
 import numpy as np
 from utils.auth import require_login, require_email_whitelist
 from utils.allowed_emails import ALLOWED_EMAILS
-from utils.data_loaders import load_data
+from utils.data_loaders import load_data, load_data_df
 
 st.set_page_config(
     page_title="Werkverdeling",
@@ -37,10 +37,16 @@ if not POSTGRES_URL:
 engine = create_engine(POSTGRES_URL)
 
 # Datasets laden
-df_employees = load_data("employees", columns=["id", "firstname", "lastname", "function"])
+df_employees = load_data_df("employees", columns=["id", "firstname", "lastname", "function"])
+if not isinstance(df_employees, pd.DataFrame):
+    df_employees = pd.concat(list(df_employees), ignore_index=True)
 df_employees['fullname'] = df_employees['firstname'] + " " + df_employees['lastname']
-df_projects = load_data("projects", columns=["id", "name", "company_id", "archived", "totalexclvat"])
-df_companies = load_data("companies", columns=["id", "companyname"])
+df_projects = load_data_df("projects", columns=["id", "name", "company_id", "archived", "totalexclvat"])
+if not isinstance(df_projects, pd.DataFrame):
+    df_projects = pd.concat(list(df_projects), ignore_index=True)
+df_companies = load_data_df("companies", columns=["id", "companyname"])
+if not isinstance(df_companies, pd.DataFrame):
+    df_companies = pd.concat(list(df_companies), ignore_index=True)
 
 # Filter niet-gearchiveerde projecten
 df_projects = df_projects[df_projects["archived"] != True]
@@ -64,7 +70,9 @@ else:
 
 # Data ophalen met filters
 # Voor urenregistratie:
-df_uren = load_data("urenregistratie", columns=["id", "offerprojectbase_id", "employee_id", "amount", "task_searchname", "date_date", "status_searchname"], where=f"status_searchname = 'Gefiatteerd' AND date_date::timestamp BETWEEN '{start_date}' AND '{end_date}'")
+df_uren = load_data_df("urenregistratie", columns=["id", "offerprojectbase_id", "employee_id", "amount", "task_searchname", "date_date", "status_searchname"], where=f"status_searchname = 'Gefiatteerd' AND date_date::timestamp BETWEEN '{start_date}' AND '{end_date}'")
+if not isinstance(df_uren, pd.DataFrame):
+    df_uren = pd.concat(list(df_uren), ignore_index=True)
 # Voor andere tabellen:
 # df_employees = load_data("employees") # This line is removed as df_employees is now loaded globally
 

@@ -40,6 +40,12 @@ def load_data(table_name, columns=None, where=None, limit=None, streaming: bool 
         return pd.read_sql(query, con=engine, chunksize=chunksize)
     return pd.read_sql(query, con=engine)
 
+def load_data_df(*args, **kwargs) -> pd.DataFrame:
+    df = load_data(*args, **kwargs)
+    if not isinstance(df, pd.DataFrame):
+        df = pd.concat(list(df), ignore_index=True)
+    return df
+
 def save_to_parquet(df: pd.DataFrame, name: str):
     """Sla een DataFrame op als Parquet-bestand in de cachefolder."""
     if df.empty:

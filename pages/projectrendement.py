@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 from dotenv import load_dotenv
 from utils.auth import require_login, require_email_whitelist
 from utils.allowed_emails import ALLOWED_EMAILS
-from utils.data_loaders import load_data
+from utils.data_loaders import load_data, load_data_df
 
 st.set_page_config(
     page_title="Customer-analysis",
@@ -49,11 +49,21 @@ if not POSTGRES_URL:
     raise ValueError("POSTGRES_URL is not set in the environment.")
 
 # --- DATA EXACT ZOALS IN app.py ---
-df_projects_raw = load_data("projects", columns=["id", "company_id", "archived", "totalexclvat"])
-df_companies = load_data("companies", columns=["id", "companyname"])
-df_employees = load_data("employees", columns=["id", "firstname", "lastname"])
-df_projectlines = load_data("projectlines_per_company", columns=["id", "bedrijf_id", "amountwritten", "sellingprice", "amount"])
-df_invoices = load_data("invoices", columns=["id", "company_id", "fase", "totalpayed", "status_searchname", "number", "date_date", "subject"])
+df_projects_raw = load_data_df("projects", columns=["id", "company_id", "archived", "totalexclvat"])
+if not isinstance(df_projects_raw, pd.DataFrame):
+    df_projects_raw = pd.concat(list(df_projects_raw), ignore_index=True)
+df_companies = load_data_df("companies", columns=["id", "companyname"])
+if not isinstance(df_companies, pd.DataFrame):
+    df_companies = pd.concat(list(df_companies), ignore_index=True)
+df_employees = load_data_df("employees", columns=["id", "firstname", "lastname"])
+if not isinstance(df_employees, pd.DataFrame):
+    df_employees = pd.concat(list(df_employees), ignore_index=True)
+df_projectlines = load_data_df("projectlines_per_company", columns=["id", "bedrijf_id", "amountwritten", "sellingprice", "amount"])
+if not isinstance(df_projectlines, pd.DataFrame):
+    df_projectlines = pd.concat(list(df_projectlines), ignore_index=True)
+df_invoices = load_data_df("invoices", columns=["id", "company_id", "fase", "totalpayed", "status_searchname", "number", "date_date", "subject"])
+if not isinstance(df_invoices, pd.DataFrame):
+    df_invoices = pd.concat(list(df_invoices), ignore_index=True)
 
 # Kolomhernoemingen en numerieke conversies
 if 'bedrijf_id' not in df_projectlines.columns and 'bedrijf_id' in df_projectlines.columns:
@@ -65,11 +75,11 @@ for col in ["amountwritten", "sellingprice"]:
         df_projectlines[col] = pd.to_numeric(df_projectlines[col], errors="coerce")
 
 # Bereken totaal uren per bedrijf direct in SQL
-uren_per_bedrijf = load_data("projectlines_per_company", columns=["bedrijf_id", "SUM(amountwritten) as totaal_uren"]).groupby("bedrijf_id").sum().reset_index()
+uren_per_bedrijf = load_data_df("projectlines_per_company", columns=["bedrijf_id", "SUM(amountwritten) as totaal_uren"]).groupby("bedrijf_id").sum().reset_index()
 uren_per_bedrijf.columns = ["bedrijf_id", "totaal_uren"]
 
 # Bereken totaal gefactureerd per bedrijf direct in SQL
-factuurbedrag_per_bedrijf = load_data("invoices", columns=["company_id", "SUM(CAST(totalpayed AS FLOAT)) as totalpayed"], where="fase = 'Factuur'").groupby("company_id").sum().reset_index()
+factuurbedrag_per_bedrijf = load_data_df("invoices", columns=["company_id", "SUM(CAST(totalpayed AS FLOAT)) as totalpayed"], where="fase = 'Factuur'").groupby("company_id").sum().reset_index()
 factuurbedrag_per_bedrijf = factuurbedrag_per_bedrijf.rename(columns={"company_id": "bedrijf_id"})
 
 # Combineer stats per bedrijf
@@ -487,7 +497,7 @@ benodigde_opbrengst = sim_uren * desired_realisatie
 st.caption("📝 Je huidige verwachte opbrengst is gebaseerd op je eigen invoer hierboven.")
 huidige_opbrengst = sim_opbrengst
 
-st.write(f"🔍 Om een realisatie-ratio van {desired_realisatie:.1f} te halen bij {sim_uren} uur, is minimaal €{benodigde_opbrengst:.0f} aan opbrengst nodig.")
+st.write(f"�� Om een realisatie-ratio van {desired_realisatie:.1f} te halen bij {sim_uren} uur, is minimaal €{benodigde_opbrengst:.0f} aan opbrengst nodig.")
 if sim_uren > 0 and desired_realisatie > 0:
     stijging_pct = (benodigde_opbrengst - huidige_opbrengst) / huidige_opbrengst * 100 if huidige_opbrengst > 0 else float('inf')
 
