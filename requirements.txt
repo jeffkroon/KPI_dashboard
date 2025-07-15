@@ -10,15 +10,12 @@ pandas==2.3.1
 plotly==6.1.2
 prophet==1.1.7
 pydantic==2.11.7
-pysqlite3==0.5.4
 python-dotenv==1.1.1
 PyYAML==6.0.2
-PyYAML==6.0.2
-Requests==2.32.4
+requests==2.32.4
 schedule==1.2.2
-scikit_learn==1.7.0
+scikit-learn==1.7.0
 sendgrid==6.12.4
 SQLAlchemy==2.0.41
 streamlit==1.45.1
-streamlit_extras==0.7.5
 supabase==2.16.0
