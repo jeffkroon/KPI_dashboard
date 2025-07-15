@@ -25,7 +25,7 @@ def get_engine():
 # Universele data loader met kolomselectie en optionele query
 # Gebruik deze in alle scripts
 
-def load_data(table_name, columns=None, where=None, limit=None, streaming: bool = False, chunksize: int = 10000) -> Union[pd.DataFrame, Iterator[pd.DataFrame]]:
+def load_data(table_name, columns=None, where=None, group_by=None, limit=None, streaming: bool = False, chunksize: int = 10000) -> Union[pd.DataFrame, Iterator[pd.DataFrame]]:
     engine = get_engine()
     if columns:
         col_str = ", ".join(columns)
@@ -34,6 +34,8 @@ def load_data(table_name, columns=None, where=None, limit=None, streaming: bool 
     query = f"SELECT {col_str} FROM {table_name}"
     if where:
         query += f" WHERE {where}"
+    if group_by:
+        query += f" GROUP BY {group_by}"
     if limit:
         query += f" LIMIT {limit}"
     if streaming:

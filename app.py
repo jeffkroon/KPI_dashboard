@@ -97,10 +97,10 @@ for col in ["amountwritten", "sellingprice"]:
         df_projectlines[col] = pd.to_numeric(df_projectlines[col], errors="coerce")
 
 # Bereken totaal uren per bedrijf direct in SQL
-uren_per_bedrijf = load_data_df("projectlines_per_company", columns=["bedrijf_id", "SUM(CAST(amountwritten AS FLOAT)) as totaal_uren"], where=None, limit=None).groupby("bedrijf_id").sum().reset_index()
+uren_per_bedrijf = load_data_df("projectlines_per_company", columns=["bedrijf_id", "SUM(CAST(amountwritten AS FLOAT)) as totaal_uren"], group_by="bedrijf_id")
 
 # Bereken totaal gefactureerd per bedrijf direct in SQL
-factuurbedrag_per_bedrijf = load_data_df("invoices", columns=["company_id", "SUM(CAST(totalpayed AS FLOAT)) as totalpayed"], where="fase = 'Factuur'", limit=None).groupby("company_id").sum().reset_index()
+factuurbedrag_per_bedrijf = load_data_df("invoices", columns=["company_id", "SUM(CAST(totalpayed AS FLOAT)) as totalpayed"], where="fase = 'Factuur'", group_by="company_id")
 
 # Combineer stats per bedrijf
 bedrijfsstats = uren_per_bedrijf.merge(factuurbedrag_per_bedrijf, on="bedrijf_id", how="outer")
