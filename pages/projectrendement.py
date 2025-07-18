@@ -522,11 +522,14 @@ if importances_df is not None:
 st.markdown("### 🧮 Scenario-analyse: Minimale opbrengst voor gewenste realisatie-ratio")
 desired_realisatie = st.slider("🎯 Gewenste realisatie-ratio (doelstelling)", min_value=1.0, max_value=3.0, step=0.1, value=1.5)
 
-benodigde_opbrengst = sim_uren * desired_realisatie
+# Laat de gebruiker het uurtarief altijd handmatig instellen, standaard op 95 euro
+uurtarief = st.number_input("💶 Uurtarief (€)", min_value=1.0, value=95.0, step=1.0)
+
+benodigde_opbrengst = sim_uren * uurtarief * desired_realisatie
 st.caption("📝 Je huidige verwachte opbrengst is gebaseerd op je eigen invoer hierboven.")
 huidige_opbrengst = sim_opbrengst
 
-st.write(f"�� Om een realisatie-ratio van {desired_realisatie:.1f} te halen bij {sim_uren} uur, is minimaal €{benodigde_opbrengst:.0f} aan opbrengst nodig.")
+st.write(f"Om een realisatie-ratio van {desired_realisatie:.1f} te halen bij {sim_uren} uur en een uurtarief van €{uurtarief:.2f}, is minimaal €{benodigde_opbrengst:,.0f} aan opbrengst nodig.")
 if sim_uren > 0 and desired_realisatie > 0:
     stijging_pct = (benodigde_opbrengst - huidige_opbrengst) / huidige_opbrengst * 100 if huidige_opbrengst > 0 else float('inf')
 
