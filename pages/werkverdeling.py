@@ -41,7 +41,7 @@ df_employees = load_data_df("employees", columns=["id", "firstname", "lastname",
 if not isinstance(df_employees, pd.DataFrame):
     df_employees = pd.concat(list(df_employees), ignore_index=True)
 df_employees['fullname'] = df_employees['firstname'] + " " + df_employees['lastname']
-df_projects = load_data_df("projects", columns=["id", "name", "company_id", "archived", "totalexclvat"])
+df_projects = load_data_df("projects", columns=["id", "name", "company_id", "archived", "totalexclvat", "phase_searchname"])
 if not isinstance(df_projects, pd.DataFrame):
     df_projects = pd.concat(list(df_projects), ignore_index=True)
 df_companies = load_data_df("companies", columns=["id", "companyname"])
@@ -49,7 +49,7 @@ if not isinstance(df_companies, pd.DataFrame):
     df_companies = pd.concat(list(df_companies), ignore_index=True)
 
 # Filter niet-gearchiveerde projecten
-df_projects = df_projects[df_projects["archived"] == False]
+df_projects = df_projects[df_projects["phase_searchname"].isin(["Voorbereiding", "Uitvoering"])]
 
 # Zorg dat totalexclvat numeriek is voor projecten
 df_projects["totalexclvat"] = pd.to_numeric(df_projects["totalexclvat"], errors="coerce")
