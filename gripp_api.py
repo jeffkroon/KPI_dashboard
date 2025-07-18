@@ -578,6 +578,38 @@ def fetch_gripp_tasktypes():
     return cached_fetch("gripp_tasktypes", fetch, force_refresh=FORCE_REFRESH)
 
 
+def fetch_gripp_projectphases():
+    def fetch():
+        all_rows = []
+        start = 0
+        max_results = 100
+        watchdog = 50
+        while watchdog > 0:
+            payload = [{
+                "id": 1,
+                "method": "projectphase.get",
+                "params": [
+                    [],
+                    {"paging": {"firstresult": start, "maxresults": max_results}}
+                ]
+            }]
+            pytime.sleep(0.1)
+            response = post_with_rate_limit_handling(BASE_URL, headers=HEADERS, json=payload)
+            remaining = response.headers.get("X-RateLimit-Remaining")
+            if remaining is not None:
+                print(f"📉 Remaining requests: {remaining}")
+            response.raise_for_status()
+            data = response.json()
+            rows = data[0].get("result", {}).get("rows", [])
+            all_rows.extend(rows)
+            if not data[0]["result"].get("more_items_in_collection", False):
+                break
+            start = data[0]["result"].get("next_start", start + max_results)
+            watchdog -= 1
+        return pd.DataFrame(all_rows)
+    return cached_fetch("gripp_projectphases", fetch, force_refresh=FORCE_REFRESH)
+
+
 def print_projectlines_for_company(company_name: str, projects_df: pd.DataFrame, projectlines_df: pd.DataFrame):
     """
     Print een overzicht van alle projectlines voor alle projecten van een bepaalde company.
@@ -834,6 +866,14 @@ def main():
 
     # Ophalen en sanitiseren van datasets (alle fetch en clean eerst, vóór verwerking)
     projects_raw = fetch_gripp_projects()
+    # Flatten dict-kolommen in projects_raw
+    for col in projects_raw.columns:
+        if projects_raw[col].apply(lambda x: isinstance(x, dict)).any():
+            expanded = projects_raw[col].apply(pd.Series)
+            expanded.columns = [f"{col}_{subcol}" for subcol in expanded.columns]
+            projects_raw = projects_raw.drop(columns=[col]).join(expanded)
+    print("[DEBUG] Eerste 3 projecten:")
+    print(projects_raw.head(3).to_dict())
     employees_raw = fetch_gripp_employees()
     companies_raw = fetch_gripp_companies()
     tasktypes_raw = fetch_gripp_tasktypes()
@@ -921,6 +961,8 @@ def main():
         safe_to_sql(combined_projectlines.drop_duplicates(subset="id"), "projectlines_per_company")
     if datasets.get("gripp_projects") is not None:
         cleaned_projects = datasets["gripp_projects"].drop_duplicates(subset="id")
+        print("[DEBUG] Voor safe_to_sql: eerste 10 projecten met phase_searchname:")
+        print(cleaned_projects[['id', 'name', 'phase_searchname']].head(10))
         safe_to_sql(cleaned_projects, "projects")
     if datasets.get("gripp_employees") is not None:
         safe_to_sql(datasets["gripp_employees"].drop_duplicates(subset="id"), "employees")
@@ -957,6 +999,17 @@ def main():
         safe_to_sql(invoices_df, "invoices")
     #if datasets.get("gripp_invoicelines") is not None:
         #safe_to_sql(datasets["gripp_invoicelines"].drop_duplicates(subset="id"), "invoicelines")
+
+    # Debug: inspecteer de inhoud en het type van de kolom 'phase_id' en 'phase_searchname'
+    print("[DEBUG] Eerste 10 waarden van 'phase_id' en 'phase_searchname':")
+    print(projects_raw[['phase_id', 'phase_searchname']].head(10))
+    print("[DEBUG] Type-overzicht van 'phase_id':")
+    print(projects_raw['phase_id'].apply(type).value_counts())
+    # Verrijk projects_raw met phase_searchname (direct uit dict)
+    if (not projects_raw.empty) and ('phase' in projects_raw.columns):
+        projects_raw['phase_searchname'] = projects_raw['phase'].apply(
+            lambda x: x.get('searchname') if isinstance(x, dict) else None
+        )
 
 if __name__ == "__main__":
     main()
