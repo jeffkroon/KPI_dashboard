@@ -77,7 +77,7 @@ if not isinstance(df_uren, pd.DataFrame):
 # df_employees = load_data("employees") # This line is removed as df_employees is now loaded globally
 
 # Pagina titel
-st.title("📋 Project Overzicht met Medewerker Uren")
+st.title("📋 Opdracht Overzicht met Medewerker Uren")
 
 # --- Filters bovenaan ---
 # Project opties en standaard selectie
@@ -86,15 +86,15 @@ project_options = df_projects['name'].unique().tolist()
 default_projects = project_options[:10]
 
 # Checkbox voor 'Selecteer alles'
-select_all_projects = st.checkbox("Selecteer alle projecten", value=False)
+select_all_projects = st.checkbox("Selecteer alle opdrachten", value=False)
 if select_all_projects:
     selected_projects = project_options
 else:
     selected_projects = st.multiselect(
-        "Selecteer één of meerdere projecten",
+        "Selecteer één of meerdere opdrachten",
         options=project_options,
         default=default_projects,
-        help="Gebruik het zoekveld om projecten te vinden"
+        help="Gebruik het zoekveld om opdrachten te vinden"
     )
 # Filter uren op geselecteerde projecten (via offerprojectbase_id)
 project_ids = pd.Series(df_projects[df_projects['name'].isin(selected_projects)]['id']).to_list()
@@ -113,7 +113,7 @@ totale_uren = df_uren_filtered['amount'].sum()
 
 # KPI's tonen
 col1, col2, col3, col4 = st.columns(4)
-col1.metric("Aantal geselecteerde projecten", aantal_projecten)
+col1.metric("Aantal geselecteerde opdrachten", aantal_projecten)
 col2.metric("Totale projectomzet (excl. btw)", f"€ {totale_omzet:,.2f}")
 col3.metric("Aantal medewerkers betrokken", aantal_medewerkers)
 col4.metric("Totale uren geschreven", f"{totale_uren:.2f}")
@@ -127,10 +127,10 @@ if aantal_medewerkers > 0:
     # Totale uren per medewerker over alle projecten (voor percentage)
     totale_uren_per_medewerker = df_uren.groupby('employee_id')['amount'].sum().to_dict()
     ids = pd.Series(df_medewerkers_filtered['id'])
-    df_medewerkers_filtered['Uren aan geselecteerde projecten'] = ids.apply(lambda x: uren_per_medewerker.get(x, 0))
+    df_medewerkers_filtered['Uren aan geselecteerde opdrachten'] = ids.apply(lambda x: uren_per_medewerker.get(x, 0))
     df_medewerkers_filtered['Totale uren'] = ids.apply(lambda x: totale_uren_per_medewerker.get(x, 0))
     # Zorg dat Percentage uren een Series is voor replace/fillna
-    perc_uren = pd.Series(df_medewerkers_filtered['Uren aan geselecteerde projecten']) / pd.Series(df_medewerkers_filtered['Totale uren']).replace(0, np.nan)
+    perc_uren = pd.Series(df_medewerkers_filtered['Uren aan geselecteerde opdrachten']) / pd.Series(df_medewerkers_filtered['Totale uren']).replace(0, np.nan)
     perc_uren = perc_uren.astype(float).fillna(0) * 100
     df_medewerkers_filtered['Percentage uren'] = perc_uren
     df_medewerkers_filtered['fullname'] = df_medewerkers_filtered['firstname'] + " " + df_medewerkers_filtered['lastname']
@@ -141,21 +141,21 @@ if aantal_medewerkers > 0:
     else:
         df_medewerkers_filtered['Functie'] = "Onbekend"
     
-    df_display = df_medewerkers_filtered[['fullname', 'Uren aan geselecteerde projecten', 'Percentage uren', 'Functie']].copy()
+    df_display = df_medewerkers_filtered[['fullname', 'Uren aan geselecteerde opdrachten', 'Percentage uren', 'Functie']].copy()
     if not isinstance(df_display, pd.DataFrame):
         df_display = pd.DataFrame(df_display)
-    df_display = df_display.sort_values(by='Uren aan geselecteerde projecten', ascending=False).copy()
+    df_display = df_display.sort_values(by='Uren aan geselecteerde opdrachten', ascending=False).copy()
     
-    st.subheader("👷 Medewerkers die aan geselecteerde projecten werken")
+    st.subheader("👷 Medewerkers die aan geselecteerde opdrachten werken")
     st.dataframe(df_display.style.format({
-        'Uren aan geselecteerde projecten': "{:,.2f}",
+        'Uren aan geselecteerde opdrachten': "{:,.2f}",
         'Percentage uren': "{:.1f} %"
     }))
 else:
-    st.info("Geen medewerkers gevonden die uren hebben geschreven aan de geselecteerde projecten.")
+    st.info("Geen medewerkers gevonden die uren hebben geschreven aan de geselecteerde opdrachten.")
 
 # Optionele filter op medewerkers binnen geselecteerde projecten
-st.subheader("Filter medewerkers binnen geselecteerde projecten")
+st.subheader("Filter medewerkers binnen geselecteerde opdrachten")
 medewerkers = pd.Series(df_employees['firstname']).unique().tolist()
 selected_medewerkers = st.multiselect("Selecteer medewerker(s)", medewerkers)
 medewerker_ids_filter = pd.Series(df_employees[df_employees['firstname'].isin(selected_medewerkers)]['id']).to_list()

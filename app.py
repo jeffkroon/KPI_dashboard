@@ -78,7 +78,7 @@ col1, col2, col3, col4 = st.columns(4)
 with col1:
     st.metric("🏢 Bedrijven", len(df_companies))
 with col2:
-    st.metric("📋 Projecten", len(df_projects_raw))
+    st.metric("📋 Opdrachten", len(df_projects_raw))
 with col3:
     st.metric("📄 Facturen", len(df_invoices))
 with col4:
