@@ -50,6 +50,7 @@ if not isinstance(df_companies, pd.DataFrame):
 
 # Filter niet-gearchiveerde projecten
 df_projects = df_projects[(df_projects["archived"] == False) & (df_projects["phase_searchname"].isin(["Voorbereiding", "Uitvoering"]))]
+print(f"[DEBUG] Aantal projecten Voorbereiding/Uitvoering (niet-gearchiveerd): {len(df_projects)}")
 
 # Zorg dat totalexclvat numeriek is voor projecten
 df_projects["totalexclvat"] = pd.to_numeric(df_projects["totalexclvat"], errors="coerce")
