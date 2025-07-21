@@ -122,7 +122,8 @@ date_range = st.date_input(
 )
 start_date, end_date = date_range
 
-project_options = df_projects[['id', 'name']].to_dict('records')
+# After merging with companies, use the correct column for project id
+project_options = df_projects[['id_x', 'name']].rename(columns={'id_x': 'id'}).to_dict('records')
 default_projects = project_options[:10]
 select_all_projects = st.checkbox("Selecteer alle opdrachten", value=False)
 selected_projects = project_options if select_all_projects else st.multiselect(
