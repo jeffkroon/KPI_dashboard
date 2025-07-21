@@ -9,6 +9,7 @@ from utils.auth import require_login, require_email_whitelist
 from utils.allowed_emails import ALLOWED_EMAILS
 from utils.data_loaders import load_data_df
 from datetime import datetime, timedelta
+import json
 
 st.set_page_config(
     page_title="Werkverdeling",
@@ -55,19 +56,21 @@ def load_base_data():
 
         df_companies = load_data_df("companies", columns=["id", "companyname"])
         df_projects = df_projects.merge(df_companies[['id', 'companyname']], left_on='company_id', right_on='id', how='left')
-        df_projects = df_projects.rename(columns={'id_x': 'id'})
+        df_projects = df_projects.rename(columns={'id_x': 'project_id'})
 
         df_tasktypes = load_data_df("tasktypes", columns=["id", "searchname"])
         
         # Process tasks to get tasktype_id
         df_tasks = load_data_df("tasks", columns=["id", "type"])
         def extract_tasktype_id(type_data):
-            if pd.isna(type_data): return None
+            if pd.isna(type_data):
+                return None
             if isinstance(type_data, str):
                 try:
-                    data = eval(type_data)
+                    data = json.loads(type_data)
                     return data.get('id') if isinstance(data, dict) else None
-                except: return None
+                except:
+                    return None
             return type_data.get('id') if isinstance(type_data, dict) else None
         df_tasks['tasktype_id'] = df_tasks['type'].apply(extract_tasktype_id)
         df_tasks = df_tasks[['id', 'tasktype_id']].dropna()
@@ -124,16 +127,16 @@ date_range = st.date_input(
 start_date, end_date = date_range
 
 # After merging with companies, use the correct column for project id
-project_options = df_projects[['id', 'name']].to_dict('records')
+project_options = df_projects[['project_id', 'name']].to_dict('records')
 default_projects = project_options[:10]
 select_all_projects = st.checkbox("Selecteer alle opdrachten", value=False)
 selected_projects = project_options if select_all_projects else st.multiselect(
     "Selecteer één of meerdere opdrachten",
     options=project_options,
     default=default_projects,
-    format_func=lambda x: f"{x['name']} (ID: {x['id']})"
+    format_func=lambda x: f"{x['name']} (ID: {x['project_id']})"
 )
-project_ids = [p['id'] for p in selected_projects]
+project_ids = [p['project_id'] for p in selected_projects]
 
 # --- DATA AGGREGATION (DATABASE-SIDE) ---
 if project_ids:
@@ -152,7 +155,7 @@ if project_ids:
 
     # --- KPIs ---
     aantal_projecten = len(project_ids)
-    totale_omzet = df_projects[df_projects['id'].isin(project_ids)]['totalexclvat'].sum()
+    totale_omzet = df_projects[df_projects['project_id'].isin(project_ids)]['totalexclvat'].sum()
     aantal_medewerkers = len(df_total_hours_per_employee)
     totale_uren = df_total_hours_per_employee['total_hours'].sum()
 
@@ -225,12 +228,12 @@ employee_ids_filter = df_employees[df_employees['fullname'].isin(geselecteerde_m
 if employee_ids_filter:
     with st.spinner("Laden van medewerker details..."):
         query = f"""
-        SELECT to_char(date_date, 'YYYY-MM') as maand, employee_id, task_id, SUM(amount) as total_hours
+        SELECT to_char(date_date::date, 'YYYY-MM') as maand, employee_id, task_id, SUM(amount) as total_hours
         FROM urenregistratie
         WHERE status_searchname = 'Gefiatteerd'
         AND date_date BETWEEN '{start_date}' AND '{end_date}'
         AND employee_id IN ({','.join(map(str, employee_ids_filter))})
-        GROUP BY 1, 2, 3
+        GROUP BY maand, employee_id, task_id
         """
         df_detail = pd.read_sql(query, engine)
 
@@ -258,5 +261,4 @@ st.markdown("""
     Dunion Dashboard © 2024
 </div>
 """, unsafe_allow_html=True)
-    
     
