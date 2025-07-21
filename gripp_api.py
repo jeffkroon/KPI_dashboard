@@ -589,31 +589,40 @@ def fetch_gripp_tasktypes():
 
 
 def fetch_gripp_tasks():
-    """Haalt alle taken op uit de Gripp API."""
+    """Haalt alleen de benodigde kolommen voor alle taken op uit de Gripp API."""
     def fetch():
         all_rows = []
         start = 0
         max_results = 100
-        watchdog = 200  # Taken kunnen er veel zijn
+        watchdog = 1000  # Verhoogd voor de zeer grote tasks tabel
+        print("🚀 Starting to fetch the large 'tasks' table. This may take a while and will pause to respect API rate limits...")
         while watchdog > 0:
             payload = [{
                 "id": 1,
                 "method": "task.get",
                 "params": [
                     [],
-                    {"paging": {"firstresult": start, "maxresults": max_results}}
+                    {
+                        "paging": {"firstresult": start, "maxresults": max_results},
+                        "fields": ["id", "type"]  # OPTIMALISATIE: vraag alleen benodigde kolommen op
+                    }
                 ]
             }]
-            pytime.sleep(0.1)
+            pytime.sleep(0.2) # Extra vertraging om burst limit te voorkomen
             response = post_with_rate_limit_handling(BASE_URL, headers=HEADERS, json=payload)
             response.raise_for_status()
             data = response.json()
             rows = data[0].get("result", {}).get("rows", [])
+            
+            if rows:
+                print(f"   - Fetched batch of {len(rows)} tasks... (Total fetched so far: {len(all_rows) + len(rows)})")
+            
             all_rows.extend(rows)
             if not data[0]["result"].get("more_items_in_collection", False):
                 break
             start = data[0]["result"].get("next_start", start + max_results)
             watchdog -= 1
+        print("✅ Finished fetching all tasks.")
         return pd.DataFrame(all_rows)
     return cached_fetch("gripp_tasks", fetch, force_refresh=FORCE_REFRESH)
 
@@ -734,6 +743,20 @@ def safe_to_sql(df: pd.DataFrame, table_name: str):
         raise ValueError("POSTGRES_URL is not set")
     temp_engine = create_engine(f"{POSTGRES_URL}?options=-c statement_timeout=600000", pool_pre_ping=True, pool_recycle=300)
     
+    # === FIX: Controleer of de doeltabel bestaat en maak deze aan indien nodig ===
+    with temp_engine.connect() as connection:
+        inspector = inspect(connection)
+        if not inspector.has_table(table_name):
+            print(f"⚠️ Hoofdtabel '{table_name}' bestaat niet. Deze wordt nu aangemaakt...")
+            # Maak de tabel aan op basis van de DataFrame-structuur (alleen de header)
+            df.head(0).to_sql(table_name, connection, if_exists='replace', index=False)
+            print(f"✅ Hoofdtabel '{table_name}' is aangemaakt.")
+            staging_table = f"{table_name}_staging"
+            print(f"⚠️ Staging table '{staging_table}' wordt ook aangemaakt omdat '{table_name}' nieuw is.")
+            connection.execute(text(f"CREATE TABLE IF NOT EXISTS {staging_table} (LIKE {table_name} INCLUDING ALL);"))
+            print(f"✅ Staging table '{staging_table}' aangemaakt.")
+    # === EINDE FIX ===
+
     # Voor grote datasets (>10.000 records): verwerk in batches
     batch_size = 2000  # Verkleind van 5000 naar 2000 om timeouts te voorkomen
     if len(df) > batch_size:
@@ -765,6 +788,15 @@ def _process_batch(df: pd.DataFrame, table_name: str, temp_engine):
             # ✅ Haal kolommen op uit staging table
             with temp_engine.begin() as conn:
                 staging_table = f"{table_name}_staging"
+                
+                # Controleer of hoofdtabel bestaat
+                inspector = inspect(conn)
+                if not inspector.has_table(table_name):
+                    print(f"⚠️ Hoofdtabel '{table_name}' bestaat niet. Deze wordt nu aangemaakt...")
+                    # Maak de hoofdtabel aan op basis van de DataFrame-structuur
+                    df.head(0).to_sql(table_name, conn, if_exists='replace', index=False)
+                    print(f"✅ Hoofdtabel '{table_name}' is aangemaakt.")
+                
                 # Zorg dat staging table bestaat (LIKE main table)
                 conn.execute(text(f"CREATE TABLE IF NOT EXISTS {staging_table} (LIKE {table_name} INCLUDING ALL);"))
                 try:
@@ -1018,27 +1050,42 @@ def main():
 
     # Converteer date kolommen vóór database-write
     if combined_projectlines is not None:
+        print("⏳ Writing 'projectlines_per_company' to the database...")
         combined_projectlines = convert_date_columns(combined_projectlines)
         print(f"🔢 [DEBUG] Aantal projectlines die naar de database gaan: {len(combined_projectlines.drop_duplicates(subset='id'))}")
         safe_to_sql(combined_projectlines.drop_duplicates(subset="id"), "projectlines_per_company")
+        print("✅ Finished writing 'projectlines_per_company'.")
     if datasets.get("gripp_projects") is not None:
+        print("⏳ Writing 'projects' to the database...")
         cleaned_projects = datasets["gripp_projects"].drop_duplicates(subset="id")
         print("[DEBUG] Voor safe_to_sql: eerste 10 projecten met phase_searchname:")
         print(cleaned_projects[['id', 'name', 'phase_searchname']].head(10))
         safe_to_sql(cleaned_projects, "projects")
+        print("✅ Finished writing 'projects'.")
     if datasets.get("gripp_employees") is not None:
+        print("⏳ Writing 'employees' to the database...")
         safe_to_sql(datasets["gripp_employees"].drop_duplicates(subset="id"), "employees")
+        print("✅ Finished writing 'employees'.")
     if datasets.get("gripp_companies") is not None:
+        print("⏳ Writing 'companies' to the database...")
         safe_to_sql(datasets["gripp_companies"].drop_duplicates(subset="id"), "companies")
+        print("✅ Finished writing 'companies'.")
     if datasets.get("gripp_tasktypes") is not None:
+        print("⏳ Writing 'tasktypes' to the database...")
         safe_to_sql(datasets["gripp_tasktypes"].drop_duplicates(subset="id"), "tasktypes")
+        print("✅ Finished writing 'tasktypes'.")
     if datasets.get("gripp_tasks") is not None: # <-- NIEUW
+        print("⏳ Writing 'tasks' to the database...")
         safe_to_sql(datasets["gripp_tasks"].drop_duplicates(subset="id"), "tasks") # <-- NIEUW
+        print("✅ Finished writing 'tasks'.")
     if datasets.get("gripp_hours_data") is not None:
+        print("⏳ Writing 'urenregistratie' to the database...")
         hours_data = convert_date_columns(datasets["gripp_hours_data"].drop_duplicates(subset="id"))
         safe_to_sql(hours_data, "urenregistratie")
+        print("✅ Finished writing 'urenregistratie'.")
     
     if datasets.get("gripp_invoices") is not None:
+        print("⏳ Writing 'invoices' to the database...")
         invoices_df = datasets["gripp_invoices"].drop_duplicates(subset="id").copy()
 
         # Zet geneste kolommen in JSON (veilige serialisatie)
@@ -1061,6 +1108,7 @@ def main():
 
         # Gebruik safe_to_sql voor consistente verwerking
         safe_to_sql(invoices_df, "invoices")
+        print("✅ Finished writing 'invoices'.")
     #if datasets.get("gripp_invoicelines") is not None:
         #safe_to_sql(datasets["gripp_invoicelines"].drop_duplicates(subset="id"), "invoicelines")
 

@@ -41,37 +41,26 @@ engine = create_engine(POSTGRES_URL)
 df_employees = load_data_df("employees", columns=["id", "firstname", "lastname"])
 if not isinstance(df_employees, pd.DataFrame):
     df_employees = pd.concat(list(df_employees), ignore_index=True)
-df_employees['fullname'] = df_employees['firstname'] + ' ' + df_employees['lastname']
+df_employees['fullname'] = df_employees['firstname'] + " " + df_employees['lastname']
 
-df_uren = load_data_df("urenregistratie", columns=["id", "employee_id", "task_id", "amount", "date_date"])
-if not isinstance(df_uren, pd.DataFrame):
-    df_uren = pd.concat(list(df_uren), ignore_index=True)
+df_projects = load_data_df("projects", columns=["id", "name", "company_id", "archived", "totalexclvat", "phase_searchname"])
+if not isinstance(df_projects, pd.DataFrame):
+    df_projects = pd.concat(list(df_projects), ignore_index=True)
 
+df_companies = load_data_df("companies", columns=["id", "companyname"])
+if not isinstance(df_companies, pd.DataFrame):
+    df_companies = pd.concat(list(df_companies), ignore_index=True)
+    
 df_tasks = load_data_df("tasks", columns=["id", "type"])
 if not isinstance(df_tasks, pd.DataFrame):
     df_tasks = pd.concat(list(df_tasks), ignore_index=True)
 df_tasks['tasktype_id'] = df_tasks['type'].apply(lambda x: x.get('id') if isinstance(x, dict) else None)
-df_tasks['tasktype_searchname'] = df_tasks['type'].apply(lambda x: x.get('searchname') if isinstance(x, dict) else None)
 
 df_tasktypes = load_data_df("tasktypes", columns=["id", "searchname"])
 if not isinstance(df_tasktypes, pd.DataFrame):
     df_tasktypes = pd.concat(list(df_tasktypes), ignore_index=True)
 
-# Koppel uren aan tasks en tasktypes
-df_uren = df_uren.merge(df_tasks[['id', 'tasktype_id', 'tasktype_searchname']], left_on='task_id', right_on='id', how='left')
-df_uren = df_uren.merge(df_tasktypes.rename(columns={'id': 'tasktype_id', 'searchname': 'tasktype_general_name'}), on='tasktype_id', how='left')
-
-# Koppel uren aan employees
-df_uren = df_uren.merge(df_employees[['id', 'fullname']], left_on='employee_id', right_on='id', how='left', suffixes=('', '_employee'))
-
-# Voeg maandkolom toe
-df_uren['maand'] = pd.to_datetime(df_uren['date_date']).dt.to_period('M').astype(str)
-
 # Filter niet-gearchiveerde projecten
-df_projects = load_data_df("projects", columns=["id", "name", "company_id", "archived", "totalexclvat", "phase_searchname"])
-if not isinstance(df_projects, pd.DataFrame):
-    df_projects = pd.concat(list(df_projects), ignore_index=True)
-df_projects['fullname'] = df_projects['firstname'] + " " + df_projects['lastname']
 df_projects = df_projects[(df_projects["archived"] == False) & (df_projects["phase_searchname"].isin(["Voorbereiding", "Uitvoering"]))]
 print(f"[DEBUG] Aantal projecten Voorbereiding/Uitvoering (niet-gearchiveerd): {len(df_projects)}")
 
@@ -94,16 +83,19 @@ else:
 
 # Data ophalen met filters
 # Voor urenregistratie:
-df_uren = load_data_df("urenregistratie", columns=["id", "offerprojectbase_id", "employee_id", "amount", "task_id", "task_searchname", "date_date", "status_searchname"], where=f"status_searchname = 'Gefiatteerd' AND date_date::timestamp BETWEEN '{start_date}' AND '{end_date}'")
+df_uren = load_data_df("urenregistratie", columns=["id", "offerprojectbase_id", "employee_id", "task_id", "amount", "task_searchname", "date_date", "status_searchname"], where=f"status_searchname = 'Gefiatteerd' AND date_date::timestamp BETWEEN '{start_date}' AND '{end_date}'")
 if not isinstance(df_uren, pd.DataFrame):
     df_uren = pd.concat(list(df_uren), ignore_index=True)
 
-# Koppel uren aan algemene taaktypes via de 'searchname'
-df_uren = df_uren.merge(
-    df_tasktypes.rename(columns={'id': 'task_id', 'searchname': 'tasktype_general_name'}),
-    on='task_id',
-    how='left'
-)
+# Koppel uren aan tasks en tasktypes
+df_uren = df_uren.merge(df_tasks[['id', 'tasktype_id']], left_on='task_id', right_on='id', how='left')
+df_uren = df_uren.merge(df_tasktypes.rename(columns={'id': 'tasktype_id', 'searchname': 'tasktype_general_name'}), on='tasktype_id', how='left')
+
+# Koppel uren aan employees
+df_uren = df_uren.merge(df_employees[['id', 'fullname']], left_on='employee_id', right_on='id', how='left', suffixes=('', '_employee'))
+
+# Voeg maandkolom toe
+df_uren['maand'] = pd.to_datetime(df_uren['date_date']).dt.to_period('M').astype(str)
 
 # Voor andere tabellen:
 # df_employees = load_data("employees") # This line is removed as df_employees is now loaded globally
