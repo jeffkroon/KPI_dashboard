@@ -10,6 +10,7 @@ from utils.allowed_emails import ALLOWED_EMAILS
 from utils.data_loaders import load_data_df
 from datetime import datetime, timedelta
 import json
+import ast
 
 st.set_page_config(
     page_title="Werkverdeling",
@@ -67,7 +68,7 @@ def load_base_data():
                 return None
             if isinstance(type_data, str):
                 try:
-                    data = json.loads(type_data)
+                    data = ast.literal_eval(type_data)
                     return data.get('id') if isinstance(data, dict) else None
                 except:
                     return None
@@ -128,7 +129,16 @@ start_date, end_date = date_range
 
 # After merging with companies, use the correct column for project id
 project_options = df_projects[['project_id', 'name']].to_dict('records')
-default_projects = project_options[:10]
+
+# --- Define Default Projects ---
+# Use a list of known active projects instead of the 10 most recent ones
+known_active_project_ids = [342, 3368, 3101, 751, 335] 
+default_projects = [p for p in project_options if p['project_id'] in known_active_project_ids]
+
+# Fallback in case these projects aren't found in the current list
+if not default_projects:
+    default_projects = project_options[:5]
+
 select_all_projects = st.checkbox("Selecteer alle opdrachten", value=False)
 selected_projects = project_options if select_all_projects else st.multiselect(
     "Selecteer één of meerdere opdrachten",
