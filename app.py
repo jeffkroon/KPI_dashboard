@@ -287,6 +287,61 @@ fig_uren = px.bar(
 fig_uren.update_layout(yaxis={'categoryorder':'total ascending'}, height=400, margin=dict(l=40, r=20, t=60, b=40))
 st.plotly_chart(fig_uren, use_container_width=True)
 
+# --- OVERSCHRIJDINGEN PER PROJECT (offerprojectbase_id) ---
+
+# Zorg dat amount en amountwritten numeriek zijn
+for col in ["amount", "amountwritten"]:
+    if col in df_projectlines.columns:
+        df_projectlines[col] = pd.to_numeric(df_projectlines[col], errors="coerce")
+
+# Groepeer per project (offerprojectbase_id)
+df_proj_agg = df_projectlines.groupby(
+    ["offerprojectbase_id", "bedrijf_id"], dropna=False
+).agg(
+    geplande_uren=("amount", "sum"),
+    geschreven_uren=("amountwritten", "sum")
+).reset_index()
+
+# Voeg projectnaam toe
+if "id" in df_projects_raw.columns and "name" in df_projects_raw.columns:
+    df_proj_agg = df_proj_agg.merge(
+        df_projects_raw[["id", "name"]], left_on="offerprojectbase_id", right_on="id", how="left"
+    )
+
+# Voeg bedrijfsnaam toe
+if "id" in df_companies.columns and "companyname" in df_companies.columns:
+    df_proj_agg = df_proj_agg.merge(
+        df_companies[["id", "companyname"]], left_on="bedrijf_id", right_on="id", how="left", suffixes=("", "_bedrijf")
+    )
+
+# Bereken overschrijding
+df_proj_agg["overschrijding_uren"] = df_proj_agg["geschreven_uren"] - df_proj_agg["geplande_uren"]
+df_proj_agg["overschrijding_pct"] = (df_proj_agg["overschrijding_uren"] / df_proj_agg["geplande_uren"]) * 100
+
+# Filter alleen projecten met overschrijding
+df_overschrijding = df_proj_agg[df_proj_agg["overschrijding_uren"] > 0].copy()
+df_overschrijding = df_overschrijding.sort_values("overschrijding_uren", ascending=False)
+
+# Toon tabel
+st.markdown("### 🚨 Projecten met overschrijding van geplande uren")
+st.dataframe(
+    df_overschrijding[["companyname", "name", "geplande_uren", "geschreven_uren", "overschrijding_uren", "overschrijding_pct"]],
+    use_container_width=True
+)
+
+# Bar chart top 10
+if not df_overschrijding.empty:
+    top10 = df_overschrijding.head(10)
+    fig = px.bar(
+        top10,
+        x="name",
+        y="overschrijding_uren",
+        color="companyname",
+        labels={"name": "Project", "overschrijding_uren": "Overschrijding (uren)", "companyname": "Bedrijf"},
+        title="Top 10 projecten met grootste overschrijding"
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
 
 st.markdown("""
 <hr style="margin-top: 2em; margin-bottom: 0.5em; border: none; border-top: 1px solid #eee;" />

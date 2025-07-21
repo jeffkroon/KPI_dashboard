@@ -354,28 +354,6 @@ if project_ids:
         )
         fig_trend.update_layout(xaxis_title="Maand", yaxis_title="Uren", legend_title="Medewerker")
         st.plotly_chart(fig_trend, use_container_width=True)
-
-    # --- Section 5: Overzicht Top 5 Medewerkers per Taaktype ---
-    with st.container(border=True):
-        st.header("🏅 Top 5 Medewerkers per Taaktype")
-        df_top5 = df_uren.copy()
-        df_top5 = df_top5.merge(df_tasks[['task_id', 'task_name']], left_on='task_id', right_on='task_id', how='left')
-        df_top5 = df_top5.merge(df_employees[['id', 'fullname']], left_on='employee_id', right_on='id', how='left')
-        top5_table = []
-        for taaktype in sorted(df_top5['task_name'].dropna().unique()):
-            df_t = df_top5[df_top5['task_name'] == taaktype]
-            top5 = (
-                df_t.groupby('fullname')['amount'].sum().reset_index().sort_values('amount', ascending=False).head(5)
-            )
-            top5['Taaktype'] = taaktype
-            top5_table.append(top5)
-        if top5_table:
-            df_top5_concat = pd.concat(top5_table)
-            df_top5_concat = df_top5_concat[['Taaktype', 'fullname', 'amount']].rename(columns={'fullname': 'Medewerker', 'amount': 'Uren'})
-            st.dataframe(df_top5_concat, use_container_width=True)
-        else:
-            st.info("Geen data voor top 5 medewerkers per taaktype.")
-
     # --- Section 6: Taaktypeverdeling per Medewerker ---
     with st.container(border=True):
         st.header("🧑‍💻 Taaktypeverdeling per Medewerker")
