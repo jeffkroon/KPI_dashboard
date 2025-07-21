@@ -67,13 +67,20 @@ def load_base_data():
                 except (ValueError, SyntaxError): return None
             return type_data.get('id') if isinstance(type_data, dict) else None
         
+        # After merging with tasktypes, print columns and robustly rename
         df_tasks = df_tasks_raw.copy()
         df_tasks['tasktype_id'] = df_tasks['type'].apply(extract_tasktype_id)
         df_tasks = df_tasks[['id', 'tasktype_id']].dropna()
         df_tasks['tasktype_id'] = pd.to_numeric(df_tasks['tasktype_id'], downcast='integer', errors='coerce')
-        # Join with tasktypes to get the name
-        df_tasks = df_tasks.merge(df_tasktypes, left_on='tasktype_id', right_on='id')
-        df_tasks = df_tasks.rename(columns={'id_x': 'task_id', 'searchname': 'task_name'})
+        df_tasks = df_tasks.merge(df_tasktypes, left_on='tasktype_id', right_on='id', suffixes=('_task', '_tasktype'))
+        print('df_tasks columns after merge:', df_tasks.columns)
+        # Robustly rename columns
+        for col in ['id_task', 'id_x', 'id']:
+            if col in df_tasks.columns:
+                df_tasks = df_tasks.rename(columns={col: 'task_id'})
+                break
+        if 'searchname' in df_tasks.columns:
+            df_tasks = df_tasks.rename(columns={'searchname': 'task_name'})
 
 
         # Filter for active projects only
