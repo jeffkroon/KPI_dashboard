@@ -233,20 +233,28 @@ if project_ids:
     with st.expander("Bekijk Gedetailleerd Overzicht van de Laatste 1000 Urenregels"):
         DETAIL_LIMIT = 1000
         detail_query = f"""
-        SELECT u.date_date, e.fullname, p.name as project_name, t.task_name, u.amount, u.description
+        SELECT u.date_date, u.employee_id, u.offerprojectbase_id, u.task_id, u.amount, u.description
         FROM urenregistratie u
-        LEFT JOIN employees e ON u.employee_id = e.id
-        LEFT JOIN projects p ON u.offerprojectbase_id = p.project_id
-        LEFT JOIN tasks t ON u.task_id = t.task_id
         WHERE u.status_searchname = 'Gefiatteerd' AND {project_filter} AND {date_filter}
         ORDER BY u.date_date DESC
         LIMIT {DETAIL_LIMIT}
         """
-        df_display = pd.read_sql(detail_query, engine)
-        st.dataframe(df_display.rename(columns={
-            'date_date': 'Datum', 'fullname': 'Medewerker', 'project_name': 'Project',
+        df_detail_base = pd.read_sql(detail_query, engine)
+        
+        # Merge with pre-loaded dimension tables to get the names
+        df_merged = df_detail_base.merge(df_employees, left_on='employee_id', right_on='id', how='left')
+        df_merged = df_merged.merge(df_projects, left_on='offerprojectbase_id', right_on='project_id', how='left')
+        df_merged = df_merged.merge(df_tasks, on='task_id', how='left')
+        
+        # Select and rename final columns for display
+        df_display = df_merged[[
+            'date_date', 'fullname', 'name', 'task_name', 'amount', 'description'
+        ]].rename(columns={
+            'date_date': 'Datum', 'fullname': 'Medewerker', 'name': 'Project',
             'task_name': 'Taak', 'amount': 'Uren', 'description': 'Omschrijving'
-        }), use_container_width=True)
+        })
+        
+        st.dataframe(df_display, use_container_width=True)
         if len(df_display) == DETAIL_LIMIT:
             st.warning(f"Let op: De weergave is beperkt tot de laatste {DETAIL_LIMIT} urenregels.")
 
