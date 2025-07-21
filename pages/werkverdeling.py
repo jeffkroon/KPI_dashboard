@@ -120,43 +120,62 @@ st.title("📊 Werkverdeling & Projectanalyse")
 st.markdown("Selecteer een periode en projecten om de details te bekijken.")
 
 # --- Section 1: Filters & KPIs ---
-st.header("Filters & Hoofdcijfers")
+with st.container(border=True):
+    st.header("⚙️ Filters & Hoofdcijfers")
 
-# --- Filters ---
-filter_col1, filter_col2 = st.columns([1, 2])
-with filter_col1:
-    max_date = datetime.today()
-    min_date_default = max_date - timedelta(days=30)
-    date_range = st.date_input(
-        "📅 Periode",
-        (min_date_default, max_date),
-        min_value=datetime(2020, 1, 1), # Changed to 2020
-        max_value=max_date,
-        help="Selecteer de periode die u wilt analyseren."
-    )
-    if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
-        start_date, end_date = date_range
-    else:
-        start_date, end_date = min_date_default, max_date
+    # --- Filters ---
+    filter_col1, filter_col2 = st.columns([1, 2])
+    with filter_col1:
+        max_date = datetime.today()
+        min_date_default = max_date - timedelta(days=30)
+        date_range = st.date_input(
+            "📅 Analyseperiode",
+            (min_date_default, max_date),
+            min_value=datetime(2020, 1, 1),
+            max_value=max_date,
+            help="Selecteer de periode die u wilt analyseren."
+        )
+        if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
+            start_date, end_date = date_range
+        else:
+            start_date, end_date = min_date_default, max_date
 
-with filter_col2:
-    project_options = df_projects.sort_values('name').to_dict('records')
-    known_active_project_ids = [342, 3368, 3101, 751, 335]
-    default_projects = [p for p in project_options if p['project_id'] in known_active_project_ids]
-    if not default_projects:
-        default_projects = project_options[:5]
+    with filter_col2:
+        project_options = df_projects.sort_values('name').to_dict('records')
 
-    selected_projects = st.multiselect(
-        "📂 Projecten",
-        options=project_options,
-        default=default_projects,
-        format_func=lambda x: f"{x['name']} (ID: {x['project_id']})",
-        help="Selecteer de projecten die u wilt analyseren."
-    )
-    project_ids = [p['project_id'] for p in selected_projects]
+        # Define callbacks to manipulate the session state for the multiselect
+        def select_all_projects():
+            st.session_state.werkverdeling_selected_projects = project_options
+        def deselect_all_projects():
+            st.session_state.werkverdeling_selected_projects = []
 
-# --- Dynamic Data Loading based on filters ---
-df_uren = pd.DataFrame()
+        # Initialize the session state with default projects if it's not already set
+        if 'werkverdeling_selected_projects' not in st.session_state:
+            known_active_project_ids = [342, 3368, 3101, 751, 335]
+            default_projects = [p for p in project_options if p['project_id'] in known_active_project_ids]
+            if not default_projects:
+                # Fallback to the first 5 projects if the known active ones aren't found
+                default_projects = project_options[:5]
+            st.session_state.werkverdeling_selected_projects = default_projects
+
+        # The multiselect widget's state is now controlled via session_state
+        selected_projects = st.multiselect(
+            "📂 Projecten",
+            options=project_options,
+            key='werkverdeling_selected_projects',
+            format_func=lambda x: f"{x['name']} (ID: {x['project_id']})",
+            help="Selecteer de projecten die u wilt analyseren."
+        )
+        
+        # Add the buttons to control the selection
+        b_col1, b_col2, _ = st.columns([1, 1, 2])
+        with b_col1:
+            st.button("Selecteer Alles", on_click=select_all_projects, use_container_width=True)
+        with b_col2:
+            st.button("Deselecteer Alles", on_click=deselect_all_projects, use_container_width=True)
+
+        project_ids = [p['project_id'] for p in selected_projects]
+# Separate block for dynamic content
 if project_ids:
     # --- Perform Aggregations on DB side ---
     date_filter = f"date_date BETWEEN '{start_date.strftime('%Y-%m-%d')}' AND '{end_date.strftime('%Y-%m-%d')}'"
@@ -194,90 +213,168 @@ if project_ids:
         df_task_hours_agg = pd.read_sql(task_hours_query, engine)
         df_task_hours = df_task_hours_agg.merge(df_tasks, on='task_id')
 
-    # --- KPIs ---
-    st.markdown("---")
-    kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
-    total_hours = df_kpi['total_hours'] or 0
-    active_employees = df_kpi['active_employees'] or 0
-    tasks_done = df_kpi['tasks_done'] or 0
-    avg_hours_per_project = total_hours / len(project_ids) if project_ids and total_hours > 0 else 0
-    
-    kpi_col1.metric("Totaal Uren", f"{total_hours:,.2f}")
-    kpi_col2.metric("Actieve Medewerkers", active_employees)
-    kpi_col3.metric("Unieke Taken", tasks_done)
-    kpi_col4.metric("Gem. Uur/Project", f"{avg_hours_per_project:,.2f}")
+    with st.container(border=True):
+        st.markdown("##### Hoofdcijfers")
+        # --- KPIs ---
+        kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
+        total_hours = df_kpi['total_hours'] or 0
+        active_employees = df_kpi['active_employees'] or 0
+        tasks_done = df_kpi['tasks_done'] or 0
+        avg_hours_per_project = total_hours / len(project_ids) if project_ids and total_hours > 0 else 0
+        
+        kpi_col1.metric("Totaal Uren", f"{total_hours:,.2f}")
+        kpi_col2.metric("Actieve Medewerkers", active_employees)
+        kpi_col3.metric("Unieke Taken", tasks_done)
+        kpi_col4.metric("Gem. Uur/Project", f"{avg_hours_per_project:,.2f}")
+
+        # --- Data Quality & Diagnostics Expander ---
+        with st.expander("🕵️ Data Kwaliteit & Diagnostiek"):
+            st.markdown("Deze sectie controleert op mogelijke data-integriteitsproblemen binnen de huidige selectie.")
+
+            # --- Check 1: Employee Matching ---
+            st.subheader("Controle Medewerkers")
+            # Perform a left join to find hours from employees not in the main employees table
+            df_employee_check = df_employee_hours_agg.merge(df_employees, left_on='employee_id', right_on='id', how='left')
+            unmatched_employees = df_employee_check[df_employee_check['fullname'].isna()]
+
+            if not unmatched_employees.empty:
+                total_unmatched_hours = unmatched_employees['total_hours'].sum()
+                st.warning(f"⚠️ Er zijn uren van **{len(unmatched_employees)}** 'employee_id(s)' die niet in de medewerkerstabel voorkomen. Totaal **{total_unmatched_hours:,.2f}** uur wordt niet getoond in de grafiek.")
+                st.write("Uren van de volgende 'employee_id(s)' konden niet worden gekoppeld:")
+                st.dataframe(unmatched_employees[['employee_id', 'total_hours']])
+            else:
+                st.success("✅ Alle uren in de selectie zijn succesvol gekoppeld aan een bekende medewerker.")
+
+            # --- Check 2: Task & Task Type Matching ---
+            st.subheader("Controle Taken & Taaktypes")
+            # Perform a left join to find hours from tasks that couldn't be mapped to a task type
+            df_task_check = df_task_hours_agg.merge(df_tasks, on='task_id', how='left')
+            unmatched_tasks = df_task_check[df_task_check['task_name'].isna()]
+
+            if not unmatched_tasks.empty:
+                total_unmatched_hours = unmatched_tasks['total_hours'].sum()
+                st.warning(f"⚠️ Er zijn uren van **{len(unmatched_tasks)}** 'task_id(s)' die niet gekoppeld konden worden aan een taaktype. Totaal **{total_unmatched_hours:,.2f}** uur wordt niet getoond in de grafiek.")
+                st.write("Dit gebeurt meestal als een taak in de 'tasks' tabel geen (geldig) 'type' veld heeft.")
+                st.write("Uren van de volgende 'task_id(s)' konden niet worden gekoppeld:")
+                st.dataframe(unmatched_tasks[['task_id', 'total_hours']])
+            else:
+                st.success("✅ Alle uren in de selectie zijn succesvol gekoppeld aan een bekende taak met een taaktype.")
 
     # --- Section 2: Analysis of Selected Projects ---
-    st.markdown("---")
-    st.header("Analyse van Geselecteerde Projecten")
-    st.markdown("Hieronder ziet u de details van de urenverdeling voor uw selectie.")
-    sec2_col1, sec2_col2 = st.columns(2)
+    with st.container(border=True):
+        st.header("📊 Analyse van Geselecteerde Projecten")
+        st.markdown("Hieronder ziet u de details van de urenverdeling voor uw selectie.")
+        sec2_col1, sec2_col2 = st.columns(2)
 
-    with sec2_col1:
-        st.markdown("##### Uren per Medewerker")
-        fig_emp = px.bar(df_employee_hours.sort_values('total_hours', ascending=True), 
-                         x='total_hours', y='fullname', orientation='h', text_auto=True,
-                         labels={'total_hours': 'Totaal Uren', 'fullname': 'Medewerker'})
-        fig_emp.update_layout(showlegend=False)
-        st.plotly_chart(fig_emp, use_container_width=True)
+        with sec2_col1:
+            st.markdown("##### Uren per Medewerker")
+            fig_emp = px.bar(df_employee_hours.sort_values('total_hours', ascending=True), 
+                             x='total_hours', y='fullname', orientation='h', text_auto=True,
+                             labels={'total_hours': 'Totaal Uren', 'fullname': 'Medewerker'})
+            fig_emp.update_layout(showlegend=False)
+            st.plotly_chart(fig_emp, use_container_width=True)
 
-    with sec2_col2:
-        st.markdown("##### Uren per Taaktype")
-        fig_task = px.pie(df_task_hours, names='task_name', values='total_hours',
-                          hole=0.3, title="Verdeling van Uren per Taaktype",
-                          color='task_name', color_discrete_map=TASK_COLOR_MAP)
-        fig_task.update_traces(textposition='inside', textinfo='percent+label')
-        st.plotly_chart(fig_task, use_container_width=True)
+        with sec2_col2:
+            st.markdown("##### Uren per Taaktype")
+            fig_task = px.pie(df_task_hours, names='task_name', values='total_hours',
+                              hole=0.3, title="Verdeling van Uren per Taaktype",
+                              color='task_name', color_discrete_map=TASK_COLOR_MAP)
+            fig_task.update_traces(textposition='inside', textinfo='percent+label')
+            st.plotly_chart(fig_task, use_container_width=True)
 
-    # --- Detailed Table (with LIMIT) ---
-    with st.expander("Bekijk Gedetailleerd Overzicht van de Laatste 1000 Urenregels"):
-        DETAIL_LIMIT = 1000
-        detail_query = f"""
-        SELECT u.date_date, u.employee_id, u.offerprojectbase_id, u.task_id, u.amount, u.description
-        FROM urenregistratie u
-        WHERE u.status_searchname = 'Gefiatteerd' AND {project_filter} AND {date_filter}
-        ORDER BY u.date_date DESC
-        LIMIT {DETAIL_LIMIT}
-        """
-        df_detail_base = pd.read_sql(detail_query, engine)
-        
-        # Merge with pre-loaded dimension tables to get the names
-        df_merged = df_detail_base.merge(df_employees, left_on='employee_id', right_on='id', how='left')
-        df_merged = df_merged.merge(df_projects, left_on='offerprojectbase_id', right_on='project_id', how='left')
-        df_merged = df_merged.merge(df_tasks, on='task_id', how='left')
-        
-        # Select and rename final columns for display
-        df_display = df_merged[[
-            'date_date', 'fullname', 'name', 'task_name', 'amount', 'description'
-        ]].rename(columns={
-            'date_date': 'Datum', 'fullname': 'Medewerker', 'name': 'Project',
-            'task_name': 'Taak', 'amount': 'Uren', 'description': 'Omschrijving'
-        })
-        
-        st.dataframe(df_display, use_container_width=True)
-        if len(df_display) == DETAIL_LIMIT:
-            st.warning(f"Let op: De weergave is beperkt tot de laatste {DETAIL_LIMIT} urenregels.")
+        # --- Detailed Table (with LIMIT) ---
+        with st.expander("Bekijk Gedetailleerd Overzicht van de Laatste 1000 Urenregels"):
+            DETAIL_LIMIT = 1000
+            detail_query = f"""
+            SELECT u.date_date, u.employee_id, u.offerprojectbase_id, u.task_id, u.amount, u.description
+            FROM urenregistratie u
+            WHERE u.status_searchname = 'Gefiatteerd' AND {project_filter} AND {date_filter}
+            ORDER BY u.date_date DESC
+            LIMIT {DETAIL_LIMIT}
+            """
+            df_detail_base = pd.read_sql(detail_query, engine)
+            
+            # Merge with pre-loaded dimension tables to get the names
+            df_merged = df_detail_base.merge(df_employees, left_on='employee_id', right_on='id', how='left')
+            df_merged = df_merged.merge(df_projects, left_on='offerprojectbase_id', right_on='project_id', how='left')
+            df_merged = df_merged.merge(df_tasks, on='task_id', how='left')
+            
+            # Select and rename final columns for display
+            df_display = df_merged[[
+                'date_date', 'fullname', 'name', 'task_name', 'amount', 'description'
+            ]].rename(columns={
+                'date_date': 'Datum', 'fullname': 'Medewerker', 'name': 'Project',
+                'task_name': 'Taak', 'amount': 'Uren', 'description': 'Omschrijving'
+            })
+            
+            st.dataframe(df_display, use_container_width=True)
+            if len(df_display) == DETAIL_LIMIT:
+                st.warning(f"Let op: De weergave is beperkt tot de laatste {DETAIL_LIMIT} urenregels.")
 
     # --- Section 3: Monthly Analysis ---
-    st.markdown("---")
-    st.header("Maandelijkse Analyse per Bedrijf")
-    st.markdown("Analyseer de uren per taak voor specifieke bedrijven in een gekozen maand.")
-    
-    # ... rest of the logic for section 3
-    # This also needs to be refactored to use a server-side aggregated query.
-    # For now, this part will be based on the limited df_display to avoid crashing.
-    df_uren_detailed_limited = df_display.copy()
-    df_uren_detailed_limited['companyname'] = df_uren_detailed_limited['project_name'].map(df_projects.set_index('name')['companyname']) # Approximate companyname
-
-    if not df_uren_detailed_limited.empty:
-        df_monthly = df_uren_detailed_limited
-        df_monthly['maand'] = pd.to_datetime(df_monthly['Datum']).dt.strftime('%Y-%m')
-        # ... (rest of section 3 unchanged but now runs on limited data)
-    
-    # ... (code for section 3 continues here)
+    with st.container(border=True):
+        st.header("🏢 Maandelijkse Analyse per Bedrijf")
+        st.markdown("Analyseer de uren per taak voor specifieke bedrijven in een gekozen maand.")
         
+        # This part will be based on the limited df_display to avoid crashing.
+        df_uren_detailed_limited = df_display.copy()
+        # The project name column is now called 'Project' after the rename operation above
+        df_uren_detailed_limited['companyname'] = df_uren_detailed_limited['Project'].map(df_projects.set_index('name')['companyname']) # Approximate companyname
+
+        if not df_uren_detailed_limited.empty:
+            df_monthly = df_uren_detailed_limited
+            df_monthly['maand'] = pd.to_datetime(df_monthly['Datum']).dt.strftime('%Y-%m')
+            
+            # Add selectors for month and company
+            sec3_col1, sec3_col2 = st.columns(2)
+            
+            with sec3_col1:
+                unique_months = sorted(df_monthly['maand'].unique(), reverse=True)
+                selected_month = st.selectbox("Kies Maand", unique_months, index=0)
+                
+            with sec3_col2:
+                unique_companies = sorted(df_monthly['companyname'].dropna().unique())
+                # If there are no companies, handle gracefully
+                if unique_companies:
+                    selected_company = st.selectbox("Kies Bedrijf", unique_companies, index=0)
+                else:
+                    selected_company = None
+                
+            # Filter data based on selections
+            if selected_company:
+                df_filtered_monthly = df_monthly[(df_monthly['maand'] == selected_month) & (df_monthly['companyname'] == selected_company)]
+            else:
+                df_filtered_monthly = pd.DataFrame()
+            
+            if not df_filtered_monthly.empty:
+                st.markdown(f"##### Uren per Taak voor {selected_company} in {selected_month}")
+                
+                # Pivot table to show hours per task
+                pivot_table = pd.pivot_table(
+                    df_filtered_monthly,
+                    values='Uren',
+                    index='Taak',
+                    aggfunc='sum'
+                ).sort_values('Uren', ascending=False)
+                
+                st.dataframe(pivot_table, use_container_width=True)
+                
+                # Bar chart for the same data
+                fig_monthly_tasks = px.bar(
+                    pivot_table.reset_index(),
+                    x='Uren',
+                    y='Taak',
+                    orientation='h',
+                    text_auto=True,
+                    color='Taak',
+                    color_discrete_map=TASK_COLOR_MAP
+                )
+                fig_monthly_tasks.update_layout(showlegend=False)
+                st.plotly_chart(fig_monthly_tasks, use_container_width=True)
+            else:
+                st.warning("Geen data beschikbaar voor de geselecteerde maand en bedrijf.")
 else:
-    st.info("Selecteer projecten om de analyse te zien.")
+    st.info("📂 Selecteer één of meer projecten om de analyse te starten.")
 
 
 # Footer
