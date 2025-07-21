@@ -255,10 +255,11 @@ if project_ids:
         """
         df_task_hours_agg = pd.read_sql(task_hours_query, engine)
         df_task_hours = df_task_hours_agg.merge(df_tasks, on='task_id')
-
+    
     with st.container(border=True):
         st.markdown("##### Hoofdcijfers")
         # --- KPIs ---
+        date_filter = f"date_date BETWEEN '{start_date.strftime('%Y-%m-%d')}' AND '{end_date.strftime('%Y-%m-%d')}'"
         kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
         total_hours = df_kpi['total_hours'] or 0
         active_employees = df_kpi['active_employees'] or 0
