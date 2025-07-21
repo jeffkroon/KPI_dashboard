@@ -58,15 +58,20 @@ if not isinstance(df_tasks, pd.DataFrame):
 def extract_tasktype_id(type_data):
     if pd.isna(type_data):
         return None
-    if isinstance(type_data, dict):
-        return type_data.get('id')
+    # Handle case where it's a string representation of a dict
     if isinstance(type_data, str):
         try:
-            import json
-            data = json.loads(type_data)
-            return data.get('id')
-        except:
+            import ast
+            # Safely evaluate the string to a dict
+            data = ast.literal_eval(type_data)
+            if isinstance(data, dict):
+                return data.get('id')
+        except (ValueError, SyntaxError):
+            # The string is not a valid dict literal
             return None
+    # Handle case where it's already a dict
+    if isinstance(type_data, dict):
+        return type_data.get('id')
     return None
 
 df_tasks['tasktype_id'] = df_tasks['type'].apply(extract_tasktype_id)
@@ -77,7 +82,6 @@ if not isinstance(df_tasktypes, pd.DataFrame):
 
 # Filter niet-gearchiveerde projecten
 df_projects = df_projects[(df_projects["archived"] == False) & (df_projects["phase_searchname"].isin(["Voorbereiding", "Uitvoering"]))]
-print(f"[DEBUG] Aantal projecten Voorbereiding/Uitvoering (niet-gearchiveerd): {len(df_projects)}")
 
 # Zorg dat totalexclvat numeriek is voor projecten
 df_projects["totalexclvat"] = pd.to_numeric(df_projects["totalexclvat"], errors="coerce")
@@ -101,13 +105,6 @@ else:
 df_uren = load_data_df("urenregistratie", columns=["id", "offerprojectbase_id", "employee_id", "task_id", "amount", "task_searchname", "date_date", "status_searchname"], where=f"status_searchname = 'Gefiatteerd' AND date_date::timestamp BETWEEN '{start_date}' AND '{end_date}'")
 if not isinstance(df_uren, pd.DataFrame):
     df_uren = pd.concat(list(df_uren), ignore_index=True)
-
-# Debug informatie
-st.write(f"🔍 Debug: Aantal uren geladen: {len(df_uren)}")
-st.write(f"🔍 Debug: Datum range: {start_date} tot {end_date}")
-st.write(f"🔍 Debug: Aantal projecten beschikbaar: {len(df_projects)}")
-st.write(f"🔍 Debug: Aantal tasks beschikbaar: {len(df_tasks)}")
-st.write(f"🔍 Debug: Aantal tasktypes beschikbaar: {len(df_tasktypes)}")
 
 # Koppel uren aan tasks en tasktypes
 df_uren = df_uren.merge(df_tasks[['id', 'tasktype_id']], left_on='task_id', right_on='id', how='left')
