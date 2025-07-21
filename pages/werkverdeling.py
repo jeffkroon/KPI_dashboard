@@ -89,6 +89,12 @@ if not isinstance(df_uren, pd.DataFrame):
 
 # Koppel uren aan tasks en tasktypes
 df_uren = df_uren.merge(df_tasks[['id', 'tasktype_id']], left_on='task_id', right_on='id', how='left')
+
+# Fix data type mismatch voor tasktype_id
+if 'tasktype_id' in df_uren.columns:
+    # Converteer tasktype_id naar numeriek, met errors='coerce' voor niet-numerieke waarden
+    df_uren['tasktype_id'] = pd.to_numeric(df_uren['tasktype_id'], errors='coerce')
+
 df_uren = df_uren.merge(df_tasktypes.rename(columns={'id': 'tasktype_id', 'searchname': 'tasktype_general_name'}), on='tasktype_id', how='left')
 
 # Koppel uren aan employees
