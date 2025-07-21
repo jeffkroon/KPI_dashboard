@@ -142,28 +142,30 @@ with st.container(border=True):
 
     with filter_col2:
         project_options = df_projects.sort_values('name').to_dict('records')
+        project_id_to_obj = {p['project_id']: p for p in project_options}
+        all_project_ids = [p['project_id'] for p in project_options]
 
         # Define callbacks to manipulate the session state for the multiselect
         def select_all_projects():
-            st.session_state.werkverdeling_selected_projects = project_options
+            st.session_state.werkverdeling_selected_project_ids = all_project_ids
         def deselect_all_projects():
-            st.session_state.werkverdeling_selected_projects = []
+            st.session_state.werkverdeling_selected_project_ids = []
 
-        # Initialize the session state with default projects if it's not already set
-        if 'werkverdeling_selected_projects' not in st.session_state:
+        # Initialize the session state with default project_ids if it's not already set
+        if 'werkverdeling_selected_project_ids' not in st.session_state:
             known_active_project_ids = [342, 3368, 3101, 751, 335]
-            default_projects = [p for p in project_options if p['project_id'] in known_active_project_ids]
-            if not default_projects:
-                # Fallback to the first 5 projects if the known active ones aren't found
-                default_projects = project_options[:5]
-            st.session_state.werkverdeling_selected_projects = default_projects
+            default_project_ids = [p['project_id'] for p in project_options if p['project_id'] in known_active_project_ids]
+            if not default_project_ids:
+                default_project_ids = all_project_ids[:5]
+            st.session_state.werkverdeling_selected_project_ids = default_project_ids
 
-        # The multiselect widget's state is now controlled via session_state
-        selected_projects = st.multiselect(
+        # The multiselect widget's state is now controlled via session_state (list of project_ids)
+        selected_project_ids = st.multiselect(
             "📂 Projecten",
-            options=project_options,
-            key='werkverdeling_selected_projects',
-            format_func=lambda x: f"{x['name']} (ID: {x['project_id']})",
+            options=all_project_ids,
+            key='werkverdeling_selected_project_ids',
+            default=st.session_state.werkverdeling_selected_project_ids,
+            format_func=lambda pid: f"{project_id_to_obj[pid]['name']} (ID: {pid})",
             help="Selecteer de projecten die u wilt analyseren."
         )
         
@@ -174,7 +176,10 @@ with st.container(border=True):
         with b_col2:
             st.button("Deselecteer Alles", on_click=deselect_all_projects, use_container_width=True)
 
-        project_ids = [p['project_id'] for p in selected_projects]
+        # Get the selected project dicts for downstream use
+        selected_projects = [project_id_to_obj[pid] for pid in selected_project_ids]
+        project_ids = selected_project_ids
+
 # Separate block for dynamic content
 if project_ids:
     # --- Perform Aggregations on DB side ---
