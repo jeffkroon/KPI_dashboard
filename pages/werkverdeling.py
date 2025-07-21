@@ -93,6 +93,22 @@ if df_employees.empty or df_projects.empty:
     st.stop()
 
 # --- 3. UI LAYOUT & PLACEHOLDERS ---
+
+# --- Color Scheme for Task Types (based on user image) ---
+TASK_COLOR_MAP = {
+    'Vormgeving / DTP': '#002060',
+    'Consultancy / Concept / Advies': '#5B9BD5',
+    'Affiliate Marketing': '#7030A0',
+    'Customer Data Platform | CDP': '#FFC000',
+    'Development': '#ED7D31',
+    'Zoekmachine Optimalisatie | SEO': '#FF0000',
+    'Overige': '#A5A5A5',
+    'Zoekmachine Advertising | SEA': '#20B2AA',
+    'Copywriting / Content Creatie': '#333E48',
+    'Conversie Ratio Optimalisatie | CRO': '#D95319',
+    'Email Marketing (Automation)': '#FFD966'
+}
+
 st.title("📊 Werkverdeling & Projectanalyse")
 st.markdown("Selecteer een periode en projecten om de details te bekijken.")
 
@@ -171,7 +187,7 @@ if not df_uren.empty:
     # --- Join the data for detailed analysis ---
     df_uren_detailed = df_uren.merge(df_projects, left_on='offerprojectbase_id', right_on='project_id', how='left')
     df_uren_detailed = df_uren_detailed.merge(df_employees, left_on='employee_id', right_on='id', suffixes=('_hour', '_emp'), how='left')
-    df_uren_detailed = df_uren_detailed.merge(df_tasks, left_on='task_id', right_on='id', suffixes=('_hour', '_task'), how='left')
+    df_uren_detailed = df_uren_detailed.merge(df_tasks, on='task_id', suffixes=('_hour', '_task'), how='left')
 
     st.markdown("Hieronder ziet u de details van de urenverdeling voor uw selectie.")
     sec2_col1, sec2_col2 = st.columns(2)
@@ -188,7 +204,8 @@ if not df_uren.empty:
         st.markdown("##### Uren per Taaktype")
         df_task_hours = df_uren_detailed.groupby('task_name')['amount'].sum().reset_index()
         fig_task = px.pie(df_task_hours, names='task_name', values='amount',
-                          hole=0.3, title="Verdeling van Uren per Taaktype")
+                          hole=0.3, title="Verdeling van Uren per Taaktype",
+                          color='task_name', color_discrete_map=TASK_COLOR_MAP)
         fig_task.update_traces(textposition='inside', textinfo='percent+label')
         st.plotly_chart(fig_task, use_container_width=True)
 
@@ -234,6 +251,21 @@ if not df_uren.empty:
         st.markdown("##### Uren per Taak per Bedrijf")
         pivot_table = pd.pivot_table(df_analysis, values='amount', index='companyname', columns='task_name', aggfunc='sum', fill_value=0)
         st.dataframe(pivot_table.style.background_gradient(cmap='viridis').format("{:.2f}u"))
+
+        # --- Bar chart for this section ---
+        st.markdown("##### Totaal Uren per Taak (voor geselecteerde bedrijven)")
+        df_pivot_totals = pivot_table.sum().sort_values(ascending=False).reset_index()
+        df_pivot_totals.columns = ['task_name', 'total_hours']
+        fig_pivot_bar = px.bar(
+            df_pivot_totals,
+            x='task_name',
+            y='total_hours',
+            color='task_name',
+            color_discrete_map=TASK_COLOR_MAP,
+            title=f"Totaal Uren per Taak in {selected_month}"
+        )
+        fig_pivot_bar.update_layout(xaxis_title="Taak", yaxis_title="Totaal Uren")
+        st.plotly_chart(fig_pivot_bar, use_container_width=True)
 
         # --- Detailed Table for this section ---
         with st.expander("Bekijk Details per Medewerker"):
