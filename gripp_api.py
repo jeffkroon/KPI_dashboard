@@ -180,6 +180,7 @@ def filter_invoices(df: pd.DataFrame) -> pd.DataFrame:
     keep_cols = [
         "id",
         "number",
+        "subject",         # <-- toegevoegd
         "description",
         "date_date",
         "status_searchname",
@@ -193,7 +194,7 @@ def filter_invoices(df: pd.DataFrame) -> pd.DataFrame:
         "totalpayed",
         "fase",
         "company",
-        # "invoicelines",  # verwijderd
+        # "invoicelines",    # niet toevoegen
         "tags",
         "status"
     ]
