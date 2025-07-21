@@ -54,7 +54,22 @@ if not isinstance(df_companies, pd.DataFrame):
 df_tasks = load_data_df("tasks", columns=["id", "type"])
 if not isinstance(df_tasks, pd.DataFrame):
     df_tasks = pd.concat(list(df_tasks), ignore_index=True)
-df_tasks['tasktype_id'] = df_tasks['type'].apply(lambda x: x.get('id') if isinstance(x, dict) else None)
+# Extract tasktype_id from type field (handles both dict and JSON string)
+def extract_tasktype_id(type_data):
+    if pd.isna(type_data):
+        return None
+    if isinstance(type_data, dict):
+        return type_data.get('id')
+    if isinstance(type_data, str):
+        try:
+            import json
+            data = json.loads(type_data)
+            return data.get('id')
+        except:
+            return None
+    return None
+
+df_tasks['tasktype_id'] = df_tasks['type'].apply(extract_tasktype_id)
 
 df_tasktypes = load_data_df("tasktypes", columns=["id", "searchname"])
 if not isinstance(df_tasktypes, pd.DataFrame):
@@ -86,6 +101,13 @@ else:
 df_uren = load_data_df("urenregistratie", columns=["id", "offerprojectbase_id", "employee_id", "task_id", "amount", "task_searchname", "date_date", "status_searchname"], where=f"status_searchname = 'Gefiatteerd' AND date_date::timestamp BETWEEN '{start_date}' AND '{end_date}'")
 if not isinstance(df_uren, pd.DataFrame):
     df_uren = pd.concat(list(df_uren), ignore_index=True)
+
+# Debug informatie
+st.write(f"🔍 Debug: Aantal uren geladen: {len(df_uren)}")
+st.write(f"🔍 Debug: Datum range: {start_date} tot {end_date}")
+st.write(f"🔍 Debug: Aantal projecten beschikbaar: {len(df_projects)}")
+st.write(f"🔍 Debug: Aantal tasks beschikbaar: {len(df_tasks)}")
+st.write(f"🔍 Debug: Aantal tasktypes beschikbaar: {len(df_tasktypes)}")
 
 # Koppel uren aan tasks en tasktypes
 df_uren = df_uren.merge(df_tasks[['id', 'tasktype_id']], left_on='task_id', right_on='id', how='left')
@@ -188,9 +210,9 @@ else:
 
 # Optionele filter op medewerkers binnen geselecteerde projecten
 st.subheader("Filter medewerkers binnen geselecteerde opdrachten")
-medewerkers = pd.Series(df_employees['firstname']).unique().tolist()
+medewerkers = df_employees['fullname'].dropna().unique().tolist()
 selected_medewerkers = st.multiselect("Selecteer medewerker(s)", medewerkers)
-medewerker_ids_filter = pd.Series(df_employees[df_employees['firstname'].isin(selected_medewerkers)]['id']).to_list()
+medewerker_ids_filter = pd.Series(df_employees[df_employees['fullname'].isin(selected_medewerkers)]['id']).to_list()
 
 # Visualisaties
 st.subheader("📊 Visualisaties")
@@ -269,19 +291,20 @@ if not df_uren_filtered.empty:
 else:
     st.info("Geen uren gevonden voor de geselecteerde periode en projecten.")
 
-# --- Multiselect voor medewerkers ---
-alle_medewerkers = df_uren['fullname'].dropna().unique().tolist()
+# --- Multiselect voor medewerkers (tweede sectie) ---
+alle_medewerkers_sectie2 = df_uren['fullname'].dropna().unique().tolist()
 
 # Checkbox voor 'Selecteer alles' voor medewerkers
-select_all_medewerkers = st.checkbox("Selecteer alle medewerkers", value=False, key="select_all_medewerkers")
+select_all_medewerkers = st.checkbox("Selecteer alle medewerkers", value=False, key="select_all_medewerkers_sectie2")
 if select_all_medewerkers:
-    geselecteerde_medewerkers = alle_medewerkers
+    geselecteerde_medewerkers = alle_medewerkers_sectie2
 else:
     geselecteerde_medewerkers = st.multiselect(
         "Selecteer medewerker(s) voor detailoverzicht",
-        options=alle_medewerkers,
-        default=alle_medewerkers[:3],
-        help="Selecteer één of meerdere medewerkers om hun urenverdeling te zien"
+        options=alle_medewerkers_sectie2,
+        default=alle_medewerkers_sectie2[:3],
+        help="Selecteer één of meerdere medewerkers om hun urenverdeling te zien",
+        key="medewerkers_sectie2"
     )
 
 # === Overzicht 1: Uren per maand per algemeen taaktype (alle uren) ===
