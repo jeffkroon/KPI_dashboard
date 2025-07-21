@@ -159,12 +159,21 @@ with st.container(border=True):
                 default_project_ids = all_project_ids[:5]
             st.session_state.werkverdeling_selected_project_ids = default_project_ids
 
-        # The multiselect widget's state is now controlled via session_state (list of project_ids)
+        # Toon een korte samenvatting van de selectie boven de multiselect
+        aantal = len(st.session_state.werkverdeling_selected_project_ids)
+        totaal = len(all_project_ids)
+        if aantal == totaal:
+            st.markdown(f"**Alle {totaal} projecten geselecteerd**")
+        elif aantal == 0:
+            st.markdown("**Geen projecten geselecteerd**")
+        else:
+            st.markdown(f"**{aantal} van {totaal} projecten geselecteerd**")
+
+        # Multiselect zonder label zodat de selectie niet dubbel wordt weergegeven
         selected_project_ids = st.multiselect(
-            "📂 Projecten",
+            "",
             options=all_project_ids,
             key='werkverdeling_selected_project_ids',
-            default=st.session_state.werkverdeling_selected_project_ids,
             format_func=lambda pid: f"{project_id_to_obj[pid]['name']} (ID: {pid})",
             help="Selecteer de projecten die u wilt analyseren."
         )
@@ -184,7 +193,12 @@ with st.container(border=True):
 if project_ids:
     # --- Perform Aggregations on DB side ---
     date_filter = f"date_date BETWEEN '{start_date.strftime('%Y-%m-%d')}' AND '{end_date.strftime('%Y-%m-%d')}'"
-    project_filter = f"offerprojectbase_id IN ({','.join(map(str, project_ids))})"
+    # Bepaal of alle projecten geselecteerd zijn
+    all_selected = len(project_ids) == len(all_project_ids)
+    if all_selected:
+        project_filter = "1=1"  # Geen filter, alles selecteren
+    else:
+        project_filter = f"offerprojectbase_id IN ({','.join(map(str, project_ids))})"
     
     with st.spinner("Aggregeren van data..."):
         # Query for KPIs
