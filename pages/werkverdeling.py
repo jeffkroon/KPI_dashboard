@@ -239,7 +239,7 @@ if project_ids:
 
             # --- Check 2: Task & Task Type Matching ---
             st.subheader("Controle Taken & Taaktypes")
-            unmatched_tasks = df_uren[~df_uren['task_id'].isin(df_tasks['id'])]
+            unmatched_tasks = df_uren[~df_uren['task_id'].isin(df_tasks['task_id'])]
             if not unmatched_tasks.empty:
                 total_unmatched_hours = unmatched_tasks['amount'].sum()
                 st.warning(f"⚠️ Er zijn uren van **{unmatched_tasks['task_id'].nunique()}** 'task_id(s)' die niet gekoppeld konden worden aan een taaktype. Totaal **{total_unmatched_hours:,.2f}** uur wordt niet getoond in de grafiek.")
