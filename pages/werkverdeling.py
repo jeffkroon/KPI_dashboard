@@ -203,56 +203,21 @@ with st.container(border=True):
 
 # Separate block for dynamic content
 if project_ids:
-    # --- Perform Aggregations on DB side ---
-    # Define filters first
-    date_filter = f"date_date BETWEEN '{start_date.strftime('%Y-%m-%d')}' AND '{end_date.strftime('%Y-%m-%d')}'"
-    all_selected = len(project_ids) == len(all_project_ids)
-    if all_selected:
-        project_filter = "1=1"  # Geen filter, alles selecteren
-    else:
-        project_filter = f"offerprojectbase_id IN ({','.join(map(str, project_ids))})"
-    
-    with st.spinner("Aggregeren van data..."):
-        # Query for KPIs
-        kpi_query = f"""
-        SELECT
-            SUM(amount) as total_hours,
-            COUNT(DISTINCT employee_id) as active_employees,
-            COUNT(DISTINCT task_id) as tasks_done
-        FROM urenregistratie
-        WHERE status_searchname = 'Gefiatteerd' AND {project_filter} AND {date_filter}
-        """
-        df_kpi = pd.read_sql(kpi_query, engine).iloc[0]
+    # --- Nieuwe, efficiënte datalaadstrategie ---
+    df_uren, df_employees, df_projects_filtered, df_tasks = load_filtered_data(project_ids, start_date, end_date)
+    if df_uren.empty:
+        st.warning("Geen urenregistraties gevonden voor de geselecteerde criteria.")
+        st.stop()
 
-        # Query for employee hours chart
-        employee_hours_query = f"""
-        SELECT employee_id, SUM(amount) as total_hours
-        FROM urenregistratie
-        WHERE status_searchname = 'Gefiatteerd' AND {project_filter} AND {date_filter}
-        GROUP BY employee_id
-        """
-        df_employee_hours_agg = pd.read_sql(employee_hours_query, engine)
-        df_employee_hours = df_employee_hours_agg.merge(df_employees, left_on='employee_id', right_on='id')
+    # --- KPIs ---
+    total_hours = df_uren['amount'].sum()
+    active_employees = df_uren['employee_id'].nunique()
+    tasks_done = df_uren['task_id'].nunique()
+    avg_hours_per_project = total_hours / len(project_ids) if project_ids and total_hours > 0 else 0
 
-        # Query for task hours chart
-        task_hours_query = f"""
-        SELECT task_id, SUM(amount) as total_hours
-        FROM urenregistratie
-        WHERE status_searchname = 'Gefiatteerd' AND {project_filter} AND {date_filter}
-        GROUP BY task_id
-        """
-        df_task_hours_agg = pd.read_sql(task_hours_query, engine)
-        df_task_hours = df_task_hours_agg.merge(df_tasks, on='task_id')
-    
     with st.container(border=True):
         st.markdown("##### Hoofdcijfers")
-        # --- KPIs ---
         kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
-        total_hours = df_kpi['total_hours'] or 0
-        active_employees = df_kpi['active_employees'] or 0
-        tasks_done = df_kpi['tasks_done'] or 0
-        avg_hours_per_project = total_hours / len(project_ids) if project_ids and total_hours > 0 else 0
-        
         kpi_col1.metric("Totaal Uren", f"{total_hours:,.2f}")
         kpi_col2.metric("Actieve Medewerkers", active_employees)
         kpi_col3.metric("Unieke Taken", tasks_done)
@@ -264,30 +229,21 @@ if project_ids:
 
             # --- Check 1: Employee Matching ---
             st.subheader("Controle Medewerkers")
-            # Perform a left join to find hours from employees not in the main employees table
-            df_employee_check = df_employee_hours_agg.merge(df_employees, left_on='employee_id', right_on='id', how='left')
-            unmatched_employees = df_employee_check[df_employee_check['fullname'].isna()]
-
+            unmatched_employees = df_uren[~df_uren['employee_id'].isin(df_employees['id'])]
             if not unmatched_employees.empty:
-                total_unmatched_hours = unmatched_employees['total_hours'].sum()
-                st.warning(f"⚠️ Er zijn uren van **{len(unmatched_employees)}** 'employee_id(s)' die niet in de medewerkerstabel voorkomen. Totaal **{total_unmatched_hours:,.2f}** uur wordt niet getoond in de grafiek.")
-                st.write("Uren van de volgende 'employee_id(s)' konden niet worden gekoppeld:")
-                st.dataframe(unmatched_employees[['employee_id', 'total_hours']])
+                total_unmatched_hours = unmatched_employees['amount'].sum()
+                st.warning(f"⚠️ Er zijn uren van **{unmatched_employees['employee_id'].nunique()}** 'employee_id(s)' die niet in de medewerkerstabel voorkomen. Totaal **{total_unmatched_hours:,.2f}** uur wordt niet getoond in de grafiek.")
+                st.dataframe(unmatched_employees[['employee_id', 'amount']].groupby('employee_id').sum().reset_index())
             else:
                 st.success("✅ Alle uren in de selectie zijn succesvol gekoppeld aan een bekende medewerker.")
 
             # --- Check 2: Task & Task Type Matching ---
             st.subheader("Controle Taken & Taaktypes")
-            # Perform a left join to find hours from tasks that couldn't be mapped to a task type
-            df_task_check = df_task_hours_agg.merge(df_tasks, on='task_id', how='left')
-            unmatched_tasks = df_task_check[df_task_check['task_name'].isna()]
-
+            unmatched_tasks = df_uren[~df_uren['task_id'].isin(df_tasks['id'])]
             if not unmatched_tasks.empty:
-                total_unmatched_hours = unmatched_tasks['total_hours'].sum()
-                st.warning(f"⚠️ Er zijn uren van **{len(unmatched_tasks)}** 'task_id(s)' die niet gekoppeld konden worden aan een taaktype. Totaal **{total_unmatched_hours:,.2f}** uur wordt niet getoond in de grafiek.")
-                st.write("Dit gebeurt meestal als een taak in de 'tasks' tabel geen (geldig) 'type' veld heeft.")
-                st.write("Uren van de volgende 'task_id(s)' konden niet worden gekoppeld:")
-                st.dataframe(unmatched_tasks[['task_id', 'total_hours']])
+                total_unmatched_hours = unmatched_tasks['amount'].sum()
+                st.warning(f"⚠️ Er zijn uren van **{unmatched_tasks['task_id'].nunique()}** 'task_id(s)' die niet gekoppeld konden worden aan een taaktype. Totaal **{total_unmatched_hours:,.2f}** uur wordt niet getoond in de grafiek.")
+                st.dataframe(unmatched_tasks[['task_id', 'amount']].groupby('task_id').sum().reset_index())
             else:
                 st.success("✅ Alle uren in de selectie zijn succesvol gekoppeld aan een bekende taak met een taaktype.")
 
@@ -297,17 +253,27 @@ if project_ids:
         st.markdown("Hieronder ziet u de details van de urenverdeling voor uw selectie.")
         sec2_col1, sec2_col2 = st.columns(2)
 
+        # Uren per medewerker
+        df_employee_hours = (
+            df_uren.groupby('employee_id')['amount'].sum().reset_index()
+            .merge(df_employees, left_on='employee_id', right_on='id', how='left')
+        )
         with sec2_col1:
             st.markdown("##### Uren per Medewerker")
-            fig_emp = px.bar(df_employee_hours.sort_values('total_hours', ascending=True), 
-                             x='total_hours', y='fullname', orientation='h', text_auto=True,
-                             labels={'total_hours': 'Totaal Uren', 'fullname': 'Medewerker'})
+            fig_emp = px.bar(df_employee_hours.sort_values('amount', ascending=True), 
+                             x='amount', y='fullname', orientation='h', text_auto=True,
+                             labels={'amount': 'Totaal Uren', 'fullname': 'Medewerker'})
             fig_emp.update_layout(showlegend=False)
             st.plotly_chart(fig_emp, use_container_width=True)
 
+        # Uren per taaktype
+        df_task_hours = (
+            df_uren.groupby('task_id')['amount'].sum().reset_index()
+            .merge(df_tasks, left_on='task_id', right_on='id', how='left')
+        )
         with sec2_col2:
             st.markdown("##### Uren per Taaktype")
-            fig_task = px.pie(df_task_hours, names='task_name', values='total_hours',
+            fig_task = px.pie(df_task_hours, names='task_name', values='amount',
                               hole=0.3, title="Verdeling van Uren per Taaktype",
                               color='task_name', color_discrete_map=TASK_COLOR_MAP)
             fig_task.update_traces(textposition='inside', textinfo='percent+label')
@@ -316,28 +282,17 @@ if project_ids:
         # --- Detailed Table (with LIMIT) ---
         with st.expander("Bekijk Gedetailleerd Overzicht van de Laatste 1000 Urenregels"):
             DETAIL_LIMIT = 1000
-            detail_query = f"""
-            SELECT u.date_date, u.employee_id, u.offerprojectbase_id, u.task_id, u.amount, u.description
-            FROM urenregistratie u
-            WHERE u.status_searchname = 'Gefiatteerd' AND {project_filter} AND {date_filter}
-            ORDER BY u.date_date DESC
-            LIMIT {DETAIL_LIMIT}
-            """
-            df_detail_base = pd.read_sql(detail_query, engine)
-            
-            # Merge with pre-loaded dimension tables to get the names
-            df_merged = df_detail_base.merge(df_employees, left_on='employee_id', right_on='id', how='left')
-            df_merged = df_merged.merge(df_projects_filtered, left_on='offerprojectbase_id', right_on='project_id', how='left')
-            df_merged = df_merged.merge(df_tasks, on='task_id', how='left')
-            
-            # Select and rename final columns for display
-            df_display = df_merged[[
+            df_display = df_uren.copy()
+            df_display = df_display.merge(df_employees, left_on='employee_id', right_on='id', how='left')
+            df_display = df_display.merge(df_projects_filtered, left_on='offerprojectbase_id', right_on='project_id', how='left')
+            df_display = df_display.merge(df_tasks, left_on='task_id', right_on='id', how='left')
+            df_display = df_display.sort_values('date_date', ascending=False).head(DETAIL_LIMIT)
+            df_display = df_display[[
                 'date_date', 'fullname', 'name', 'task_name', 'amount', 'description'
             ]].rename(columns={
                 'date_date': 'Datum', 'fullname': 'Medewerker', 'name': 'Project',
                 'task_name': 'Taak', 'amount': 'Uren', 'description': 'Omschrijving'
             })
-            
             st.dataframe(df_display, use_container_width=True)
             if len(df_display) == DETAIL_LIMIT:
                 st.warning(f"Let op: De weergave is beperkt tot de laatste {DETAIL_LIMIT} urenregels.")
@@ -346,52 +301,35 @@ if project_ids:
     with st.container(border=True):
         st.header("🏢 Maandelijkse Analyse per Bedrijf")
         st.markdown("Analyseer de uren per taak voor specifieke bedrijven in een gekozen maand.")
-        
-        # This part will be based on the limited df_display to avoid crashing.
         df_uren_detailed_limited = df_display.copy()
-        # Vervang de .map() door een merge op projectnaam (name), zodat dubbele namen geen probleem zijn
         df_uren_detailed_limited = df_uren_detailed_limited.merge(
             df_projects_filtered[['name', 'companyname']].drop_duplicates(),
             left_on='Project',
             right_on='name',
             how='left'
         )
-
         if not df_uren_detailed_limited.empty:
             df_monthly = df_uren_detailed_limited
             df_monthly['maand'] = pd.to_datetime(df_monthly['Datum']).dt.strftime('%Y-%m')
-            
-            # Add selectors for month and company
             sec3_col1, sec3_col2 = st.columns(2)
-            
             with sec3_col1:
                 unique_months = sorted(df_monthly['maand'].unique(), reverse=True)
                 selected_month = st.selectbox("Kies Maand", unique_months, index=0)
-                
             with sec3_col2:
                 unique_companies = sorted(df_monthly['companyname'].dropna().unique())
-                # If there are no companies, handle gracefully
                 if unique_companies:
                     selected_company = st.selectbox("Kies Bedrijf", unique_companies, index=0)
                 else:
                     selected_company = None
-                
-            # Filter data based on selections
             if selected_company:
                 df_filtered_monthly = df_monthly[(df_monthly['maand'] == selected_month) & (df_monthly['companyname'] == selected_company)]
             else:
                 df_filtered_monthly = pd.DataFrame()
-            
             if not df_filtered_monthly.empty:
                 st.markdown(f"##### Uren per Taak voor {selected_company} in {selected_month}")
-                
-                # Gebruik groupby().sum() in plaats van pivot_table voor robuustheid
                 uren_per_taak = df_filtered_monthly.groupby('Taak')['Uren'].sum().reset_index()
                 uren_per_taak = uren_per_taak.sort_values('Uren', ascending=False)
-                
                 st.dataframe(uren_per_taak, use_container_width=True)
-                
-                # Bar chart for the same data
                 fig_monthly_tasks = px.bar(
                     uren_per_taak,
                     x='Uren',
