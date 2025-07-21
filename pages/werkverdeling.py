@@ -94,8 +94,8 @@ def get_aggregated_hours(table, start_date, end_date, project_ids=None, employee
     AND {date_filter}
     {project_filter}
     {employee_filter}
-    GROUP BY 1, 2
-    ORDER BY 1, 2
+    GROUP BY 1
+    ORDER BY 1
     """
     return pd.read_sql(query, engine)
 
