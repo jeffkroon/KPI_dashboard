@@ -82,7 +82,7 @@ st.title("📋 Opdracht Overzicht met Medewerker Uren")
 
 # --- Filters bovenaan ---
 # Project opties en standaard selectie
-project_options = df_projects['name'].unique().tolist()
+project_options = df_projects[['id', 'name']].drop_duplicates().to_dict('records')
 # Alleen eerste 10 projecten standaard geselecteerd
 default_projects = project_options[:10]
 
@@ -95,15 +95,17 @@ else:
         "Selecteer één of meerdere opdrachten",
         options=project_options,
         default=default_projects,
+        format_func=lambda x: f"{x['name']} (ID: {x['id']})",
         help="Gebruik het zoekveld om opdrachten te vinden"
     )
 # Filter uren op geselecteerde projecten (via offerprojectbase_id)
-project_ids = pd.Series(df_projects[df_projects['name'].isin(selected_projects)]['id']).to_list()
+project_ids = [p['id'] for p in selected_projects]
 df_uren_filtered = df_uren[df_uren['offerprojectbase_id'].isin(project_ids)].copy()
 
 # KPI-berekeningen
-aantal_projecten = len(selected_projects)
-totale_omzet = df_projects[df_projects['name'].isin(selected_projects)]['totalexclvat'].sum()
+# Aantal geselecteerde projecten op basis van unieke IDs
+aantal_projecten = len(project_ids)
+totale_omzet = df_projects[df_projects['id'].isin(project_ids)]['totalexclvat'].sum()
 
 # Medewerkers betrokken bij geselecteerde projecten
 medewerkers_ids = pd.Series(df_uren_filtered['employee_id']).unique().tolist()
