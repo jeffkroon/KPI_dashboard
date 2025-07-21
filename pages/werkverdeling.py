@@ -227,19 +227,19 @@ if aantal_medewerkers > 0:
 else:
     st.info("Geen data beschikbaar voor visualisaties.")
 
-# === Uren per taaktype per maand ===
-st.subheader("📊 Uren per taaktype per maand")
+# === Uren per taaktype per maand (gefilterd op projecten) ===
+st.subheader("📊 Uren per taaktype per maand (gefilterd op projecten)")
 
 # Voeg maandkolom toe
 if not df_uren_filtered.empty:
     df_uren_filtered['maand'] = pd.to_datetime(df_uren_filtered['date_date']).dt.to_period('M')
-    uren_per_maand_taak = df_uren_filtered.groupby(['maand', 'tasktype_general_name'])['amount'].sum().reset_index()
-    uren_per_maand_taak['maand'] = uren_per_maand_taak['maand'].astype(str)
-    uren_per_maand_taak = uren_per_maand_taak.sort_values(['maand', 'tasktype_general_name'])
+    uren_per_maand_taak_filtered = df_uren_filtered.groupby(['maand', 'tasktype_general_name'])['amount'].sum().reset_index()
+    uren_per_maand_taak_filtered['maand'] = uren_per_maand_taak_filtered['maand'].astype(str)
+    uren_per_maand_taak_filtered = uren_per_maand_taak_filtered.sort_values(['maand', 'tasktype_general_name'])
 
     # Toon als tabel
     st.dataframe(
-        uren_per_maand_taak.rename(columns={
+        uren_per_maand_taak_filtered.rename(columns={
             'maand': 'Maand',
             'tasktype_general_name': 'Taaktype',
             'amount': 'Totaal uren'
@@ -248,17 +248,16 @@ if not df_uren_filtered.empty:
     )
 
     # Stacked bar chart
-    import plotly.express as px
-    fig = px.bar(
-        uren_per_maand_taak,
+    fig_filtered = px.bar(
+        uren_per_maand_taak_filtered,
         x='maand',
         y='amount',
         color='tasktype_general_name',
-        title='Uren per taaktype per maand',
+        title='Uren per taaktype per maand (gefilterd op projecten)',
         labels={'amount': 'Uren', 'maand': 'Maand', 'tasktype_general_name': 'Taaktype'},
         text_auto=True
     )
-    fig.update_layout(
+    fig_filtered.update_layout(
         barmode='stack',
         xaxis_title='Maand',
         yaxis_title='Totaal uren',
@@ -266,43 +265,48 @@ if not df_uren_filtered.empty:
         template='plotly_white',
         margin=dict(l=40, r=40, t=60, b=40)
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig_filtered, use_container_width=True, key="filtered_tasktype_chart")
 else:
     st.info("Geen uren gevonden voor de geselecteerde periode en projecten.")
 
 # --- Multiselect voor medewerkers ---
 alle_medewerkers = df_uren['fullname'].dropna().unique().tolist()
-geselecteerde_medewerkers = st.multiselect(
-    "Selecteer medewerker(s) voor detailoverzicht",
-    options=alle_medewerkers,
-    default=alle_medewerkers[:3],
-    help="Selecteer één of meerdere medewerkers om hun urenverdeling te zien"
-)
 
-# === Overzicht 1: Uren per maand per algemeen taaktype ===
-st.subheader("📊 Uren per maand per algemeen taaktype")
-uren_per_maand_taak = df_uren.groupby(['maand', 'tasktype_general_name'])['amount'].sum().reset_index()
-uren_per_maand_taak = uren_per_maand_taak.sort_values(['maand', 'tasktype_general_name'])
+# Checkbox voor 'Selecteer alles' voor medewerkers
+select_all_medewerkers = st.checkbox("Selecteer alle medewerkers", value=False, key="select_all_medewerkers")
+if select_all_medewerkers:
+    geselecteerde_medewerkers = alle_medewerkers
+else:
+    geselecteerde_medewerkers = st.multiselect(
+        "Selecteer medewerker(s) voor detailoverzicht",
+        options=alle_medewerkers,
+        default=alle_medewerkers[:3],
+        help="Selecteer één of meerdere medewerkers om hun urenverdeling te zien"
+    )
+
+# === Overzicht 1: Uren per maand per algemeen taaktype (alle uren) ===
+st.subheader("📊 Uren per maand per algemeen taaktype (alle uren)")
+uren_per_maand_taak_general = df_uren.groupby(['maand', 'tasktype_general_name'])['amount'].sum().reset_index()
+uren_per_maand_taak_general = uren_per_maand_taak_general.sort_values(['maand', 'tasktype_general_name'])
 st.dataframe(
-    uren_per_maand_taak.rename(columns={
+    uren_per_maand_taak_general.rename(columns={
         'maand': 'Maand',
         'tasktype_general_name': 'Taaktype',
         'amount': 'Totaal uren'
     }),
     use_container_width=True
 )
-import plotly.express as px
 fig1 = px.bar(
-    uren_per_maand_taak,
+    uren_per_maand_taak_general,
     x='maand',
     y='amount',
     color='tasktype_general_name',
-    title='Uren per taaktype per maand',
+    title='Uren per taaktype per maand (alle uren)',
     labels={'amount': 'Uren', 'maand': 'Maand', 'tasktype_general_name': 'Taaktype'},
     text_auto=True
 )
 fig1.update_layout(barmode='stack', xaxis_title='Maand', yaxis_title='Totaal uren', legend_title='Taaktype', template='plotly_white', margin=dict(l=40, r=40, t=60, b=40))
-st.plotly_chart(fig1, use_container_width=True)
+st.plotly_chart(fig1, use_container_width=True, key="general_tasktype_chart")
 
 # === Overzicht 2: Uren per maand per taaktype per medewerker ===
 st.subheader("📊 Uren per maand per taaktype per medewerker(s)")
@@ -330,7 +334,7 @@ if geselecteerde_medewerkers:
         text_auto=True
     )
     fig2.update_layout(barmode='stack', xaxis_title='Maand', yaxis_title='Totaal uren', legend_title='Taaktype', template='plotly_white', margin=dict(l=40, r=40, t=60, b=40))
-    st.plotly_chart(fig2, use_container_width=True)
+    st.plotly_chart(fig2, use_container_width=True, key="employee_tasktype_chart")
 else:
     st.info("Selecteer één of meer medewerkers om hun detailoverzicht te zien.")
 
