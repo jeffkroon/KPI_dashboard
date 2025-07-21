@@ -8,6 +8,7 @@ import numpy as np
 from utils.auth import require_login, require_email_whitelist
 from utils.allowed_emails import ALLOWED_EMAILS
 from utils.data_loaders import load_data, load_data_df
+from datetime import datetime
 
 st.set_page_config(
     page_title="Werkverdeling",
@@ -37,18 +38,40 @@ if not POSTGRES_URL:
 engine = create_engine(POSTGRES_URL)
 
 # Datasets laden
-df_employees = load_data_df("employees", columns=["id", "firstname", "lastname", "function"])
+df_employees = load_data_df("employees", columns=["id", "firstname", "lastname"])
 if not isinstance(df_employees, pd.DataFrame):
     df_employees = pd.concat(list(df_employees), ignore_index=True)
-df_employees['fullname'] = df_employees['firstname'] + " " + df_employees['lastname']
+df_employees['fullname'] = df_employees['firstname'] + ' ' + df_employees['lastname']
+
+df_uren = load_data_df("urenregistratie", columns=["id", "employee_id", "task_id", "amount", "date_date"])
+if not isinstance(df_uren, pd.DataFrame):
+    df_uren = pd.concat(list(df_uren), ignore_index=True)
+
+df_tasks = load_data_df("tasks", columns=["id", "type"])
+if not isinstance(df_tasks, pd.DataFrame):
+    df_tasks = pd.concat(list(df_tasks), ignore_index=True)
+df_tasks['tasktype_id'] = df_tasks['type'].apply(lambda x: x.get('id') if isinstance(x, dict) else None)
+df_tasks['tasktype_searchname'] = df_tasks['type'].apply(lambda x: x.get('searchname') if isinstance(x, dict) else None)
+
+df_tasktypes = load_data_df("tasktypes", columns=["id", "searchname"])
+if not isinstance(df_tasktypes, pd.DataFrame):
+    df_tasktypes = pd.concat(list(df_tasktypes), ignore_index=True)
+
+# Koppel uren aan tasks en tasktypes
+df_uren = df_uren.merge(df_tasks[['id', 'tasktype_id', 'tasktype_searchname']], left_on='task_id', right_on='id', how='left')
+df_uren = df_uren.merge(df_tasktypes.rename(columns={'id': 'tasktype_id', 'searchname': 'tasktype_general_name'}), on='tasktype_id', how='left')
+
+# Koppel uren aan employees
+df_uren = df_uren.merge(df_employees[['id', 'fullname']], left_on='employee_id', right_on='id', how='left', suffixes=('', '_employee'))
+
+# Voeg maandkolom toe
+df_uren['maand'] = pd.to_datetime(df_uren['date_date']).dt.to_period('M').astype(str)
+
+# Filter niet-gearchiveerde projecten
 df_projects = load_data_df("projects", columns=["id", "name", "company_id", "archived", "totalexclvat", "phase_searchname"])
 if not isinstance(df_projects, pd.DataFrame):
     df_projects = pd.concat(list(df_projects), ignore_index=True)
-df_companies = load_data_df("companies", columns=["id", "companyname"])
-if not isinstance(df_companies, pd.DataFrame):
-    df_companies = pd.concat(list(df_companies), ignore_index=True)
-
-# Filter niet-gearchiveerde projecten
+df_projects['fullname'] = df_projects['firstname'] + " " + df_projects['lastname']
 df_projects = df_projects[(df_projects["archived"] == False) & (df_projects["phase_searchname"].isin(["Voorbereiding", "Uitvoering"]))]
 print(f"[DEBUG] Aantal projecten Voorbereiding/Uitvoering (niet-gearchiveerd): {len(df_projects)}")
 
@@ -71,9 +94,17 @@ else:
 
 # Data ophalen met filters
 # Voor urenregistratie:
-df_uren = load_data_df("urenregistratie", columns=["id", "offerprojectbase_id", "employee_id", "amount", "task_searchname", "date_date", "status_searchname"], where=f"status_searchname = 'Gefiatteerd' AND date_date::timestamp BETWEEN '{start_date}' AND '{end_date}'")
+df_uren = load_data_df("urenregistratie", columns=["id", "offerprojectbase_id", "employee_id", "amount", "task_id", "task_searchname", "date_date", "status_searchname"], where=f"status_searchname = 'Gefiatteerd' AND date_date::timestamp BETWEEN '{start_date}' AND '{end_date}'")
 if not isinstance(df_uren, pd.DataFrame):
     df_uren = pd.concat(list(df_uren), ignore_index=True)
+
+# Koppel uren aan algemene taaktypes via de 'searchname'
+df_uren = df_uren.merge(
+    df_tasktypes.rename(columns={'id': 'task_id', 'searchname': 'tasktype_general_name'}),
+    on='task_id',
+    how='left'
+)
+
 # Voor andere tabellen:
 # df_employees = load_data("employees") # This line is removed as df_employees is now loaded globally
 
@@ -124,7 +155,7 @@ col4.metric("Totale uren geschreven", f"{totale_uren:.2f}")
 # Medewerker details tabel
 if aantal_medewerkers > 0:
     df_medewerkers_filtered = df_employees[df_employees['id'].isin(medewerkers_ids)].copy()
-    
+
     # Uren per medewerker voor de geselecteerde projecten
     uren_per_medewerker = df_uren_filtered.groupby('employee_id')['amount'].sum().to_dict()
     # Totale uren per medewerker over alle projecten (voor percentage)
@@ -137,18 +168,18 @@ if aantal_medewerkers > 0:
     perc_uren = perc_uren.astype(float).fillna(0) * 100
     df_medewerkers_filtered['Percentage uren'] = perc_uren
     df_medewerkers_filtered['fullname'] = df_medewerkers_filtered['firstname'] + " " + df_medewerkers_filtered['lastname']
-    
+
     # Optioneel: functie of uurtarief tonen als kolom als beschikbaar
     if 'function' in df_medewerkers_filtered.columns and isinstance(df_medewerkers_filtered, pd.DataFrame):
         df_medewerkers_filtered = df_medewerkers_filtered.rename(columns={'function': 'Functie'})
     else:
         df_medewerkers_filtered['Functie'] = "Onbekend"
-    
+
     df_display = df_medewerkers_filtered[['fullname', 'Uren aan geselecteerde opdrachten', 'Percentage uren', 'Functie']].copy()
     if not isinstance(df_display, pd.DataFrame):
         df_display = pd.DataFrame(df_display)
     df_display = df_display.sort_values(by='Uren aan geselecteerde opdrachten', ascending=False).copy()
-    
+
     st.subheader("👷 Medewerkers die aan geselecteerde opdrachten werken")
     st.dataframe(df_display.style.format({
         'Uren aan geselecteerde opdrachten': "{:,.2f}",
@@ -171,27 +202,27 @@ if aantal_medewerkers > 0:
     if selected_medewerkers:
         medewerker_ids_filter = list(medewerker_ids_filter)
         df_vis = df_vis[pd.Series(df_vis['employee_id']).isin(medewerker_ids_filter)]
-    
+
     # Uren per medewerker bar chart
     if isinstance(df_vis, pd.DataFrame):
         uren_per_medewerker_vis = df_vis.groupby('employee_id')['amount'].sum()
         df_med_uren = df_employees.set_index('id').loc[uren_per_medewerker_vis.index]
         df_med_uren['Uren'] = uren_per_medewerker_vis.values
         df_med_uren['fullname'] = df_med_uren['firstname'] + " " + df_med_uren['lastname']
-        
+
         fig1 = px.bar(df_med_uren.sort_values('Uren', ascending=True), x='Uren', y='fullname', orientation='h',
                       title='Uren per medewerker (filter toepasbaar)', labels={'Uren': 'Uren', 'fullname': 'Medewerker'},
                       color='fullname', color_discrete_sequence=px.colors.qualitative.Plotly, text_auto=True)
         fig1.update_layout(showlegend=False, template="plotly_white")
         st.plotly_chart(fig1, use_container_width=True)
-    
+
     # Uren per taak bar chart
-    if isinstance(df_vis, pd.DataFrame) and 'task_searchname' in df_uren_filtered.columns:
-        uren_per_taak = df_vis.groupby('task_searchname')['amount'].sum()
+    if isinstance(df_vis, pd.DataFrame) and 'tasktype_general_name' in df_vis.columns:
+        uren_per_taak = df_vis.groupby('tasktype_general_name')['amount'].sum()
         df_taak = uren_per_taak.reset_index().sort_values('amount', ascending=False).head(10)
-        fig2 = px.bar(df_taak, x='task_searchname', y='amount',
-                      title='Top 10 taken per uren', labels={'task_searchname': 'Taak', 'amount': 'Uren'},
-                      color='task_searchname', color_discrete_sequence=px.colors.qualitative.Plotly, text_auto=True)
+        fig2 = px.bar(df_taak, x='tasktype_general_name', y='amount',
+                      title='Top 10 taken per uren', labels={'tasktype_general_name': 'Taaktype', 'amount': 'Uren'},
+                      color='tasktype_general_name', color_discrete_sequence=px.colors.qualitative.Plotly, text_auto=True)
         fig2.update_layout(showlegend=False, xaxis_tickangle=-45, template="plotly_white")
         st.plotly_chart(fig2, use_container_width=True)
 
@@ -204,15 +235,15 @@ st.subheader("📊 Uren per taaktype per maand")
 # Voeg maandkolom toe
 if not df_uren_filtered.empty:
     df_uren_filtered['maand'] = pd.to_datetime(df_uren_filtered['date_date']).dt.to_period('M')
-    uren_per_maand_taak = df_uren_filtered.groupby(['maand', 'task_searchname'])['amount'].sum().reset_index()
+    uren_per_maand_taak = df_uren_filtered.groupby(['maand', 'tasktype_general_name'])['amount'].sum().reset_index()
     uren_per_maand_taak['maand'] = uren_per_maand_taak['maand'].astype(str)
-    uren_per_maand_taak = uren_per_maand_taak.sort_values(['maand', 'task_searchname'])
+    uren_per_maand_taak = uren_per_maand_taak.sort_values(['maand', 'tasktype_general_name'])
 
     # Toon als tabel
     st.dataframe(
         uren_per_maand_taak.rename(columns={
             'maand': 'Maand',
-            'task_searchname': 'Taaktype',
+            'tasktype_general_name': 'Taaktype',
             'amount': 'Totaal uren'
         }),
         use_container_width=True
@@ -224,9 +255,9 @@ if not df_uren_filtered.empty:
         uren_per_maand_taak,
         x='maand',
         y='amount',
-        color='task_searchname',
+        color='tasktype_general_name',
         title='Uren per taaktype per maand',
-        labels={'amount': 'Uren', 'maand': 'Maand', 'task_searchname': 'Taaktype'},
+        labels={'amount': 'Uren', 'maand': 'Maand', 'tasktype_general_name': 'Taaktype'},
         text_auto=True
     )
     fig.update_layout(
@@ -240,6 +271,70 @@ if not df_uren_filtered.empty:
     st.plotly_chart(fig, use_container_width=True)
 else:
     st.info("Geen uren gevonden voor de geselecteerde periode en projecten.")
+
+# --- Multiselect voor medewerkers ---
+alle_medewerkers = df_uren['fullname'].dropna().unique().tolist()
+geselecteerde_medewerkers = st.multiselect(
+    "Selecteer medewerker(s) voor detailoverzicht",
+    options=alle_medewerkers,
+    default=alle_medewerkers[:3],
+    help="Selecteer één of meerdere medewerkers om hun urenverdeling te zien"
+)
+
+# === Overzicht 1: Uren per maand per algemeen taaktype ===
+st.subheader("📊 Uren per maand per algemeen taaktype")
+uren_per_maand_taak = df_uren.groupby(['maand', 'tasktype_general_name'])['amount'].sum().reset_index()
+uren_per_maand_taak = uren_per_maand_taak.sort_values(['maand', 'tasktype_general_name'])
+st.dataframe(
+    uren_per_maand_taak.rename(columns={
+        'maand': 'Maand',
+        'tasktype_general_name': 'Taaktype',
+        'amount': 'Totaal uren'
+    }),
+    use_container_width=True
+)
+import plotly.express as px
+fig1 = px.bar(
+    uren_per_maand_taak,
+    x='maand',
+    y='amount',
+    color='tasktype_general_name',
+    title='Uren per taaktype per maand',
+    labels={'amount': 'Uren', 'maand': 'Maand', 'tasktype_general_name': 'Taaktype'},
+    text_auto=True
+)
+fig1.update_layout(barmode='stack', xaxis_title='Maand', yaxis_title='Totaal uren', legend_title='Taaktype', template='plotly_white', margin=dict(l=40, r=40, t=60, b=40))
+st.plotly_chart(fig1, use_container_width=True)
+
+# === Overzicht 2: Uren per maand per taaktype per medewerker ===
+st.subheader("📊 Uren per maand per taaktype per medewerker(s)")
+if geselecteerde_medewerkers:
+    df_uren_sel = df_uren[df_uren['fullname'].isin(geselecteerde_medewerkers)].copy()
+    uren_per_maand_taak_med = df_uren_sel.groupby(['maand', 'fullname', 'tasktype_general_name'])['amount'].sum().reset_index()
+    uren_per_maand_taak_med = uren_per_maand_taak_med.sort_values(['maand', 'fullname', 'tasktype_general_name'])
+    st.dataframe(
+        uren_per_maand_taak_med.rename(columns={
+            'maand': 'Maand',
+            'fullname': 'Medewerker',
+            'tasktype_general_name': 'Taaktype',
+            'amount': 'Totaal uren'
+        }),
+        use_container_width=True
+    )
+    fig2 = px.bar(
+        uren_per_maand_taak_med,
+        x='maand',
+        y='amount',
+        color='tasktype_general_name',
+        facet_row='fullname',
+        title='Uren per taaktype per maand per medewerker',
+        labels={'amount': 'Uren', 'maand': 'Maand', 'tasktype_general_name': 'Taaktype', 'fullname': 'Medewerker'},
+        text_auto=True
+    )
+    fig2.update_layout(barmode='stack', xaxis_title='Maand', yaxis_title='Totaal uren', legend_title='Taaktype', template='plotly_white', margin=dict(l=40, r=40, t=60, b=40))
+    st.plotly_chart(fig2, use_container_width=True)
+else:
+    st.info("Selecteer één of meer medewerkers om hun detailoverzicht te zien.")
 
 st.markdown("""
 <hr style="margin-top: 2em; margin-bottom: 0.5em; border: none; border-top: 1px solid #eee;" />

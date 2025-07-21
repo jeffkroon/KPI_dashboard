@@ -879,6 +879,16 @@ def main():
     companies_raw = fetch_gripp_companies()
     tasktypes_raw = fetch_gripp_tasktypes()
     hours_raw = fetch_gripp_hours_data()
+
+    # === FIX: Flatten de 'task' kolom in urenregistratie ===
+    if 'task' in hours_raw.columns:
+        print("🔧 Flattening 'task' data in urenregistratie...")
+        hours_raw['task_id'] = hours_raw['task'].apply(
+            lambda x: x.get('id') if isinstance(x, dict) else None
+        )
+        hours_raw['task_searchname'] = hours_raw['task'].apply(
+            lambda x: x.get('searchname') if isinstance(x, dict) else None
+        )
     invoices_raw = fetch_gripp_invoices()
     # Forceer flatten voor alle kolommen die dicts kunnen bevatten
     for col in invoices_raw.columns:
@@ -948,6 +958,16 @@ def main():
             print(f"🔢 [DEBUG] Sample bedrijf_id's: {projectlines_raw['bedrijf_id'].head(5).tolist()}")
         else:
             print("⚠️ offerprojectbase kolom niet gevonden")
+
+    # === FIX: Flatten de 'unit' kolom in projectlines ===
+    if 'unit' in projectlines_raw.columns:
+        print("🔧 Flattening 'unit' data in projectlines...")
+        projectlines_raw['unit_id'] = projectlines_raw['unit'].apply(
+            lambda x: x.get('id') if isinstance(x, dict) else None
+        )
+        projectlines_raw['unit_searchname'] = projectlines_raw['unit'].apply(
+            lambda x: x.get('searchname') if isinstance(x, dict) else None
+        )
     
     datasets["gripp_projectlines"] = projectlines_raw
     #datasets["gripp_invoicelines"] = filter_invoicelines(invoicelines_raw)
