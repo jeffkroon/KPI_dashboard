@@ -323,8 +323,13 @@ if project_ids:
         
         # This part will be based on the limited df_display to avoid crashing.
         df_uren_detailed_limited = df_display.copy()
-        # The project name column is now called 'Project' after the rename operation above
-        df_uren_detailed_limited['companyname'] = df_uren_detailed_limited['Project'].map(df_projects.set_index('name')['companyname']) # Approximate companyname
+        # Vervang de .map() door een merge op projectnaam (name), zodat dubbele namen geen probleem zijn
+        df_uren_detailed_limited = df_uren_detailed_limited.merge(
+            df_projects[['name', 'companyname']].drop_duplicates(),
+            left_on='Project',
+            right_on='name',
+            how='left'
+        )
 
         if not df_uren_detailed_limited.empty:
             df_monthly = df_uren_detailed_limited
