@@ -269,7 +269,7 @@ if project_ids:
         # Uren per taaktype
         df_task_hours = (
             df_uren.groupby('task_id')['amount'].sum().reset_index()
-            .merge(df_tasks, left_on='task_id', right_on='id', how='left')
+            .merge(df_tasks, left_on='task_id', right_on='task_id', how='left')
         )
         with sec2_col2:
             st.markdown("##### Uren per Taaktype")
@@ -285,7 +285,7 @@ if project_ids:
             df_display = df_uren.copy()
             df_display = df_display.merge(df_employees, left_on='employee_id', right_on='id', how='left')
             df_display = df_display.merge(df_projects_filtered, left_on='offerprojectbase_id', right_on='project_id', how='left')
-            df_display = df_display.merge(df_tasks, left_on='task_id', right_on='id', how='left')
+            df_display = df_display.merge(df_tasks, left_on='task_id', right_on='task_id', how='left')
             df_display = df_display.sort_values('date_date', ascending=False).head(DETAIL_LIMIT)
             df_display = df_display[[
                 'date_date', 'fullname', 'name', 'task_name', 'amount', 'description'
