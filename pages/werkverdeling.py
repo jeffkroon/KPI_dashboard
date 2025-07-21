@@ -78,24 +78,24 @@ def load_base_data():
         st.error(f"Error loading base data: {e}")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-def get_aggregated_hours(table, start_date, end_date, project_ids=None, employee_ids=None):
+def get_aggregated_hours(select_columns, groupby_columns, start_date, end_date, project_ids=None, employee_ids=None):
     """
-    Fetches and aggregates hours data directly from the database,
-    avoiding loading the full raw data into memory.
+    select_columns: str, e.g. 'employee_id, SUM(amount) as total_hours'
+    groupby_columns: list of str, e.g. ['employee_id'] or ['employee_id', 'task_id']
     """
     date_filter = f"date_date BETWEEN '{start_date}' AND '{end_date}'"
     project_filter = f"AND offerprojectbase_id IN ({','.join(map(str, project_ids))})" if project_ids else ""
     employee_filter = f"AND employee_id IN ({','.join(map(str, employee_ids))})" if employee_ids else ""
-    
+    groupby_clause = ", ".join(str(i+1) for i in range(len(groupby_columns)))
     query = f"""
-    SELECT {table}
+    SELECT {select_columns}
     FROM urenregistratie
     WHERE status_searchname = 'Gefiatteerd'
     AND {date_filter}
     {project_filter}
     {employee_filter}
-    GROUP BY 1
-    ORDER BY 1
+    GROUP BY {groupby_clause}
+    ORDER BY {groupby_clause}
     """
     return pd.read_sql(query, engine)
 
@@ -140,6 +140,7 @@ if project_ids:
         # KPI: Totale uren en medewerkers
         df_total_hours_per_employee = get_aggregated_hours(
             "employee_id, SUM(amount) as total_hours",
+            ["employee_id"],
             start_date, end_date, project_ids
         )
         
