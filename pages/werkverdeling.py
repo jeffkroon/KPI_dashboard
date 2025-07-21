@@ -203,21 +203,9 @@ with st.container(border=True):
 
 # Separate block for dynamic content
 if project_ids:
-    # --- New Data Loading ---
-    df_uren, df_employees, df_projects_filtered, df_tasks = load_filtered_data(project_ids, start_date, end_date)
-
-    if df_uren.empty:
-        st.warning("Geen urenregistraties gevonden voor de geselecteerde criteria.")
-        st.stop()
-        
-    # All subsequent logic uses the filtered dataframes...
-    # For example:
-    # df_employee_hours = df_uren.groupby('employee_id')['amount'].sum().reset_index().merge(df_employees, left_on='employee_id', right_on='id')
-    # ... and so on for all charts and tables
-
     # --- Perform Aggregations on DB side ---
-    # date_filter = f"date_date BETWEEN '{start_date.strftime('%Y-%m-%d')}' AND '{end_date.strftime('%Y-%m-%d')}'" # This line is removed
-    # Bepaal of alle projecten geselecteerd zijn
+    # Define filters first
+    date_filter = f"date_date BETWEEN '{start_date.strftime('%Y-%m-%d')}' AND '{end_date.strftime('%Y-%m-%d')}'"
     all_selected = len(project_ids) == len(all_project_ids)
     if all_selected:
         project_filter = "1=1"  # Geen filter, alles selecteren
@@ -259,7 +247,6 @@ if project_ids:
     with st.container(border=True):
         st.markdown("##### Hoofdcijfers")
         # --- KPIs ---
-        date_filter = f"date_date BETWEEN '{start_date.strftime('%Y-%m-%d')}' AND '{end_date.strftime('%Y-%m-%d')}'"
         kpi_col1, kpi_col2, kpi_col3, kpi_col4 = st.columns(4)
         total_hours = df_kpi['total_hours'] or 0
         active_employees = df_kpi['active_employees'] or 0
