@@ -66,7 +66,7 @@ if not isinstance(df_companies, pd.DataFrame):
 df_employees = load_data_df("employees", columns=["id", "firstname", "lastname"])
 if not isinstance(df_employees, pd.DataFrame):
     df_employees = pd.concat(list(df_employees), ignore_index=True)
-df_projectlines = load_data_df("projectlines_per_company", columns=["id", "bedrijf_id", "amountwritten", "sellingprice"])
+df_projectlines = load_data_df("projectlines_per_company", columns=["id", "bedrijf_id", "offerprojectbase_id", "amount", "amountwritten", "sellingprice"])
 if not isinstance(df_projectlines, pd.DataFrame):
     df_projectlines = pd.concat(list(df_projectlines), ignore_index=True)
 df_invoices = load_data_df("invoices", columns=["id", "company_id", "fase", "totalpayed", "status_searchname", "number", "date_date", "subject"])
