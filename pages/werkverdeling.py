@@ -198,6 +198,49 @@ if aantal_medewerkers > 0:
 else:
     st.info("Geen data beschikbaar voor visualisaties.")
 
+# === Uren per taaktype per maand ===
+st.subheader("📊 Uren per taaktype per maand")
+
+# Voeg maandkolom toe
+if not df_uren_filtered.empty:
+    df_uren_filtered['maand'] = pd.to_datetime(df_uren_filtered['date_date']).dt.to_period('M')
+    uren_per_maand_taak = df_uren_filtered.groupby(['maand', 'task_searchname'])['amount'].sum().reset_index()
+    uren_per_maand_taak['maand'] = uren_per_maand_taak['maand'].astype(str)
+    uren_per_maand_taak = uren_per_maand_taak.sort_values(['maand', 'task_searchname'])
+
+    # Toon als tabel
+    st.dataframe(
+        uren_per_maand_taak.rename(columns={
+            'maand': 'Maand',
+            'task_searchname': 'Taaktype',
+            'amount': 'Totaal uren'
+        }),
+        use_container_width=True
+    )
+
+    # Stacked bar chart
+    import plotly.express as px
+    fig = px.bar(
+        uren_per_maand_taak,
+        x='maand',
+        y='amount',
+        color='task_searchname',
+        title='Uren per taaktype per maand',
+        labels={'amount': 'Uren', 'maand': 'Maand', 'task_searchname': 'Taaktype'},
+        text_auto=True
+    )
+    fig.update_layout(
+        barmode='stack',
+        xaxis_title='Maand',
+        yaxis_title='Totaal uren',
+        legend_title='Taaktype',
+        template='plotly_white',
+        margin=dict(l=40, r=40, t=60, b=40)
+    )
+    st.plotly_chart(fig, use_container_width=True)
+else:
+    st.info("Geen uren gevonden voor de geselecteerde periode en projecten.")
+
 st.markdown("""
 <hr style="margin-top: 2em; margin-bottom: 0.5em; border: none; border-top: 1px solid #eee;" />
 <div style="text-align: center; color: #888; font-size: 1em; margin-bottom: 0.5em;">
