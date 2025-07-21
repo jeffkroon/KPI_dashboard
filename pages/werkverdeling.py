@@ -55,6 +55,7 @@ def load_base_data():
 
         df_companies = load_data_df("companies", columns=["id", "companyname"])
         df_projects = df_projects.merge(df_companies[['id', 'companyname']], left_on='company_id', right_on='id', how='left')
+        df_projects = df_projects.rename(columns={'id_x': 'id'})
 
         df_tasktypes = load_data_df("tasktypes", columns=["id", "searchname"])
         
@@ -123,7 +124,7 @@ date_range = st.date_input(
 start_date, end_date = date_range
 
 # After merging with companies, use the correct column for project id
-project_options = df_projects[['id_x', 'name']].rename(columns={'id_x': 'id'}).to_dict('records')
+project_options = df_projects[['id', 'name']].to_dict('records')
 default_projects = project_options[:10]
 select_all_projects = st.checkbox("Selecteer alle opdrachten", value=False)
 selected_projects = project_options if select_all_projects else st.multiselect(
