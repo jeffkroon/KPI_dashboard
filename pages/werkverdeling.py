@@ -41,63 +41,74 @@ def get_engine():
 engine = get_engine()
 
 @st.cache_data(ttl=300)
-def load_base_data():
+def load_filtered_data(project_ids, start_date, end_date):
     """
-    Loads all the non-timesheet dimension tables (employees, projects, companies, tasks).
-    This function is cached to improve performance.
+    Loads all necessary data in a memory-efficient way based on the user's filter selection.
+    This is the core data loading function for the page.
     """
-    try:
-        df_employees = pd.read_sql("SELECT id, firstname, lastname FROM employees", engine)
-        df_employees['fullname'] = df_employees['firstname'] + ' ' + df_employees['lastname']
+    if not project_ids:
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+
+    # Define filters
+    date_filter = f"u.date_date BETWEEN '{start_date.strftime('%Y-%m-%d')}' AND '{end_date.strftime('%Y-%m-%d')}'"
+    # Handle the 'all projects' case
+    if len(project_ids) == pd.read_sql("SELECT COUNT(DISTINCT id) FROM projects WHERE archived = FALSE", engine).iloc[0,0]:
+         project_filter = "1=1"
+    else:
+        project_filter = f"u.offerprojectbase_id IN ({','.join(map(str, project_ids))})"
+
+    # 1. Get all relevant hour registrations and IDs from the fact table
+    main_query = f"""
+    SELECT
+        u.employee_id,
+        u.task_id,
+        u.offerprojectbase_id,
+        u.amount,
+        u.date_date,
+        u.description
+    FROM urenregistratie u
+    WHERE u.status_searchname = 'Gefiatteerd' AND {project_filter} AND {date_filter}
+    """
+    df_uren_base = pd.read_sql(main_query, engine)
+
+    if df_uren_base.empty:
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+
+    # 2. Get the unique dimension IDs from our base data
+    relevant_employee_ids = df_uren_base['employee_id'].dropna().unique()
+    relevant_task_ids = df_uren_base['task_id'].dropna().unique()
+    relevant_project_ids = df_uren_base['offerprojectbase_id'].dropna().unique()
+
+    # 3. Fetch details for ONLY those relevant IDs
+    df_employees = pd.read_sql(f"SELECT id, firstname, lastname FROM employees WHERE id IN ({','.join(map(str, relevant_employee_ids))})", engine)
+    df_employees['fullname'] = df_employees['firstname'] + ' ' + df_employees['lastname']
+
+    df_projects_raw = pd.read_sql(f"SELECT id, name, company_id FROM projects WHERE id IN ({','.join(map(str, relevant_project_ids))})", engine)
+    df_companies = pd.read_sql("SELECT id, companyname FROM companies", engine)
+    df_projects = df_projects_raw.merge(df_companies, left_on='company_id', right_on='id', how='left').rename(columns={'id_x': 'project_id'})
+
+    df_tasks_raw = pd.read_sql(f"SELECT id, type FROM tasks WHERE id IN ({','.join(map(str, relevant_task_ids))})", engine)
+    df_tasktypes = pd.read_sql("SELECT id, searchname FROM tasktypes", engine)
+    
+    def extract_tasktype_id(type_data):
+        if pd.isna(type_data) or not isinstance(type_data, str): return None
+        try: return ast.literal_eval(type_data).get('id')
+        except: return None
         
-        df_projects = pd.read_sql("SELECT id, name, company_id, archived, totalexclvat, phase_searchname FROM projects", engine)
-        df_companies = pd.read_sql("SELECT id, companyname FROM companies", engine)
-        df_projects = df_projects.merge(df_companies, left_on='company_id', right_on='id', suffixes=('_proj', '_comp'))
-        df_projects = df_projects.rename(columns={'id_proj': 'project_id'})
+    df_tasks = df_tasks_raw.copy()
+    df_tasks['tasktype_id'] = df_tasks['type'].apply(extract_tasktype_id)
+    df_tasks = df_tasks[['id', 'tasktype_id']].dropna()
+    df_tasks['tasktype_id'] = pd.to_numeric(df_tasks['tasktype_id'], downcast='integer', errors='coerce')
+    df_tasks = df_tasks.merge(df_tasktypes, left_on='tasktype_id', right_on='id', how='left').rename(columns={'id_x': 'task_id', 'searchname': 'task_name'})
 
-        df_tasktypes = pd.read_sql("SELECT id, searchname FROM tasktypes", engine)
-        df_tasks_raw = pd.read_sql("SELECT id, type FROM tasks", engine)
-
-        def extract_tasktype_id(type_data):
-            if pd.isna(type_data): return None
-            if isinstance(type_data, str):
-                try:
-                    data = ast.literal_eval(type_data)
-                    return data.get('id') if isinstance(data, dict) else None
-                except (ValueError, SyntaxError): return None
-            return type_data.get('id') if isinstance(type_data, dict) else None
-        
-        # After merging with tasktypes, print columns and robustly rename
-        df_tasks = df_tasks_raw.copy()
-        df_tasks['tasktype_id'] = df_tasks['type'].apply(extract_tasktype_id)
-        df_tasks = df_tasks[['id', 'tasktype_id']].dropna()
-        df_tasks['tasktype_id'] = pd.to_numeric(df_tasks['tasktype_id'], downcast='integer', errors='coerce')
-        df_tasks = df_tasks.merge(df_tasktypes, left_on='tasktype_id', right_on='id', suffixes=('_task', '_tasktype'))
-        print('df_tasks columns after merge:', df_tasks.columns)
-        # Robustly rename columns
-        for col in ['id_task', 'id_x', 'id']:
-            if col in df_tasks.columns:
-                df_tasks = df_tasks.rename(columns={col: 'task_id'})
-                break
-        if 'searchname' in df_tasks.columns:
-            df_tasks = df_tasks.rename(columns={'searchname': 'task_name'})
-
-
-        # Filter for active projects only
-        df_projects = df_projects[(df_projects["archived"] == False) & (df_projects["phase_searchname"].isin(["Voorbereiding", "Uitvoering"]))].copy()
-        df_projects["totalexclvat"] = pd.to_numeric(df_projects["totalexclvat"], errors="coerce")
-
-        return df_employees, df_projects, df_tasks
-    except Exception as e:
-        st.error(f"Fout bij het laden van basisdata: {e}")
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+    return df_uren_base, df_employees, df_projects, df_tasks
 
 # --- Load the data ---
-df_employees, df_projects, df_tasks = load_base_data()
+# df_employees, df_projects, df_tasks = load_base_data() # This line is removed
 
-if df_employees.empty or df_projects.empty:
-    st.error("Essentiële data (medewerkers of projecten) kon niet geladen worden. Het dashboard kan niet doorgaan.")
-    st.stop()
+# if df_employees.empty or df_projects.empty: # This line is removed
+#     st.error("Essentiële data (medewerkers of projecten) kon niet geladen worden. Het dashboard kan niet doorgaan.") # This line is removed
+#     st.stop() # This line is removed
 
 # --- 3. UI LAYOUT & PLACEHOLDERS ---
 
@@ -141,9 +152,9 @@ with st.container(border=True):
             start_date, end_date = min_date_default, max_date
 
     with filter_col2:
-        project_options = df_projects.sort_values('name').to_dict('records')
-        project_id_to_obj = {p['project_id']: p for p in project_options}
-        all_project_ids = [p['project_id'] for p in project_options]
+        project_options = pd.read_sql("SELECT id, name FROM projects WHERE archived = FALSE", engine).sort_values('name').to_dict('records')
+        project_id_to_obj = {p['id']: p for p in project_options}
+        all_project_ids = [p['id'] for p in project_options]
 
         # Define callbacks to manipulate the session state for the multiselect
         def select_all_projects():
@@ -154,7 +165,7 @@ with st.container(border=True):
         # Initialize the session state with default project_ids if it's not already set
         if 'werkverdeling_selected_project_ids' not in st.session_state:
             known_active_project_ids = [342, 3368, 3101, 751, 335]
-            default_project_ids = [p['project_id'] for p in project_options if p['project_id'] in known_active_project_ids]
+            default_project_ids = [p['id'] for p in project_options if p['id'] in known_active_project_ids]
             if not default_project_ids:
                 default_project_ids = all_project_ids[:5]
             st.session_state.werkverdeling_selected_project_ids = default_project_ids
@@ -192,8 +203,20 @@ with st.container(border=True):
 
 # Separate block for dynamic content
 if project_ids:
+    # --- New Data Loading ---
+    df_uren, df_employees, df_projects_filtered, df_tasks = load_filtered_data(project_ids, start_date, end_date)
+
+    if df_uren.empty:
+        st.warning("Geen urenregistraties gevonden voor de geselecteerde criteria.")
+        st.stop()
+        
+    # All subsequent logic uses the filtered dataframes...
+    # For example:
+    # df_employee_hours = df_uren.groupby('employee_id')['amount'].sum().reset_index().merge(df_employees, left_on='employee_id', right_on='id')
+    # ... and so on for all charts and tables
+
     # --- Perform Aggregations on DB side ---
-    date_filter = f"date_date BETWEEN '{start_date.strftime('%Y-%m-%d')}' AND '{end_date.strftime('%Y-%m-%d')}'"
+    # date_filter = f"date_date BETWEEN '{start_date.strftime('%Y-%m-%d')}' AND '{end_date.strftime('%Y-%m-%d')}'" # This line is removed
     # Bepaal of alle projecten geselecteerd zijn
     all_selected = len(project_ids) == len(all_project_ids)
     if all_selected:
@@ -316,7 +339,7 @@ if project_ids:
             
             # Merge with pre-loaded dimension tables to get the names
             df_merged = df_detail_base.merge(df_employees, left_on='employee_id', right_on='id', how='left')
-            df_merged = df_merged.merge(df_projects, left_on='offerprojectbase_id', right_on='project_id', how='left')
+            df_merged = df_merged.merge(df_projects_filtered, left_on='offerprojectbase_id', right_on='project_id', how='left')
             df_merged = df_merged.merge(df_tasks, on='task_id', how='left')
             
             # Select and rename final columns for display
@@ -340,7 +363,7 @@ if project_ids:
         df_uren_detailed_limited = df_display.copy()
         # Vervang de .map() door een merge op projectnaam (name), zodat dubbele namen geen probleem zijn
         df_uren_detailed_limited = df_uren_detailed_limited.merge(
-            df_projects[['name', 'companyname']].drop_duplicates(),
+            df_projects_filtered[['name', 'companyname']].drop_duplicates(),
             left_on='Project',
             right_on='name',
             how='left'
