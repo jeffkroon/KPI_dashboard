@@ -297,52 +297,42 @@ if project_ids:
             if len(df_display) == DETAIL_LIMIT:
                 st.warning(f"Let op: De weergave is beperkt tot de laatste {DETAIL_LIMIT} urenregels.")
 
-    # --- Section 3: Monthly Analysis ---
+    # --- Section 3: Werkverdeling per Maand en Taaktype ---
     with st.container(border=True):
-        st.header("🏢 Maandelijkse Analyse per Bedrijf")
-        st.markdown("Analyseer de uren per taak voor specifieke bedrijven in een gekozen maand.")
-        df_uren_detailed_limited = df_display.copy()
-        df_uren_detailed_limited = df_uren_detailed_limited.merge(
-            df_projects_filtered[['name', 'companyname']].drop_duplicates(),
-            left_on='Project',
-            right_on='name',
-            how='left'
+        st.header("📅 Werkverdeling per Maand en Taaktype")
+        st.markdown("Overzicht van het totaal aantal uren per taaktype per maand voor de huidige selectie.")
+
+        # Data voorbereiden
+        df_maand_taak = df_uren.copy()
+        df_maand_taak = df_maand_taak.merge(df_tasks[['task_id', 'task_name']], left_on='task_id', right_on='task_id', how='left')
+        df_maand_taak['maand'] = pd.to_datetime(df_maand_taak['date_date']).dt.strftime('%Y-%m')
+
+        # Groeperen per maand en taaktype
+        pivot = (
+            df_maand_taak.groupby(['maand', 'task_name'])['amount']
+            .sum()
+            .reset_index()
+            .pivot(index='maand', columns='task_name', values='amount')
+            .fillna(0)
+            .sort_index(ascending=False)
         )
-        if not df_uren_detailed_limited.empty:
-            df_monthly = df_uren_detailed_limited
-            df_monthly['maand'] = pd.to_datetime(df_monthly['Datum']).dt.strftime('%Y-%m')
-            sec3_col1, sec3_col2 = st.columns(2)
-            with sec3_col1:
-                unique_months = sorted(df_monthly['maand'].unique(), reverse=True)
-                selected_month = st.selectbox("Kies Maand", unique_months, index=0)
-            with sec3_col2:
-                unique_companies = sorted(df_monthly['companyname'].dropna().unique())
-                if unique_companies:
-                    selected_company = st.selectbox("Kies Bedrijf", unique_companies, index=0)
-                else:
-                    selected_company = None
-            if selected_company:
-                df_filtered_monthly = df_monthly[(df_monthly['maand'] == selected_month) & (df_monthly['companyname'] == selected_company)]
-            else:
-                df_filtered_monthly = pd.DataFrame()
-            if not df_filtered_monthly.empty:
-                st.markdown(f"##### Uren per Taak voor {selected_company} in {selected_month}")
-                uren_per_taak = df_filtered_monthly.groupby('Taak')['Uren'].sum().reset_index()
-                uren_per_taak = uren_per_taak.sort_values('Uren', ascending=False)
-                st.dataframe(uren_per_taak, use_container_width=True)
-                fig_monthly_tasks = px.bar(
-                    uren_per_taak,
-                    x='Uren',
-                    y='Taak',
-                    orientation='h',
-                    text_auto=True,
-                    color='Taak',
-                    color_discrete_map=TASK_COLOR_MAP
-                )
-                fig_monthly_tasks.update_layout(showlegend=False)
-                st.plotly_chart(fig_monthly_tasks, use_container_width=True)
-            else:
-                st.warning("Geen data beschikbaar voor de geselecteerde maand en bedrijf.")
+
+        st.markdown("#### Tabel: Uren per Maand per Taaktype")
+        st.dataframe(pivot, use_container_width=True)
+
+        st.markdown("#### Grafiek: Uren per Maand per Taaktype (Stacked Bar)")
+        fig = px.bar(
+            pivot,
+            x=pivot.index,
+            y=pivot.columns,
+            labels={'value': 'Uren', 'maand': 'Maand', 'variable': 'Taaktype'},
+            title="Totaal aantal uren per taaktype per maand",
+            barmode='stack',
+            color_discrete_map=TASK_COLOR_MAP
+        )
+        fig.update_layout(xaxis_title="Maand", yaxis_title="Uren", legend_title="Taaktype")
+        st.plotly_chart(fig, use_container_width=True)
+
 else:
     st.info("📂 Selecteer één of meer projecten om de analyse te starten.")
 
