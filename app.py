@@ -57,7 +57,7 @@ except ImportError:
     st.warning("📛 'streamlit-extras' is niet geïnstalleerd of niet vindbaar door je environment.")
 
 # --- LOAD DATA ---
-df_projects_raw = load_data_df("projects", columns=["id", "company_id", "archived", "totalexclvat"])
+df_projects_raw = load_data_df("projects", columns=["id", "company_id", "archived", "totalexclvat", "name"])
 if not isinstance(df_projects_raw, pd.DataFrame):
     df_projects_raw = pd.concat(list(df_projects_raw), ignore_index=True)
 df_companies = load_data_df("companies", columns=["id", "companyname"])
