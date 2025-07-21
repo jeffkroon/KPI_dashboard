@@ -159,25 +159,17 @@ with st.container(border=True):
                 default_project_ids = all_project_ids[:5]
             st.session_state.werkverdeling_selected_project_ids = default_project_ids
 
-        # Toon een korte samenvatting van de selectie boven de multiselect
-        aantal = len(st.session_state.werkverdeling_selected_project_ids)
-        totaal = len(all_project_ids)
-        if aantal == totaal:
-            st.markdown(f"**Alle {totaal} projecten geselecteerd**")
-        elif aantal == 0:
-            st.markdown("**Geen projecten geselecteerd**")
-        else:
-            st.markdown(f"**{aantal} van {totaal} projecten geselecteerd**")
+    # The multiselect widget's state is now controlled via session_state (list of project_ids)
+    aantal = len(st.session_state.werkverdeling_selected_project_ids)
+    totaal = len(all_project_ids)
+    if aantal == totaal:
+        summary_label = f"Alle {totaal} projecten geselecteerd"
+    elif aantal == 0:
+        summary_label = "Geen projecten geselecteerd"
+    else:
+        summary_label = f"{aantal} van {totaal} projecten geselecteerd"
 
-        # Multiselect zonder label zodat de selectie niet dubbel wordt weergegeven
-        selected_project_ids = st.multiselect(
-            "",
-            options=all_project_ids,
-            key='werkverdeling_selected_project_ids',
-            format_func=lambda pid: f"{project_id_to_obj[pid]['name']} (ID: {pid})",
-            help="Selecteer de projecten die u wilt analyseren."
-        )
-        
+    with st.expander(summary_label):
         # Add the buttons to control the selection
         b_col1, b_col2, _ = st.columns([1, 1, 2])
         with b_col1:
@@ -185,9 +177,18 @@ with st.container(border=True):
         with b_col2:
             st.button("Deselecteer Alles", on_click=deselect_all_projects, use_container_width=True)
 
-        # Get the selected project dicts for downstream use
-        selected_projects = [project_id_to_obj[pid] for pid in selected_project_ids]
-        project_ids = selected_project_ids
+        selected_project_ids = st.multiselect(
+            "Wijzig selectie:",
+            options=all_project_ids,
+            key='werkverdeling_selected_project_ids',
+            format_func=lambda pid: f"{project_id_to_obj.get(pid, {'name': 'Onbekend'})['name']} (ID: {pid})",
+            help="Selecteer de projecten die u wilt analyseren.",
+            label_visibility="collapsed"
+        )
+    
+    # Get the selected project dicts for downstream use
+    selected_projects = [project_id_to_obj[pid] for pid in selected_project_ids]
+    project_ids = selected_project_ids
 
 # Separate block for dynamic content
 if project_ids:
@@ -373,19 +374,15 @@ if project_ids:
             if not df_filtered_monthly.empty:
                 st.markdown(f"##### Uren per Taak voor {selected_company} in {selected_month}")
                 
-                # Pivot table to show hours per task
-                pivot_table = pd.pivot_table(
-                    df_filtered_monthly,
-                    values='Uren',
-                    index='Taak',
-                    aggfunc='sum'
-                ).sort_values('Uren', ascending=False)
+                # Gebruik groupby().sum() in plaats van pivot_table voor robuustheid
+                uren_per_taak = df_filtered_monthly.groupby('Taak')['Uren'].sum().reset_index()
+                uren_per_taak = uren_per_taak.sort_values('Uren', ascending=False)
                 
-                st.dataframe(pivot_table, use_container_width=True)
+                st.dataframe(uren_per_taak, use_container_width=True)
                 
                 # Bar chart for the same data
                 fig_monthly_tasks = px.bar(
-                    pivot_table.reset_index(),
+                    uren_per_taak,
                     x='Uren',
                     y='Taak',
                     orientation='h',
