@@ -252,6 +252,15 @@ def filter_hours(df: pd.DataFrame) -> pd.DataFrame:
     ]
     cols = [c for c in keep_cols if c in df.columns]
     return pd.DataFrame(df[cols].copy())
+
+def filter_tasks(df: pd.DataFrame) -> pd.DataFrame:
+    """Filtert en selecteert relevante kolommen voor tasks."""
+    keep_cols = [
+        "id", "searchname", "content", "number", "estimatedhours", "type"
+    ]
+    cols = [c for c in keep_cols if c in df.columns]
+    return pd.DataFrame(df[cols].copy())
+
 def flatten_dict_column(df: pd.DataFrame) -> pd.DataFrame:
     for col in df.columns:
         is_dict_series = df[col].apply(lambda x: isinstance(x, dict))
@@ -579,6 +588,36 @@ def fetch_gripp_tasktypes():
     return cached_fetch("gripp_tasktypes", fetch, force_refresh=FORCE_REFRESH)
 
 
+def fetch_gripp_tasks():
+    """Haalt alle taken op uit de Gripp API."""
+    def fetch():
+        all_rows = []
+        start = 0
+        max_results = 100
+        watchdog = 200  # Taken kunnen er veel zijn
+        while watchdog > 0:
+            payload = [{
+                "id": 1,
+                "method": "task.get",
+                "params": [
+                    [],
+                    {"paging": {"firstresult": start, "maxresults": max_results}}
+                ]
+            }]
+            pytime.sleep(0.1)
+            response = post_with_rate_limit_handling(BASE_URL, headers=HEADERS, json=payload)
+            response.raise_for_status()
+            data = response.json()
+            rows = data[0].get("result", {}).get("rows", [])
+            all_rows.extend(rows)
+            if not data[0]["result"].get("more_items_in_collection", False):
+                break
+            start = data[0]["result"].get("next_start", start + max_results)
+            watchdog -= 1
+        return pd.DataFrame(all_rows)
+    return cached_fetch("gripp_tasks", fetch, force_refresh=FORCE_REFRESH)
+
+
 def fetch_gripp_projectphases():
     def fetch():
         all_rows = []
@@ -878,6 +917,7 @@ def main():
     employees_raw = fetch_gripp_employees()
     companies_raw = fetch_gripp_companies()
     tasktypes_raw = fetch_gripp_tasktypes()
+    tasks_raw = fetch_gripp_tasks()  # <-- NIEUW
     hours_raw = fetch_gripp_hours_data()
 
     # === FIX: Flatten de 'task' kolom in urenregistratie ===
@@ -919,6 +959,7 @@ def main():
     datasets["gripp_employees"] = filter_employees(employees_raw)
     datasets["gripp_companies"] = filter_companies(companies_raw)
     datasets["gripp_tasktypes"] = filter_tasktypes(tasktypes_raw)
+    datasets["gripp_tasks"] = filter_tasks(tasks_raw) # <-- NIEUW
     datasets["gripp_hours_data"] = filter_hours(hours_raw)
     datasets["gripp_invoices"] = filter_invoices(invoices_raw)
     
@@ -991,6 +1032,8 @@ def main():
         safe_to_sql(datasets["gripp_companies"].drop_duplicates(subset="id"), "companies")
     if datasets.get("gripp_tasktypes") is not None:
         safe_to_sql(datasets["gripp_tasktypes"].drop_duplicates(subset="id"), "tasktypes")
+    if datasets.get("gripp_tasks") is not None: # <-- NIEUW
+        safe_to_sql(datasets["gripp_tasks"].drop_duplicates(subset="id"), "tasks") # <-- NIEUW
     if datasets.get("gripp_hours_data") is not None:
         hours_data = convert_date_columns(datasets["gripp_hours_data"].drop_duplicates(subset="id"))
         safe_to_sql(hours_data, "urenregistratie")
