@@ -152,21 +152,7 @@ if project_ids:
 
     # --- KPIs ---
     aantal_projecten = len(project_ids)
-    # Debug output before using 'id' column
-    st.write("df_projects columns:", df_projects.columns.tolist())
-    st.write("First few rows of df_projects:", df_projects.head())
-
-    # Use the first available column for project id
-    project_id_col = None
-    for col in ['id', 'id_x', 'id_y']:
-        if col in df_projects.columns:
-            project_id_col = col
-            break
-    if project_id_col is None:
-        st.error("No project id column found in df_projects!")
-        st.stop()
-
-    totale_omzet = df_projects[df_projects[project_id_col].isin(project_ids)]['totalexclvat'].sum()
+    totale_omzet = df_projects[df_projects['id'].isin(project_ids)]['totalexclvat'].sum()
     aantal_medewerkers = len(df_total_hours_per_employee)
     totale_uren = df_total_hours_per_employee['total_hours'].sum()
 
