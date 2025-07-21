@@ -98,6 +98,18 @@ for col in ["amountwritten", "sellingprice"]:
 
 # Bereken totaal uren per bedrijf direct in SQL
 uren_per_bedrijf = load_data_df("projectlines_per_company", columns=["bedrijf_id", "SUM(CAST(amountwritten AS FLOAT)) as totaal_uren"], group_by="bedrijf_id")
+uren_per_bedrijf.columns = ["bedrijf_id", "totaal_uren"]
+
+# === Alleen uren van projectonderdelen met unit_searchname == 'uur' ===
+df_projectlines_unit = load_data_df("projectlines_per_company", columns=["id", "bedrijf_id", "amountwritten", "unit_searchname"])
+if not isinstance(df_projectlines_unit, pd.DataFrame):
+    df_projectlines_unit = pd.concat(list(df_projectlines_unit), ignore_index=True)
+df_projectlines_uur = df_projectlines_unit[df_projectlines_unit["unit_searchname"].str.lower() == "uur"].copy()
+uren_per_bedrijf_uur = df_projectlines_uur.groupby("bedrijf_id")["amountwritten"].sum().reset_index()
+uren_per_bedrijf_uur.columns = ["bedrijf_id", "totaal_uren_uur"]
+
+# Merge deze gefilterde uren met uren_per_bedrijf (of bedrijfsstats indien aanwezig)
+uren_per_bedrijf = uren_per_bedrijf.merge(uren_per_bedrijf_uur, on="bedrijf_id", how="left")
 
 # Bereken totaal gefactureerd per bedrijf direct in SQL
 factuurbedrag_per_bedrijf = load_data_df("invoices", columns=["company_id", "SUM(CAST(totalpayed AS FLOAT)) as totalpayed"], where="fase = 'Factuur'", group_by="company_id")

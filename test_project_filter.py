@@ -32,5 +32,14 @@ def main():
     # Toon eventueel de eerste paar rijen
     print(df_projects_merged.head())
 
+    df_projectlines = load_data_df("projectlines_per_company", columns=["id", "bedrijf_id", "amountwritten", "unit_searchname"])
+    if not isinstance(df_projectlines, pd.DataFrame):
+        df_projectlines = pd.concat(list(df_projectlines), ignore_index=True)
+    df_projectlines_uur = df_projectlines[df_projectlines["unit_searchname"].str.lower() == "uur"].copy()
+    uren_per_bedrijf_uur = df_projectlines_uur.groupby("bedrijf_id")["amountwritten"].sum().reset_index()
+    uren_per_bedrijf_uur.columns = ["bedrijf_id", "totaal_uren_uur"]
+    print("\nAantal uren per bedrijf (alleen unit 'uur'):")
+    print(uren_per_bedrijf_uur.head())
+
 if __name__ == "__main__":
     main() 
