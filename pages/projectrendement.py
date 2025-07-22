@@ -168,6 +168,9 @@ bedrijfsstats["totalpayed"] = bedrijfsstats["totalpayed"].fillna(0)
 # Voeg geplande_omzet toe aan bedrijfsstats en vul NaN met 0
 bedrijfsstats = bedrijfsstats.merge(geplande_omzet_per_bedrijf, on="bedrijf_id", how="left")
 bedrijfsstats["geplande_omzet"] = bedrijfsstats["geplande_omzet"].fillna(0)
+# Zorg dat totalpayed en totaal_uren numeriek zijn vóór deling
+bedrijfsstats["totalpayed"] = pd.to_numeric(bedrijfsstats["totalpayed"], errors="coerce").fillna(0)
+bedrijfsstats["totaal_uren"] = pd.to_numeric(bedrijfsstats["totaal_uren"], errors="coerce").fillna(0)
 # Dynamische berekening tarief_per_uur op basis van omzet_optie
 if omzet_optie == "Werkelijke omzet (facturen)":
     bedrijfsstats["tarief_per_uur"] = bedrijfsstats["totalpayed"].div(bedrijfsstats["totaal_uren"].replace(0, pd.NA)).fillna(0)
