@@ -1,40 +1,24 @@
 import pandas as pd
-from sqlalchemy import create_engine
-from dotenv import load_dotenv
-import os
+from utils.data_loaders import load_data_df
 
-# Laad de omgeving
-load_dotenv()
-POSTGRES_URL = os.getenv("POSTGRES_URL")
-engine = create_engine(POSTGRES_URL)
+# Load companies dataset
+df_companies = load_data_df("companies", columns=["id", "companyname"])
 
-# 1. Laad projecten
-df_projects = pd.read_sql("SELECT id, name FROM projects WHERE archived = FALSE", engine)
+# Find the ID of the company 'EV Administratie & Advies B.V.'
+target_company = df_companies[df_companies["companyname"] == "EV Administratie & Advies B.V."]
+if target_company.empty:
+    print("Bedrijf niet gevonden.")
+    exit()
 
-# 2. Laad urenregistraties
-df_uren = pd.read_sql("""
-    SELECT offerprojectbase_id, employee_id, amount 
-    FROM urenregistratie 
-    WHERE status_searchname = 'Gefiatteerd'
-""", engine)
+company_id = target_company.iloc[0]["id"]
+print(f"Bedrijf ID voor 'EV Administratie & Advies B.V.': {company_id}")
 
-# 3. Laad projectlines
-df_projectlines = pd.read_sql("SELECT offerprojectbase_id FROM projectlines_per_company", engine)
+# Load projectlines dataset
+df_projectlines = load_data_df("projectlines_per_company", columns=["bedrijf_id", "amount", "amountwritten", "sellingprice", "unit_searchname", "description"])
+df_projectlines["totalexclvat"] = pd.to_numeric(df_projectlines["sellingprice"], errors="coerce").fillna(0) * pd.to_numeric(df_projectlines["amount"], errors="coerce").fillna(0)
 
-# 4. Groepeer uren per project
-uren_per_project = df_uren.groupby('offerprojectbase_id')['employee_id'].nunique().reset_index()
-uren_per_project.columns = ['project_id', 'unique_employees']
+# Filter projectlines for the target company
+df_target_projectlines = df_projectlines[df_projectlines["bedrijf_id"] == company_id]
 
-# 5. Tel projectlines per project
-projectlines_per_project = df_projectlines.groupby('offerprojectbase_id').size().reset_index(name='projectlines_count')
-
-# 6. Combineer datasets
-df_check = uren_per_project.merge(projectlines_per_project, left_on='project_id', right_on='offerprojectbase_id', how='left').fillna(0)
-
-# 7. Filter: veel medewerkers maar geen projectlines
-df_suspect = df_check[(df_check['unique_employees'] >= 3) & (df_check['projectlines_count'] == 0)]
-
-# 8. Output
-resultaat = df_suspect.merge(df_projects, left_on='project_id', right_on='id')[['project_id', 'name', 'unique_employees']]
-print("\n❗ Verdachte projecten waar veel mensen uren op schrijven maar geen projectregels:\n")
-print(resultaat)
+print(f"Aantal projectlines gevonden: {len(df_target_projectlines)}")
+print(df_target_projectlines)
