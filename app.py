@@ -100,9 +100,22 @@ df_companies = load_data_df("companies", columns=["id", "companyname", "tag_name
 if not isinstance(df_companies, pd.DataFrame):
     df_companies = pd.concat(list(df_companies), ignore_index=True)
 
+# Helperfunctie voor exacte tag match
+def bedrijf_heeft_tag(tag_string, filter_tags):
+    if not isinstance(tag_string, str):
+        return False
+    tags = [t.strip() for t in tag_string.split(",")]
+    return any(tag in tags for tag in filter_tags)
+
 if filter_tags:
-    df_companies = df_companies[df_companies["tag_names"].notnull()]
-    df_companies = df_companies[df_companies["tag_names"].apply(lambda tags: any(tag in tags for tag in filter_tags))]
+    df_companies = df_companies[df_companies["tag_names"].apply(lambda x: bedrijf_heeft_tag(x, filter_tags))]
+
+# --- Bedrijf ID's na filtering ---
+bedrijf_ids = df_companies["id"].unique().tolist()
+
+if len(bedrijf_ids) == 0:
+    st.warning("Geen bedrijven gevonden voor deze filterkeuze.")
+    st.stop()
 
 df_employees = load_data_df("employees", columns=["id", "firstname", "lastname"])
 if not isinstance(df_employees, pd.DataFrame):
@@ -113,6 +126,10 @@ if not isinstance(df_projectlines, pd.DataFrame):
 df_invoices = load_data_df("invoices", columns=["id", "company_id", "fase", "totalpayed", "status_searchname", "number", "date_date", "subject"])
 if not isinstance(df_invoices, pd.DataFrame):
     df_invoices = pd.concat(list(df_invoices), ignore_index=True)
+
+# --- Filter projectlines en invoices op bedrijf_ids ---
+df_projectlines = df_projectlines[df_projectlines["bedrijf_id"].isin(bedrijf_ids)]
+df_invoices = df_invoices[df_invoices["company_id"].isin(bedrijf_ids)]
 
 # --- KPI CARDS ---
 col1, col2, col3, col4 = st.columns(4)
@@ -137,7 +154,7 @@ for col in ["amountwritten", "sellingprice"]:
     if col in df_projectlines.columns:
         df_projectlines[col] = pd.to_numeric(df_projectlines[col], errors="coerce")
 
-# Bereken totaal uren per bedrijf direct in SQL
+ # Bereken totaal uren per bedrijf direct in SQL
 uren_per_bedrijf = load_data_df("projectlines_per_company", columns=["bedrijf_id", "SUM(CAST(amountwritten AS FLOAT)) as totaal_uren"], group_by="bedrijf_id")
 uren_per_bedrijf.columns = ["bedrijf_id", "totaal_uren"]
 
@@ -161,6 +178,10 @@ if 'company_id' in uren_per_bedrijf.columns:
 if 'company_id' in factuurbedrag_per_bedrijf.columns:
     factuurbedrag_per_bedrijf = factuurbedrag_per_bedrijf.rename(columns={'company_id': 'bedrijf_id'})
 
+# Filter uren_per_bedrijf en factuurbedrag_per_bedrijf op bedrijf_ids (voor zekerheid, SQL kan breder zijn)
+uren_per_bedrijf = uren_per_bedrijf[uren_per_bedrijf["bedrijf_id"].isin(bedrijf_ids)]
+factuurbedrag_per_bedrijf = factuurbedrag_per_bedrijf[factuurbedrag_per_bedrijf["bedrijf_id"].isin(bedrijf_ids)]
+
 # Combineer stats per bedrijf
 bedrijfsstats = uren_per_bedrijf.merge(factuurbedrag_per_bedrijf, on="bedrijf_id", how="outer")
 bedrijfsstats = bedrijfsstats.merge(df_companies[["id", "companyname"]], left_on="bedrijf_id", right_on="id", how="left")
@@ -168,6 +189,8 @@ bedrijfsstats = bedrijfsstats.drop(columns=[col for col in ['id'] if col in bedr
 bedrijfsstats["totaal_uren"] = bedrijfsstats["totaal_uren"].fillna(0)
 bedrijfsstats["totalpayed"] = bedrijfsstats["totalpayed"].fillna(0)
 bedrijfsstats["werkelijk_tarief_per_uur"] = bedrijfsstats["totalpayed"].div(bedrijfsstats["totaal_uren"].replace(0, pd.NA)).fillna(0)
+# Filter bedrijfsstats op bedrijf_ids (voor absolute veiligheid)
+bedrijfsstats = bedrijfsstats[bedrijfsstats["bedrijf_id"].isin(bedrijf_ids)]
 
 # --- SIMPELE KPI'S & LEUKE INZICHTEN ---
 st.markdown("""
