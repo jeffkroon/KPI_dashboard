@@ -40,6 +40,33 @@ def get_engine():
 
 engine = get_engine()
 
+# --- Caching: Load all employees, projects, and tasks ---
+@st.cache_data(ttl=600)
+def load_all_employees():
+    return pd.read_sql("SELECT id, firstname, lastname FROM employees", engine)
+
+@st.cache_data(ttl=600)
+def load_all_projects():
+    df_projects_raw = pd.read_sql("SELECT id, name, company_id FROM projects WHERE archived = FALSE", engine)
+    df_companies = pd.read_sql("SELECT id, companyname FROM companies", engine)
+    return df_projects_raw.merge(df_companies, left_on='company_id', right_on='id', how='left')
+
+@st.cache_data(ttl=600)
+def load_all_tasks():
+    df_tasks_raw = pd.read_sql("SELECT id, type FROM tasks", engine)
+    df_tasktypes = pd.read_sql("SELECT id, searchname FROM tasktypes", engine)
+
+    def extract_tasktype_id(type_data):
+        if pd.isna(type_data) or not isinstance(type_data, str): return None
+        try: return ast.literal_eval(type_data).get('id')
+        except: return None
+
+    df_tasks_raw['tasktype_id'] = df_tasks_raw['type'].apply(extract_tasktype_id)
+    df_tasks_raw = df_tasks_raw[['id', 'tasktype_id']].dropna()
+    df_tasks_raw['tasktype_id'] = pd.to_numeric(df_tasks_raw['tasktype_id'], downcast='integer', errors='coerce')
+    return df_tasks_raw.merge(df_tasktypes, left_on='tasktype_id', right_on='id', how='left').rename(columns={'searchname': 'task_name'})
+
+
 @st.cache_data(ttl=300)
 def load_filtered_data(project_ids, start_date, end_date):
     """
@@ -74,34 +101,7 @@ def load_filtered_data(project_ids, start_date, end_date):
     if df_uren_base.empty:
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-    # 2. Get the unique dimension IDs from our base data
-    relevant_employee_ids = df_uren_base['employee_id'].dropna().unique()
-    relevant_task_ids = df_uren_base['task_id'].dropna().unique()
-    relevant_project_ids = df_uren_base['offerprojectbase_id'].dropna().unique()
-
-    # 3. Fetch details for ONLY those relevant IDs
-    df_employees = pd.read_sql(f"SELECT id, firstname, lastname FROM employees WHERE id IN ({','.join(map(str, relevant_employee_ids))})", engine)
-    df_employees['fullname'] = df_employees['firstname'] + ' ' + df_employees['lastname']
-
-    df_projects_raw = pd.read_sql(f"SELECT id, name, company_id FROM projects WHERE id IN ({','.join(map(str, relevant_project_ids))})", engine)
-    df_companies = pd.read_sql("SELECT id, companyname FROM companies", engine)
-    df_projects = df_projects_raw.merge(df_companies, left_on='company_id', right_on='id', how='left').rename(columns={'id_x': 'project_id'})
-
-    df_tasks_raw = pd.read_sql(f"SELECT id, type FROM tasks WHERE id IN ({','.join(map(str, relevant_task_ids))})", engine)
-    df_tasktypes = pd.read_sql("SELECT id, searchname FROM tasktypes", engine)
-    
-    def extract_tasktype_id(type_data):
-        if pd.isna(type_data) or not isinstance(type_data, str): return None
-        try: return ast.literal_eval(type_data).get('id')
-        except: return None
-        
-    df_tasks = df_tasks_raw.copy()
-    df_tasks['tasktype_id'] = df_tasks['type'].apply(extract_tasktype_id)
-    df_tasks = df_tasks[['id', 'tasktype_id']].dropna()
-    df_tasks['tasktype_id'] = pd.to_numeric(df_tasks['tasktype_id'], downcast='integer', errors='coerce')
-    df_tasks = df_tasks.merge(df_tasktypes, left_on='tasktype_id', right_on='id', how='left').rename(columns={'id_x': 'task_id', 'searchname': 'task_name'})
-
-    return df_uren_base, df_employees, df_projects, df_tasks
+    return df_uren_base, load_all_employees(), load_all_projects(), load_all_tasks()
 
 # --- Load the data ---
 # df_employees, df_projects, df_tasks = load_base_data() # This line is removed
@@ -152,7 +152,8 @@ with st.container(border=True):
             start_date, end_date = min_date_default, max_date
 
     with filter_col2:
-        project_options = pd.read_sql("SELECT id, name FROM projects WHERE archived = FALSE", engine).sort_values('name').to_dict('records')
+        project_df = load_all_projects()
+        project_options = project_df[['id', 'name']].sort_values('name').to_dict('records')
         project_id_to_obj = {p['id']: p for p in project_options}
         all_project_ids = [p['id'] for p in project_options]
 
@@ -204,7 +205,7 @@ with st.container(border=True):
 # Separate block for dynamic content
 if project_ids:
     # --- Nieuwe, efficiënte datalaadstrategie ---
-    df_uren, df_employees, df_projects_filtered, df_tasks = load_filtered_data(project_ids, start_date, end_date)
+    df_uren, df_employees, project_df, df_tasks = load_filtered_data(project_ids, start_date, end_date)
     if df_uren.empty:
         st.warning("Geen urenregistraties gevonden voor de geselecteerde criteria.")
         st.stop()
@@ -284,8 +285,8 @@ if project_ids:
             DETAIL_LIMIT = 1000
             df_display = df_uren.copy()
             df_display = df_display.merge(df_employees, left_on='employee_id', right_on='id', how='left')
-            df_display = df_display.merge(df_projects_filtered, left_on='offerprojectbase_id', right_on='project_id', how='left')
-            df_display = df_display.merge(df_tasks, left_on='task_id', right_on='task_id', how='left')
+            df_display = df_display.merge(project_df, left_on='offerprojectbase_id', right_on='id', how='left')
+            df_display = df_display.merge(df_tasks, left_on='task_id', right_on='id', how='left')
             df_display = df_display.sort_values('date_date', ascending=False).head(DETAIL_LIMIT)
             df_display = df_display[[
                 'date_date', 'fullname', 'name', 'task_name', 'amount', 'description'
