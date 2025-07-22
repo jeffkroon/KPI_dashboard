@@ -179,7 +179,8 @@ bedrijfsstats = bedrijfsstats[bedrijfsstats["bedrijf_id"].isin(bedrijf_ids)].cop
 
 #
 # Bereken gemiddeld tarief per klant (bedrijf) -- alleen op urenregels
-df_projectlines_uren["sellingprice"] = pd.to_numeric(df_projectlines_uren["sellingprice"], errors="coerce").fillna(0)
+df_projectlines_uren["sellingprice"] = pd.to_numeric(df_projectlines_uren["sellingprice"], errors="coerce")
+df_projectlines_uren = df_projectlines_uren[df_projectlines_uren["sellingprice"].notna()]
 gemiddeld_tarief_per_klant = df_projectlines_uren.groupby('bedrijf_id')["sellingprice"].mean().reset_index()
 gemiddeld_tarief_per_klant.columns = ["bedrijf_id", "gemiddeld_tarief"]
 bedrijfsstats = bedrijfsstats.merge(gemiddeld_tarief_per_klant, on="bedrijf_id", how="left")
