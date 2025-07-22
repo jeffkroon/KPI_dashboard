@@ -68,13 +68,29 @@ if not POSTGRES_URL:
 # === OMZET OPTIE SELECTIE ===
 omzet_optie = st.radio("📊 Welke omzet wil je tonen?", options=["Werkelijke omzet (facturen)", "Geplande omzet (offerte)"], index=0, horizontal=True)
 
+# === ARCHIVEER FILTER SELECTIE ===
+toon_archived = st.radio(
+    "📁 Wil je ook gearchiveerde projecten meenemen?",
+    options=["Nee, alleen actieve projecten", "Ja, ook gearchiveerde projecten"],
+    index=0,
+    horizontal=True
+)
+
 # --- DATA EXACT ZOALS IN app.py ---
 df_projects_raw = load_data_df("projects", columns=["id", "company_id", "archived", "totalexclvat"])
 if not isinstance(df_projects_raw, pd.DataFrame):
     df_projects_raw = pd.concat(list(df_projects_raw), ignore_index=True)
 # --- Geplande omzet per bedrijf toevoegen direct na conversie naar DataFrame
 df_projects_raw["totalexclvat"] = pd.to_numeric(df_projects_raw["totalexclvat"], errors="coerce").fillna(0)
-geplande_omzet_per_bedrijf = df_projects_raw.groupby("company_id")["totalexclvat"].sum().reset_index()
+
+# === ARCHIVEER FILTERING OP PROJECTEN ===
+if toon_archived == "Nee, alleen actieve projecten":
+    df_projects_filtered = df_projects_raw[df_projects_raw["archived"] != True].copy()
+else:
+    df_projects_filtered = df_projects_raw.copy()
+
+# Geplande omzet per bedrijf op basis van gefilterde projecten
+geplande_omzet_per_bedrijf = df_projects_filtered.groupby("company_id")["totalexclvat"].sum().reset_index()
 geplande_omzet_per_bedrijf.rename(columns={"company_id": "bedrijf_id", "totalexclvat": "geplande_omzet"}, inplace=True)
 df_companies = load_data_df("companies", columns=["id", "companyname", "tag_names"])
 if not isinstance(df_companies, pd.DataFrame):
@@ -187,11 +203,11 @@ bedrijfsstats["rendement_per_uur"] = (
 ).round(2)
 
 
+
 # Voeg werkelijke omzet toe aan projects via een merge
-df_projects_raw = df_projects_raw[df_projects_raw["archived"] != True].copy()  # type: ignore
-df_projects_raw = df_projects_raw.merge(bedrijfsstats, left_on="company_id", right_on="bedrijf_id", how="left")
-df_projects_raw["werkelijke_opbrengst"] = df_projects_raw["totalpayed"].fillna(0)
-df_projects_raw["totaal_uren"] = df_projects_raw["totaal_uren"].fillna(0)
+df_projects_filtered = df_projects_filtered.merge(bedrijfsstats, left_on="company_id", right_on="bedrijf_id", how="left")
+df_projects_filtered["werkelijke_opbrengst"] = df_projects_filtered["totalpayed"].fillna(0)
+df_projects_filtered["totaal_uren"] = df_projects_filtered["totaal_uren"].fillna(0)
 
 
 # Sorteer en filter op tarief_per_uur, hoogste eerst, filter 0 en NaN
@@ -494,7 +510,8 @@ st.info(f"💡 {bedrijven_80pct} bedrijven zijn samen goed voor 80% van de total
 # === AI-INSIGHTS & AUTOMATISCHE AANBEVELINGEN ===
 st.markdown("### 🤖 AI-Inzichten & Automatische Aanbevelingen")
 
-# Topklanten voor intensivering
+#
+# Topklanten voor intensivering (geen wijziging nodig)
 top_klanten = df_rend[(df_rend["tarief_per_uur"] > mediaan_tarief) & (df_rend["totaal_uren"] < 50)].sort_values("tarief_per_uur", ascending=False).head(5)  # type: ignore
 
 
@@ -526,6 +543,7 @@ else:
     st.plotly_chart(fig_cluster, use_container_width=True)
 
  
+#
 # === AI-adviseur: automatisch gegenereerd advies per bedrijf op basis van prestaties ===
 st.markdown("### 🧠 AI-adviseur: Automatisch gegenereerd advies per bedrijf")
 
@@ -564,7 +582,6 @@ Je bent een zakelijke AI-consultant. Geef beknopt maar concreet advies voor het 
 
 Geef suggesties over klantprioriteit, verbeterpotentieel, tariefoptimalisatie of workloadplanning. Houd het zakelijk en feitelijk.
 """
-
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
