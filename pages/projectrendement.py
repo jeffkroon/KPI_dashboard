@@ -113,10 +113,16 @@ st.info(f"✅ Filtering actief: {len(bedrijf_ids)} bedrijven geselecteerd na fil
 df_employees = load_data_df("employees", columns=["id", "firstname", "lastname"])
 if not isinstance(df_employees, pd.DataFrame):
     df_employees = pd.concat(list(df_employees), ignore_index=True)
-df_projectlines = load_data_df("projectlines_per_company", columns=["id", "bedrijf_id", "amountwritten", "sellingprice", "amount", "unit_searchname", "hidefortimewriting"])
+# --- Projectlines laden ---
+df_projectlines = load_data_df("projectlines_per_company", columns=["id", "bedrijf_id", "amountwritten", "sellingprice", "amount", "unit_searchname", "hidefortimewriting", "offerprojectbase_id"])
 if not isinstance(df_projectlines, pd.DataFrame):
     df_projectlines = pd.concat(list(df_projectlines), ignore_index=True)
 df_projectlines = df_projectlines[df_projectlines["bedrijf_id"].isin(bedrijf_ids)]
+
+# --- Filter projectlines op project_id's van zichtbare projecten ---
+project_ids = df_projects_filtered["id"].unique().tolist()
+if "offerprojectbase_id" in df_projectlines.columns:
+    df_projectlines = df_projectlines[df_projectlines["offerprojectbase_id"].isin(project_ids)].copy()
 # Filter alleen urenregels voor analyses van uren
 df_projectlines_uren = df_projectlines[
     (df_projectlines["unit_searchname"].str.lower() == "uur") &
