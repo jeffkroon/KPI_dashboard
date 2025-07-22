@@ -35,14 +35,32 @@ st.logo("images/dunion-logo-def_donker-06.png")
 st.title("Dunion KPI Dashboard – Overzicht")
 
 # --- FILTERING KNOPPEN VOOR BEDRIJVEN ---
-st.markdown("### 🔎 Filter Bedrijven op Type")
+with st.container():
+    st.markdown("""
+    <style>
+    .filter-box {
+        background-color: #f9f9f9;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+    }
+    .filter-box h4 {
+        margin-top: 0;
+        font-size: 1.4em;
+        font-weight: 600;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
-filter_optie = st.radio(
-    "Selecteer Bedrijfstype:",
-    options=["Alle bedrijven", "Eigen bedrijven", "Klanten"],
-    index=0,
-    horizontal=True
-)
+    st.markdown('<div class="filter-box"><h4>🔎 Filter Bedrijven op Type</h4>', unsafe_allow_html=True)
+    filter_optie = st.radio(
+        "",
+        options=["Alle bedrijven", "Eigen bedrijven", "Klanten"],
+        index=0,
+        horizontal=True
+    )
+    st.markdown('</div>', unsafe_allow_html=True)
 
 filter_tags = None
 if filter_optie == "Eigen bedrijven":
