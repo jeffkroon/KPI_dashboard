@@ -126,7 +126,7 @@ def log_unique_values(df: pd.DataFrame, columns: list):
 
 
 def get_active_projectlines_for_company(company_name: str) -> pd.DataFrame:
-    print(f"\n🔍 Actieve projectlines ophalen voor bedrijf: '{company_name}'...")
+    print(f"\n🔍 Alle projectlines ophalen voor bedrijf: '{company_name}'...")
 
     projects_df = datasets.get("gripp_projects")
     projectlines_df = datasets.get("gripp_projectlines")
@@ -135,10 +135,10 @@ def get_active_projectlines_for_company(company_name: str) -> pd.DataFrame:
         print("❌ Vereiste datasets zijn niet geladen.")
         return pd.DataFrame()
 
-    active_projects = filter_active_projects_only(projects_df)
+    active_projects = projects_df
     company_projects = active_projects[active_projects["company_searchname"] == company_name]
     if company_projects.empty:
-        print(f"⚠️ Geen actieve projecten gevonden voor bedrijf '{company_name}'.")
+        print(f"⚠️ Geen projecten gevonden voor bedrijf '{company_name}'.")
         return pd.DataFrame()
 
     project_ids = company_projects["id"].tolist()
@@ -150,7 +150,7 @@ def get_active_projectlines_for_company(company_name: str) -> pd.DataFrame:
         (matching_lines["rowtype_searchname"] == "NORMAL")
     ]
 
-    print(f"✅ Gevonden: {len(matching_lines)} projectlines voor {len(project_ids)} actieve projecten.")
+    print(f"✅ Gevonden: {len(matching_lines)} projectlines voor {len(project_ids)} projecten.")
     return matching_lines
 
 
