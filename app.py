@@ -191,7 +191,11 @@ bedrijfsstats = bedrijfsstats.merge(df_companies[["id", "companyname"]], left_on
 bedrijfsstats = bedrijfsstats.drop(columns=[col for col in ['id'] if col in bedrijfsstats.columns])
 bedrijfsstats["totaal_uren"] = bedrijfsstats["totaal_uren"].fillna(0)
 bedrijfsstats["totalpayed"] = bedrijfsstats["totalpayed"].fillna(0)
-bedrijfsstats["werkelijk_tarief_per_uur"] = bedrijfsstats["totalpayed"].div(bedrijfsstats["totaal_uren"].replace(0, pd.NA)).fillna(0)
+# Dynamische tariefberekening afhankelijk van omzet_optie
+if omzet_optie == "Werkelijke omzet (facturen)":
+    bedrijfsstats["tarief_per_uur"] = bedrijfsstats["totalpayed"].div(bedrijfsstats["totaal_uren"].replace(0, pd.NA)).fillna(0)
+else:
+    bedrijfsstats["tarief_per_uur"] = bedrijfsstats["geplande_omzet"].div(bedrijfsstats["totaal_uren"].replace(0, pd.NA)).fillna(0)
 # Voeg geplande omzet toe aan bedrijfsstats
 bedrijfsstats = bedrijfsstats.merge(geplande_omzet_per_bedrijf, on="bedrijf_id", how="left")
 bedrijfsstats["geplande_omzet"] = pd.to_numeric(bedrijfsstats["geplande_omzet"], errors="coerce").fillna(0)
@@ -242,46 +246,46 @@ st.markdown("""
 
 colA, colB = st.columns(2)
 
-# Hoogste werkelijk tarief per uur (bedrijf)
-if isinstance(bedrijfsstats, pd.DataFrame) and "werkelijk_tarief_per_uur" in bedrijfsstats.columns:
-    df_tarief = bedrijfsstats[bedrijfsstats["werkelijk_tarief_per_uur"] > 0]
+# Hoogste tarief per uur (bedrijf)
+if isinstance(bedrijfsstats, pd.DataFrame) and "tarief_per_uur" in bedrijfsstats.columns:
+    df_tarief = bedrijfsstats[bedrijfsstats["tarief_per_uur"] > 0]
     if not df_tarief.empty:
-        hoogste = df_tarief.sort_values(by="werkelijk_tarief_per_uur", ascending=False).iloc[0]  # type: ignore
+        hoogste = df_tarief.sort_values(by="tarief_per_uur", ascending=False).iloc[0]  # type: ignore
         naam_hoog = str(hoogste["companyname"]) if pd.notna(hoogste["companyname"]) else "-"
-        tarief_hoog = float(hoogste["werkelijk_tarief_per_uur"]) if pd.notna(hoogste["werkelijk_tarief_per_uur"]) else 0
-        colA.metric("Hoogste werkelijk tarief (bedrijf)", naam_hoog, f"€ {tarief_hoog:.2f}")
+        tarief_hoog = float(hoogste["tarief_per_uur"]) if pd.notna(hoogste["tarief_per_uur"]) else 0
+        colA.metric("Hoogste tarief per uur (bedrijf)", naam_hoog, f"€ {tarief_hoog:.2f}")
     else:
-        colA.metric("Hoogste werkelijk tarief (bedrijf)", "-", "€ 0.00")
+        colA.metric("Hoogste tarief per uur (bedrijf)", "-", "€ 0.00")
 else:
-    colA.metric("Hoogste werkelijk tarief (bedrijf)", "-", "€ 0.00")
+    colA.metric("Hoogste tarief per uur (bedrijf)", "-", "€ 0.00")
 
-# Laagste werkelijk tarief per uur (bedrijf)
-if isinstance(bedrijfsstats, pd.DataFrame) and "werkelijk_tarief_per_uur" in bedrijfsstats.columns:
-    df_tarief = bedrijfsstats[bedrijfsstats["werkelijk_tarief_per_uur"] > 0]
+# Laagste tarief per uur (bedrijf)
+if isinstance(bedrijfsstats, pd.DataFrame) and "tarief_per_uur" in bedrijfsstats.columns:
+    df_tarief = bedrijfsstats[bedrijfsstats["tarief_per_uur"] > 0]
     if not df_tarief.empty:
-        laagste = df_tarief.sort_values(by="werkelijk_tarief_per_uur", ascending=True).iloc[0]  # type: ignore
+        laagste = df_tarief.sort_values(by="tarief_per_uur", ascending=True).iloc[0]  # type: ignore
         naam_laag = str(laagste["companyname"]) if pd.notna(laagste["companyname"]) else "-"
-        tarief_laag = float(laagste["werkelijk_tarief_per_uur"]) if pd.notna(laagste["werkelijk_tarief_per_uur"]) else 0
-        colB.metric("Laagste werkelijk tarief (bedrijf)", naam_laag, f"€ {tarief_laag:.2f}")
+        tarief_laag = float(laagste["tarief_per_uur"]) if pd.notna(laagste["tarief_per_uur"]) else 0
+        colB.metric("Laagste tarief per uur (bedrijf)", naam_laag, f"€ {tarief_laag:.2f}")
     else:
-        colB.metric("Laagste werkelijk tarief (bedrijf)", "-", "€ 0.00")
+        colB.metric("Laagste tarief per uur (bedrijf)", "-", "€ 0.00")
 else:
-    colB.metric("Laagste werkelijk tarief (bedrijf)", "-", "€ 0.00")
+    colB.metric("Laagste tarief per uur (bedrijf)", "-", "€ 0.00")
 
 # --- BAR CHART ---
-st.subheader("📊 Werkelijk tarief per uur per bedrijf")
+st.subheader("📊 Tarief per uur per bedrijf")
 if not isinstance(bedrijfsstats, pd.DataFrame):
     chart_data = pd.DataFrame(bedrijfsstats)
 else:
     chart_data = bedrijfsstats.copy()
 assert isinstance(chart_data, pd.DataFrame), "chart_data moet een DataFrame zijn"
-chart_data = chart_data[chart_data["werkelijk_tarief_per_uur"] > 0].sort_values(by="werkelijk_tarief_per_uur", ascending=False)  # type: ignore
+chart_data = chart_data[chart_data["tarief_per_uur"] > 0].sort_values(by="tarief_per_uur", ascending=False)  # type: ignore
 fig = px.bar(
     chart_data,
     x="companyname",
-    y="werkelijk_tarief_per_uur",
-    labels={"companyname": "Bedrijf", "werkelijk_tarief_per_uur": "Werkelijk tarief per uur"},
-    title="Werkelijk tarief per uur per bedrijf",
+    y="tarief_per_uur",
+    labels={"companyname": "Bedrijf", "tarief_per_uur": "Tarief per uur"},
+    title="Tarief per uur per bedrijf",
     height=400
 )
 fig.update_layout(xaxis_tickangle=-45, margin=dict(l=40, r=20, t=60, b=120))
@@ -289,14 +293,14 @@ st.plotly_chart(fig, use_container_width=True)
 
 # --- TOP 5 & BOTTOM 5 ---
 st.markdown("### 🔝 Top 10 bedrijven – Hoog tarief per uur")
-top5 = chart_data.head(10)[["companyname", "werkelijk_tarief_per_uur"]].copy()
-top5["werkelijk_tarief_per_uur"] = pd.Series(top5["werkelijk_tarief_per_uur"]).apply(lambda x: f"€ {float(x):,.2f}")
+top5 = chart_data.head(10)[["companyname", "tarief_per_uur"]].copy()
+top5["tarief_per_uur"] = pd.Series(top5["tarief_per_uur"]).apply(lambda x: f"€ {float(x):,.2f}")
 top5.columns = ["Bedrijfsnaam", "Tarief per Uur (€)"]
 st.dataframe(top5, use_container_width=True)
 
 st.markdown("### 📉 Bottom 10 bedrijven – Laag tarief per uur")
-bottom5 = chart_data.sort_values(by="werkelijk_tarief_per_uur").head(10)[["companyname", "werkelijk_tarief_per_uur"]].copy()
-bottom5["werkelijk_tarief_per_uur"] = pd.Series(bottom5["werkelijk_tarief_per_uur"]).apply(lambda x: f"€ {float(x):,.2f}")
+bottom5 = chart_data.sort_values(by="tarief_per_uur").head(10)[["companyname", "tarief_per_uur"]].copy()
+bottom5["tarief_per_uur"] = pd.Series(bottom5["tarief_per_uur"]).apply(lambda x: f"€ {float(x):,.2f}")
 bottom5.columns = ["Bedrijfsnaam", "Tarief per Uur (€)"]
 st.dataframe(bottom5, use_container_width=True)
 
@@ -308,17 +312,17 @@ bedrijf_naam_selectie = st.selectbox("Kies een bedrijf:", bedrijf_opties)
 bedrijf_id_selectie = bedrijfsstats.loc[bedrijfsstats["companyname"] == bedrijf_naam_selectie, "bedrijf_id"].iloc[0] if bedrijf_naam_selectie else None
 
 if bedrijf_naam_selectie:
-    display_df = bedrijfsstats[bedrijfsstats["companyname"] == bedrijf_naam_selectie][["bedrijf_id", "companyname", "totalpayed", "totaal_uren", "werkelijk_tarief_per_uur"]].copy()
+    display_df = bedrijfsstats[bedrijfsstats["companyname"] == bedrijf_naam_selectie][["bedrijf_id", "companyname", "totalpayed", "totaal_uren", "tarief_per_uur"]].copy()
     assert isinstance(display_df, pd.DataFrame), "display_df moet een DataFrame zijn"
     display_df = display_df.rename(columns={
         "bedrijf_id": "Bedrijf ID",
         "companyname": "Bedrijfsnaam",
         "totalpayed": "Totaal Gefactureerd (€)",
         "totaal_uren": "Totaal Uren",
-        "werkelijk_tarief_per_uur": "Werkelijk tarief per Uur (€)"
+        "tarief_per_uur": "Tarief per Uur (€)"
     })
     display_df["Totaal Gefactureerd (€)"] = display_df["Totaal Gefactureerd (€)"].apply(lambda x: f"€ {float(x):,.2f}")
-    display_df["Werkelijk tarief per Uur (€)"] = display_df["Werkelijk tarief per Uur (€)"].apply(lambda x: f"€ {float(x):,.2f}")
+    display_df["Tarief per Uur (€)"] = display_df["Tarief per Uur (€)"].apply(lambda x: f"€ {float(x):,.2f}")
     st.dataframe(display_df, use_container_width=True)
 
 # --- FACTUREN PER BEDRIJF ---
