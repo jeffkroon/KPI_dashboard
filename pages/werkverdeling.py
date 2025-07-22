@@ -47,9 +47,9 @@ def load_all_employees():
 
 @st.cache_data(ttl=600)
 def load_all_projects():
-    df_projects_raw = pd.read_sql("SELECT id, name, company_id FROM projects WHERE archived = FALSE", engine)
-    df_companies = pd.read_sql("SELECT id, companyname FROM companies", engine)
-    return df_projects_raw.merge(df_companies, left_on='company_id', right_on='id', how='left')
+    df_projects_raw = pd.read_sql("SELECT id AS project_id, name, company_id FROM projects WHERE archived = FALSE", engine)
+    df_companies = pd.read_sql("SELECT id AS company_id, companyname FROM companies", engine)
+    return df_projects_raw.merge(df_companies, left_on='company_id', right_on='company_id', how='left')
 
 @st.cache_data(ttl=600)
 def load_all_tasks():
@@ -153,9 +153,9 @@ with st.container(border=True):
 
     with filter_col2:
         project_df = load_all_projects()
-        project_options = project_df[['id', 'name']].sort_values('name').to_dict('records')
-        project_id_to_obj = {p['id']: p for p in project_options}
-        all_project_ids = [p['id'] for p in project_options]
+        project_options = project_df[['project_id', 'name']].sort_values('name').to_dict('records')
+        project_id_to_obj = {p['project_id']: p for p in project_options}
+        all_project_ids = [p['project_id'] for p in project_options]
 
         # Define callbacks to manipulate the session state for the multiselect
         def select_all_projects():
@@ -166,7 +166,7 @@ with st.container(border=True):
         # Initialize the session state with default project_ids if it's not already set
         if 'werkverdeling_selected_project_ids' not in st.session_state:
             known_active_project_ids = [342, 3368, 3101, 751, 335]
-            default_project_ids = [p['id'] for p in project_options if p['id'] in known_active_project_ids]
+            default_project_ids = [p['project_id'] for p in project_options if p['project_id'] in known_active_project_ids]
             if not default_project_ids:
                 default_project_ids = all_project_ids[:5]
             st.session_state.werkverdeling_selected_project_ids = default_project_ids
