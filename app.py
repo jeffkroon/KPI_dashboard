@@ -191,15 +191,18 @@ bedrijfsstats = bedrijfsstats.merge(df_companies[["id", "companyname"]], left_on
 bedrijfsstats = bedrijfsstats.drop(columns=[col for col in ['id'] if col in bedrijfsstats.columns])
 bedrijfsstats["totaal_uren"] = bedrijfsstats["totaal_uren"].fillna(0)
 bedrijfsstats["totalpayed"] = bedrijfsstats["totalpayed"].fillna(0)
+
+# Voeg geplande omzet toe aan bedrijfsstats VOORDAT tarief_per_uur wordt berekend
+bedrijfsstats = bedrijfsstats.merge(geplande_omzet_per_bedrijf, on="bedrijf_id", how="left")
+bedrijfsstats["geplande_omzet"] = pd.to_numeric(bedrijfsstats["geplande_omzet"], errors="coerce").fillna(0)
+
 # Dynamische tariefberekening afhankelijk van omzet_optie
 if omzet_optie == "Werkelijke omzet (facturen)":
     bedrijfsstats["tarief_per_uur"] = bedrijfsstats["totalpayed"].div(bedrijfsstats["totaal_uren"].replace(0, pd.NA)).fillna(0)
 else:
     bedrijfsstats["tarief_per_uur"] = bedrijfsstats["geplande_omzet"].div(bedrijfsstats["totaal_uren"].replace(0, pd.NA)).fillna(0)
-# Voeg geplande omzet toe aan bedrijfsstats
-bedrijfsstats = bedrijfsstats.merge(geplande_omzet_per_bedrijf, on="bedrijf_id", how="left")
-bedrijfsstats["geplande_omzet"] = pd.to_numeric(bedrijfsstats["geplande_omzet"], errors="coerce").fillna(0)
- # Filter bedrijfsstats op bedrijf_ids (voor absolute veiligheid)
+
+# Filter bedrijfsstats op bedrijf_ids (voor absolute veiligheid)
 bedrijfsstats = bedrijfsstats[bedrijfsstats["bedrijf_id"].isin(bedrijf_ids)]
 
 # --- KPI CARDS ---
