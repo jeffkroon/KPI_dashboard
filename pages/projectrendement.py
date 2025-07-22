@@ -56,7 +56,6 @@ def bedrijf_heeft_tag(tag_string, filter_primary_tag):
 eigen_tag = "1 | Eigen webshop(s) / bedrijven"
 klant_tag = "1 | Externe opdrachten / contracten"
 
-# --- LOAD DATA ---
 from sqlalchemy import create_engine
 from dotenv import load_dotenv
 from datetime import datetime
@@ -65,6 +64,9 @@ load_dotenv()
 POSTGRES_URL = os.getenv("POSTGRES_URL")
 if not POSTGRES_URL:
     raise ValueError("POSTGRES_URL is not set in the environment.")
+
+# === OMZET OPTIE SELECTIE ===
+omzet_optie = st.radio("📊 Welke omzet wil je tonen?", options=["Werkelijke omzet (facturen)", "Geplande omzet (offerte)"], index=0, horizontal=True)
 
 # --- DATA EXACT ZOALS IN app.py ---
 df_projects_raw = load_data_df("projects", columns=["id", "company_id", "archived", "totalexclvat"])
@@ -133,7 +135,15 @@ bedrijfsstats = bedrijfsstats.merge(df_companies[["id", "companyname"]], left_on
 bedrijfsstats = bedrijfsstats.drop(columns=[col for col in ['id'] if col in bedrijfsstats.columns])
 bedrijfsstats["totaal_uren"] = bedrijfsstats["totaal_uren"].fillna(0)
 bedrijfsstats["totalpayed"] = bedrijfsstats["totalpayed"].fillna(0)
-bedrijfsstats["werkelijk_tarief_per_uur"] = bedrijfsstats["totalpayed"].div(bedrijfsstats["totaal_uren"].replace(0, pd.NA)).fillna(0)
+# Dynamische berekening tarief_per_uur op basis van omzet_optie
+if omzet_optie == "Werkelijke omzet (facturen)":
+    bedrijfsstats["tarief_per_uur"] = bedrijfsstats["totalpayed"].div(bedrijfsstats["totaal_uren"].replace(0, pd.NA)).fillna(0)
+else:
+    # Geplande omzet = offertebedrag (bijv. som van verwachte_opbrengst)
+    # We zorgen dat 'geplande_omzet' bestaat, anders vullen we met verwachte_opbrengst
+    if "geplande_omzet" not in bedrijfsstats.columns:
+        bedrijfsstats["geplande_omzet"] = bedrijfsstats["verwachte_opbrengst"] if "verwachte_opbrengst" in bedrijfsstats.columns else 0
+    bedrijfsstats["tarief_per_uur"] = bedrijfsstats["geplande_omzet"].div(bedrijfsstats["totaal_uren"].replace(0, pd.NA)).fillna(0)
 
 # --- Pas filtering toe op bedrijfsstats direct na merge ---
 bedrijfsstats = bedrijfsstats[bedrijfsstats["bedrijf_id"].isin(bedrijf_ids)].copy()
@@ -162,7 +172,7 @@ uren_per_bedrijf_uur.columns = ["bedrijf_id", "totaal_uren_uur"]
 # Merge deze gefilterde uren met bedrijfsstats
 bedrijfsstats = bedrijfsstats.merge(uren_per_bedrijf_uur, on="bedrijf_id", how="left")
 
-# Bereken rendement per uur per bedrijf
+# Bereken rendement per uur per bedrijf (voor backward compatibility, maar niet meer gebruiken)
 bedrijfsstats["rendement_per_uur"] = (
     bedrijfsstats["totalpayed"] / bedrijfsstats["totaal_uren"]
 ).round(2)
@@ -176,60 +186,60 @@ df_projects_raw["werkelijke_opbrengst"] = df_projects_raw["totalpayed"].fillna(0
 df_projects_raw["totaal_uren"] = df_projects_raw["totaal_uren"].fillna(0)
 
 
-# Sorteer en filter op rendement per uur, hoogste eerst, filter 0 en NaN
+# Sorteer en filter op tarief_per_uur, hoogste eerst, filter 0 en NaN
 df_rend = bedrijfsstats.copy()
-df_rend = df_rend.dropna(subset=["rendement_per_uur"]).copy()  # type: ignore
-df_rend = df_rend[df_rend["rendement_per_uur"] > 0].copy()  # type: ignore
-df_rend = df_rend.sort_values("rendement_per_uur", ascending=False).copy()  # type: ignore
+df_rend = df_rend.dropna(subset=["tarief_per_uur"]).copy()  # type: ignore
+df_rend = df_rend[df_rend["tarief_per_uur"] > 0].copy()  # type: ignore
+df_rend = df_rend.sort_values("tarief_per_uur", ascending=False).copy()  # type: ignore
 
 # === RISICOCATEGORIE TOEVOEGEN OP BASIS VAN RENDEMENT EN TIJDSBESTEDING ===
 # Removed categoriseer_risico function and its apply call per instructions
 
-# KPI-cards: top 3 bedrijven met hoogste rendement per uur
-st.markdown("### 🥇 Top 3 bedrijven op basis van werkelijk uurtarief")
+# KPI-cards: top 3 bedrijven met hoogste tarief per uur (dynamisch label)
+titel_tarief = "Werkelijk uurtarief" if omzet_optie == "Werkelijke omzet (facturen)" else "Gepland uurtarief"
+st.markdown(f"### 🥇 Top 3 bedrijven op basis van {titel_tarief}")
 cols = st.columns(3)
 # Let op: afronden alleen bij presentatie, niet in berekening!
 for i, (_, row) in enumerate(df_rend.head(3).iterrows()):
     cols[i].metric(
         label=f"{row['companyname']}",
-        value=f"€ {row['rendement_per_uur']:.2f}/uur"
+        value=f"€ {row['tarief_per_uur']:.2f}/uur"
     )
 
-# KPI-cards: bottom 10 bedrijven met laagste rendement per uur
-st.markdown("### 🛑 Bottom 10 bedrijven op basis van werkelijk uurtarief")
-df_bottom_10 = df_rend.nsmallest(10, "rendement_per_uur")[["companyname", "totaal_uren", "totalpayed", "rendement_per_uur"]]
+# KPI-cards: bottom 10 bedrijven met laagste tarief per uur (dynamisch label)
+st.markdown(f"### 🛑 Bottom 10 bedrijven op basis van {titel_tarief}")
+df_bottom_10 = df_rend.nsmallest(10, "tarief_per_uur")[["companyname", "totaal_uren", "totalpayed", "tarief_per_uur"]]
 # Voor tabellen waar kolomnamen worden toegewezen
-# Bijvoorbeeld:
-df_bottom_10.columns = ["Bedrijf", "Totaal Uren", "Opbrengst", "Werkelijk uurtarief"]
+df_bottom_10.columns = ["Bedrijf", "Totaal Uren", "Opbrengst", titel_tarief]
 # Alleen afronden in presentatie, niet in data!
 st.dataframe(df_bottom_10.style.format({
     "Totaal Uren": "{:.1f}",
     "Opbrengst": "€ {:.2f}",
-    "Werkelijk uurtarief": "€ {:.2f}"
+    titel_tarief: "€ {:.2f}"
 }), use_container_width=True)
 
-# Extra inzichten: gemiddeld rendement, mediaan, en aantal bedrijven onder drempel
-gemiddeld_rendement = df_rend["rendement_per_uur"].mean()
-mediaan_rendement = df_rend["rendement_per_uur"].median()
+# Extra inzichten: gemiddeld tarief, mediaan, en aantal bedrijven onder drempel
+gemiddeld_tarief = df_rend["tarief_per_uur"].mean()
+mediaan_tarief = df_rend["tarief_per_uur"].median()
 ondergrens = 75  # drempelrendement, aanpasbaar
-aantal_slecht = (df_rend["rendement_per_uur"] < ondergrens).sum()
+aantal_slecht = (df_rend["tarief_per_uur"] < ondergrens).sum()
 
-st.markdown("### 📌 Extra Inzichten over Werkelijk Uurtarief")
+st.markdown(f"### 📌 Extra Inzichten over {titel_tarief}")
 col1, col2, col3 = st.columns(3)
 # Alleen afronden bij presentatie, niet in berekening!
-col1.metric("Gemiddeld werkelijk uurtarief", f"€ {gemiddeld_rendement:.2f}")
-col2.metric("Mediaan werkelijk uurtarief", f"€ {mediaan_rendement:.2f}")
+col1.metric(f"Gemiddeld {titel_tarief}", f"€ {gemiddeld_tarief:.2f}")
+col2.metric(f"Mediaan {titel_tarief}", f"€ {mediaan_tarief:.2f}")
 col3.metric(f"Aantal bedrijven < €{ondergrens}", f"{aantal_slecht}")
 
-# Horizontale bar chart van rendement per uur per bedrijf
+# Horizontale bar chart van tarief per uur per bedrijf
 fig = px.bar(
     df_rend,
-    x="rendement_per_uur",
+    x="tarief_per_uur",
     y="companyname",
     orientation="h",
-    title="Werkelijk uurtarief per bedrijf",
+    title=f"{titel_tarief} per bedrijf",
     labels={
-        "rendement_per_uur": "Werkelijk uurtarief",
+        "tarief_per_uur": titel_tarief,
         "companyname": "Bedrijf",
         "totaal_uren": "Totaal Uren",
         "totalpayed": "Werkelijke Opbrengst"
@@ -238,17 +248,17 @@ fig = px.bar(
 )
 fig.update_layout(yaxis={'categoryorder': 'total ascending'}, margin={'l': 150})
 
-# --- Volledige tabel: Werkelijk tarief per uur ---
-st.markdown("### 🧾 Volledige tabel: Werkelijk uurtarief")
+# --- Volledige tabel: tarief per uur ---
+st.markdown(f"### 🧾 Volledige tabel: {titel_tarief}")
 bedrijf_zoek = st.text_input("🔎 Zoek op bedrijfsnaam in de tarieftabel")
 df_rend_filtered = df_rend.copy()
 if bedrijf_zoek:
     df_rend_filtered = df_rend_filtered[df_rend_filtered["companyname"].str.contains(bedrijf_zoek, case=False, na=False)]
 # Hernoem de kolom voor presentatie alleen als het een DataFrame is
-if isinstance(df_rend_filtered, pd.DataFrame) and "rendement_per_uur" in df_rend_filtered.columns:
-    df_rend_filtered = df_rend_filtered.rename(columns={"rendement_per_uur": "Werkelijk uurtarief"})
+if isinstance(df_rend_filtered, pd.DataFrame) and "tarief_per_uur" in df_rend_filtered.columns:
+    df_rend_filtered = df_rend_filtered.rename(columns={"tarief_per_uur": titel_tarief})
 # Selecteer alleen de gewenste kolommen als ze bestaan
-kolommen = [col for col in ["companyname", "totaal_uren", "totalpayed", "Werkelijk uurtarief"] if col in df_rend_filtered.columns]
+kolommen = [col for col in ["companyname", "totaal_uren", "totalpayed", titel_tarief] if col in df_rend_filtered.columns]
 df_rend_present = df_rend_filtered[kolommen].copy()
 if isinstance(df_rend_present, pd.DataFrame):
     df_rend_present = df_rend_present.rename(columns={
@@ -259,32 +269,32 @@ if isinstance(df_rend_present, pd.DataFrame):
     st.dataframe(df_rend_present.style.format({
         "Totaal Uren": "{:.1f}",
         "Opbrengst": "€ {:.2f}",
-        "Werkelijk uurtarief": "€ {:.2f}"
+        titel_tarief: "€ {:.2f}"
     }), use_container_width=True)
 
 # === VISUELE PLOT VAN RISICOCATEGORIEËN ===
 # Removed visual risk analysis section per instructions
 
 # === Analyse: welke bedrijven leveren veel op vs. kosten veel tijd ===
-st.markdown("### ⏱️ Tijdsbesteding versus Opbrengst per bedrijf")
+st.markdown(f"### ⏱️ Tijdsbesteding versus Opbrengst per bedrijf")
 
-df_rend_clean = df_rend.dropna(subset=["rendement_per_uur", "totaal_uren", "totalpayed"])
-df_rend_clean = df_rend_clean[df_rend_clean["rendement_per_uur"] > 0]
+df_rend_clean = df_rend.dropna(subset=["tarief_per_uur", "totaal_uren", "totalpayed"])
+df_rend_clean = df_rend_clean[df_rend_clean["tarief_per_uur"] > 0]
 
 fig_scatter = px.scatter(
     df_rend_clean,
     x="totaal_uren",
     y="totalpayed",
     hover_name="companyname",
-    hover_data={"Werkelijk uurtarief": df_rend_clean["rendement_per_uur"]},
-    size="rendement_per_uur",
-    color="rendement_per_uur",
+    hover_data={titel_tarief: df_rend_clean["tarief_per_uur"]},
+    size="tarief_per_uur",
+    color="tarief_per_uur",
     color_continuous_scale="Viridis",
-    title="Tijdsinvestering vs Opbrengst per bedrijf (Hover voor details)",
+    title=f"Tijdsinvestering vs Opbrengst per bedrijf (Hover voor details)",
     labels={
         "totaal_uren": "Totaal Uren",
         "totalpayed": "Werkelijke Opbrengst",
-        "rendement_per_uur": "Werkelijk uurtarief",
+        "tarief_per_uur": titel_tarief,
         "companyname": "Bedrijf"
     }
 )
@@ -292,21 +302,21 @@ fig_scatter.update_layout(height=700)
 st.plotly_chart(fig_scatter, use_container_width=True)
 
 # Treemap: tijd vs opbrengst per bedrijf
-st.markdown("### 🌳 Treemap van tijdsinvestering en opbrengst per bedrijf")
+st.markdown(f"### 🌳 Treemap van tijdsinvestering en opbrengst per bedrijf")
 
 fig_treemap = px.treemap(
     df_rend_clean,
     path=["companyname"],
     values="totaal_uren",
     color="totalpayed",
-    hover_data={"Werkelijk uurtarief": df_rend_clean["rendement_per_uur"]},
+    hover_data={titel_tarief: df_rend_clean["tarief_per_uur"]},
     color_continuous_scale="RdYlGn",
-    title="Treemap: tijdsinvestering (grootte) vs opbrengst (kleur) per bedrijf",
+    title=f"Treemap: tijdsinvestering (grootte) vs opbrengst (kleur) per bedrijf",
     labels={
         "companyname": "Bedrijf",
         "totaal_uren": "Totaal Uren",
         "totalpayed": "Werkelijke Opbrengst",
-        "rendement_per_uur": "Werkelijk uurtarief"
+        "tarief_per_uur": titel_tarief
     }
 )
 st.plotly_chart(fig_treemap, use_container_width=True)
@@ -366,16 +376,16 @@ if not bedrijfsstats.empty and "totalpayed" in bedrijfsstats.columns:
 else:
     st.warning("Geen data beschikbaar voor hoogste opbrengst.")
 
-# Vóór gebruik van .iloc[0] (bijvoorbeeld top_rendement)
-if not bedrijfsstats.empty and "rendement_per_uur" in bedrijfsstats.columns:
-    sorted_rendement = pd.DataFrame(bedrijfsstats).sort_values(by="rendement_per_uur", ascending=False)
-    if not sorted_rendement.empty:
-        top_rendement = sorted_rendement.iloc[0]
-        st.metric("⚙️ Hoogste werkelijk uurtarief", f"€ {top_rendement['rendement_per_uur']:.2f}", help=f"{top_rendement['companyname']}")
+# Vóór gebruik van .iloc[0] (bijvoorbeeld top_tarief)
+if not bedrijfsstats.empty and "tarief_per_uur" in bedrijfsstats.columns:
+    sorted_tarief = pd.DataFrame(bedrijfsstats).sort_values(by="tarief_per_uur", ascending=False)
+    if not sorted_tarief.empty:
+        top_tarief = sorted_tarief.iloc[0]
+        st.metric(f"⚙️ Hoogste {titel_tarief}", f"€ {top_tarief['tarief_per_uur']:.2f}", help=f"{top_tarief['companyname']}")
     else:
-        st.warning("Geen data beschikbaar voor hoogste werkelijk uurtarief.")
+        st.warning(f"Geen data beschikbaar voor hoogste {titel_tarief}.")
 else:
-    st.warning("Geen data beschikbaar voor hoogste werkelijk uurtarief.")
+    st.warning(f"Geen data beschikbaar voor hoogste {titel_tarief}.")
 
  # Uitleg over de realisatie-marge in een expander
 with st.expander("ℹ️ Wat is de realisatie-marge?"):
@@ -465,7 +475,7 @@ st.info(f"💡 {bedrijven_80pct} bedrijven zijn samen goed voor 80% van de total
 st.markdown("### 🤖 AI-Inzichten & Automatische Aanbevelingen")
 
 # Topklanten voor intensivering
-top_klanten = df_rend[(df_rend["rendement_per_uur"] > mediaan_rendement) & (df_rend["totaal_uren"] < 50)].sort_values("rendement_per_uur", ascending=False).head(5)  # type: ignore
+top_klanten = df_rend[(df_rend["tarief_per_uur"] > mediaan_tarief) & (df_rend["totaal_uren"] < 50)].sort_values("tarief_per_uur", ascending=False).head(5)  # type: ignore
 
 
 
@@ -473,7 +483,7 @@ st.markdown("#### 3. Clustering van bedrijven op basis van prestaties")
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 
-cluster_data = bedrijfsstats[["totaal_uren", "totalpayed", "rendement_per_uur"]].dropna()  # type: ignore
+cluster_data = bedrijfsstats[["totaal_uren", "totalpayed", "tarief_per_uur"]].dropna()  # type: ignore
 if len(cluster_data) < 4:
     st.warning(f"❌ Niet genoeg bedrijven ({len(cluster_data)}) om clustering uit te voeren (minimaal 4 vereist). Clustering wordt overgeslagen.")
 else:
@@ -482,14 +492,14 @@ else:
     cluster_data["cluster"] = kmeans.labels_
     fig_cluster = px.scatter_3d(
         cluster_data,
-        x="totaal_uren", y="totalpayed", z="rendement_per_uur",
+        x="totaal_uren", y="totalpayed", z="tarief_per_uur",
         color="cluster",
         title="3D Clustering van Bedrijven",
         hover_name=bedrijfsstats.loc[cluster_data.index, "companyname"],
         labels={
             "totaal_uren": "Totaal Uren",
             "totalpayed": "Werkelijke Opbrengst",
-            "rendement_per_uur": "Werkelijk uurtarief",
+            "tarief_per_uur": titel_tarief,
             "cluster": "Cluster"
         }
     )
@@ -515,11 +525,11 @@ if bedrijf_info is not None:
     werkelijke_opbrengst_str = f"€{bedrijf_info['totalpayed']:.2f}" if 'totalpayed' in bedrijf_info else '-'
     verwachte_opbrengst_str = f"€{bedrijf_info['verwachte_opbrengst']:.2f}" if 'verwachte_opbrengst' in bedrijf_info else '-'
     realisatie_marge_str = f"{bedrijf_info['realisatie_marge']:.2f}" if 'realisatie_marge' in bedrijf_info else '-'
-    rendement_per_uur_str = f"€{bedrijf_info['rendement_per_uur']:.2f}" if 'rendement_per_uur' in bedrijf_info else '-'
+    tarief_per_uur_str = f"€{bedrijf_info['tarief_per_uur']:.2f}" if 'tarief_per_uur' in bedrijf_info else '-'
     tijdsbesteding_str = f"{bedrijf_info['% tijdsbesteding']:.1f}%" if '% tijdsbesteding' in bedrijf_info else '-'
     gemiddeld_tarief_str = f"€{bedrijf_info['gemiddeld_tarief']:.2f}" if 'gemiddeld_tarief' in bedrijf_info and pd.notnull(bedrijf_info['gemiddeld_tarief']) else '-'
 else:
-    totaal_uren_str = werkelijke_opbrengst_str = verwachte_opbrengst_str = realisatie_marge_str = rendement_per_uur_str = tijdsbesteding_str = gemiddeld_tarief_str = '-'
+    totaal_uren_str = werkelijke_opbrengst_str = verwachte_opbrengst_str = realisatie_marge_str = tarief_per_uur_str = tijdsbesteding_str = gemiddeld_tarief_str = '-'
 
 advies_prompt = f"""
 Je bent een zakelijke AI-consultant. Geef beknopt maar concreet advies voor het volgende bedrijf:
@@ -528,7 +538,7 @@ Je bent een zakelijke AI-consultant. Geef beknopt maar concreet advies voor het 
 - Werkelijke opbrengst: {werkelijke_opbrengst_str}
 - Verwachte opbrengst: {verwachte_opbrengst_str}
 - Gemiddeld tarief per uur (op basis van alle taken): {gemiddeld_tarief_str}
-- Werketlijk uurtarief (wat we echt verdienen per uur, vereleken met onze vastgestelde prijs per uur): {rendement_per_uur_str}
+- Uurtarief (gebaseerd op keuze omzet): {tarief_per_uur_str}
 - realisatie-marge: {realisatie_marge_str}
 - % tijdsbesteding: {tijdsbesteding_str}
 
