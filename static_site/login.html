@@ -2,6 +2,58 @@
 <html>
 <head>
   <title>Login met Google of e-mail (Supabase)</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f5f7fa;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+    }
+    h2 {
+      color: #333;
+    }
+    button {
+      background-color: #4CAF50;
+      color: white;
+      padding: 12px 20px;
+      margin: 10px 0;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 16px;
+      width: 220px;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    input[type="email"] {
+      padding: 12px;
+      width: 220px;
+      margin-bottom: 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      font-size: 16px;
+    }
+    #status {
+      margin-top: 15px;
+      color: #e63946;
+      font-weight: bold;
+      text-align: center;
+    }
+    hr {
+      border: none;
+      border-top: 1px solid #ccc;
+    }
+    div {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+  </style>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
 </head>
 <body>
