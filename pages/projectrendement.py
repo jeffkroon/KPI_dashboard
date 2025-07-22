@@ -46,10 +46,11 @@ filter_keuze = st.radio(
     horizontal=True
 )
 
-def bedrijf_heeft_tag(tag_lijst, zoekterm):
-    if not isinstance(tag_lijst, list):
+def bedrijf_heeft_tag(tag_string, filter_primary_tag):
+    if not isinstance(tag_string, str):
         return False
-    return any(tag.get("searchname") == zoekterm for tag in tag_lijst)
+    tags = [t.strip() for t in tag_string.split(",")]
+    return filter_primary_tag in tags
 
 # Tags logica
 eigen_tag = "1 | Eigen webshop(s) / bedrijven"
@@ -73,12 +74,14 @@ df_companies = load_data_df("companies", columns=["id", "companyname", "tag_name
 if not isinstance(df_companies, pd.DataFrame):
     df_companies = pd.concat(list(df_companies), ignore_index=True)
 
-# --- FILTERING OP TYPE (identiek aan app.py) ---
-
+filter_primary_tag = None
 if filter_keuze == "Eigen bedrijven":
-    df_companies = df_companies[df_companies["tag_names"].apply(lambda x: bedrijf_heeft_tag(x, eigen_tag))]
+    filter_primary_tag = eigen_tag
 elif filter_keuze == "Klanten":
-    df_companies = df_companies[df_companies["tag_names"].apply(lambda x: bedrijf_heeft_tag(x, klant_tag))]
+    filter_primary_tag = klant_tag
+
+if filter_primary_tag:
+    df_companies = df_companies[df_companies["tag_names"].apply(lambda x: bedrijf_heeft_tag(x, filter_primary_tag))]
 
 bedrijf_ids = df_companies["id"].tolist()
 df_employees = load_data_df("employees", columns=["id", "firstname", "lastname"])
@@ -91,9 +94,13 @@ df_invoices = load_data_df("invoices", columns=["id", "company_id", "fase", "tot
 if not isinstance(df_invoices, pd.DataFrame):
     df_invoices = pd.concat(list(df_invoices), ignore_index=True)
 
+# --- Filter direct op bedrijf_ids na laden ---
+df_invoices = df_invoices[df_invoices["company_id"].isin(bedrijf_ids)]
+df_projectlines = df_projectlines[df_projectlines["bedrijf_id"].isin(bedrijf_ids)]
+
 # Kolomhernoemingen en numerieke conversies
-if 'bedrijf_id' not in df_projectlines.columns and 'bedrijf_id' in df_projectlines.columns:
-    df_projectlines = df_projectlines.rename(columns={'bedrijf_id': 'bedrijf_id'})
+if 'bedrijf_id' not in df_projectlines.columns and 'company_id' in df_projectlines.columns:
+    df_projectlines = df_projectlines.rename(columns={'company_id': 'bedrijf_id'})
 if 'companyname' not in df_companies.columns and 'bedrijf_naam' in df_companies.columns:
     df_companies = df_companies.rename(columns={'bedrijf_naam': 'companyname'})
 for col in ["amountwritten", "sellingprice"]:
@@ -103,10 +110,12 @@ for col in ["amountwritten", "sellingprice"]:
 # Bereken totaal uren per bedrijf direct in SQL
 uren_per_bedrijf = load_data_df("projectlines_per_company", columns=["bedrijf_id", "SUM(CAST(amountwritten AS FLOAT)) as totaal_uren"], group_by="bedrijf_id")
 uren_per_bedrijf.columns = ["bedrijf_id", "totaal_uren"]
+uren_per_bedrijf = uren_per_bedrijf[uren_per_bedrijf["bedrijf_id"].isin(bedrijf_ids)]
 
 # Bereken totaal gefactureerd per bedrijf direct in SQL
 factuurbedrag_per_bedrijf = load_data_df("invoices", columns=["company_id", "SUM(CAST(totalpayed AS FLOAT)) as totalpayed"], where="fase = 'Factuur'", group_by="company_id")
 factuurbedrag_per_bedrijf = factuurbedrag_per_bedrijf.rename(columns={"company_id": "bedrijf_id"})
+factuurbedrag_per_bedrijf = factuurbedrag_per_bedrijf[factuurbedrag_per_bedrijf["bedrijf_id"].isin(bedrijf_ids)]
 
 # Zorg dat beide DataFrames een kolom 'bedrijf_id' hebben vóór de merge
 if 'company_id' in uren_per_bedrijf.columns:
@@ -141,6 +150,7 @@ bedrijfsstats = bedrijfsstats[bedrijfsstats["totaal_uren"] > 0].copy()
 df_projectlines_unit = load_data_df("projectlines_per_company", columns=["id", "bedrijf_id", "amountwritten", "unit_searchname"])
 if not isinstance(df_projectlines_unit, pd.DataFrame):
     df_projectlines_unit = pd.concat(list(df_projectlines_unit), ignore_index=True)
+df_projectlines_unit = df_projectlines_unit[df_projectlines_unit["bedrijf_id"].isin(bedrijf_ids)]
 df_projectlines_uur = df_projectlines_unit[df_projectlines_unit["unit_searchname"].str.lower() == "uur"].copy()
 uren_per_bedrijf_uur = df_projectlines_uur.groupby("bedrijf_id")["amountwritten"].sum().reset_index()
 uren_per_bedrijf_uur.columns = ["bedrijf_id", "totaal_uren_uur"]
