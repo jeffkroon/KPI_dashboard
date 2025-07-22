@@ -74,12 +74,12 @@ if not isinstance(df_companies, pd.DataFrame):
     df_companies = pd.concat(list(df_companies), ignore_index=True)
 
 # --- FILTERING OP TYPE (identiek aan app.py) ---
-df_companies["tags"] = load_data_df("companies", columns=["tags"])["tags"]
+df_companies["tag_names"] = load_data_df("companies", columns=["tag_names"])["tag_names"]
 
 if filter_keuze == "Eigen bedrijven":
-    df_companies = df_companies[df_companies["tags"].apply(lambda x: bedrijf_heeft_tag(x, eigen_tag))]
+    df_companies = df_companies[df_companies["tag_names"].apply(lambda x: bedrijf_heeft_tag(x, eigen_tag))]
 elif filter_keuze == "Klanten":
-    df_companies = df_companies[df_companies["tags"].apply(lambda x: bedrijf_heeft_tag(x, klant_tag))]
+    df_companies = df_companies[df_companies["tag_names"].apply(lambda x: bedrijf_heeft_tag(x, klant_tag))]
 
 bedrijf_ids = df_companies["id"].tolist()
 df_employees = load_data_df("employees", columns=["id", "firstname", "lastname"])
