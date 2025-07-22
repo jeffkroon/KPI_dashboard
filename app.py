@@ -62,6 +62,9 @@ with st.container():
     )
     st.markdown('</div>', unsafe_allow_html=True)
 
+# --- OMZET RADIO KNOP ---
+omzet_optie = st.radio("📊 Welke omzet wil je tonen?", options=["Werkelijke omzet (facturen)", "Geplande omzet (offerte)"], index=0, horizontal=True)
+
 filter_primary_tag = None
 if filter_optie == "Eigen bedrijven":
     filter_primary_tag = "1 | Eigen webshop(s) / bedrijven"
@@ -179,6 +182,10 @@ uren_per_bedrijf = uren_per_bedrijf.merge(uren_per_bedrijf_uur, on="bedrijf_id",
 # Bereken totaal gefactureerd per bedrijf direct in SQL
 factuurbedrag_per_bedrijf = load_data_df("invoices", columns=["company_id", "SUM(CAST(totalpayed AS FLOAT)) as totalpayed"], where="fase = 'Factuur'", group_by="company_id")
 
+# Bereken geplande omzet per bedrijf (op basis van offertes/projecten)
+geplande_omzet_per_bedrijf = df_projects_raw.groupby("company_id")["totalexclvat"].sum().reset_index()
+geplande_omzet_per_bedrijf.rename(columns={"company_id": "bedrijf_id", "totalexclvat": "geplande_omzet"}, inplace=True)
+
 # Zorg dat beide DataFrames een kolom 'bedrijf_id' hebben vóór de merge
 if 'company_id' in uren_per_bedrijf.columns:
     uren_per_bedrijf = uren_per_bedrijf.rename(columns={'company_id': 'bedrijf_id'})
@@ -196,6 +203,9 @@ bedrijfsstats = bedrijfsstats.drop(columns=[col for col in ['id'] if col in bedr
 bedrijfsstats["totaal_uren"] = bedrijfsstats["totaal_uren"].fillna(0)
 bedrijfsstats["totalpayed"] = bedrijfsstats["totalpayed"].fillna(0)
 bedrijfsstats["werkelijk_tarief_per_uur"] = bedrijfsstats["totalpayed"].div(bedrijfsstats["totaal_uren"].replace(0, pd.NA)).fillna(0)
+# Voeg geplande omzet toe aan bedrijfsstats
+bedrijfsstats = bedrijfsstats.merge(geplande_omzet_per_bedrijf, on="bedrijf_id", how="left")
+bedrijfsstats["geplande_omzet"] = bedrijfsstats["geplande_omzet"].fillna(0)
 # Filter bedrijfsstats op bedrijf_ids (voor absolute veiligheid)
 bedrijfsstats = bedrijfsstats[bedrijfsstats["bedrijf_id"].isin(bedrijf_ids)]
 
@@ -319,20 +329,34 @@ if bedrijf_naam_selectie and bedrijf_id_selectie is not None:
 
 # --- WHALES PIE CHART: OMZETVERDELING PER BEDRIJF ---
 st.markdown("---")
-st.subheader("🐋 Onze 'whales': bedrijven met het grootste deel van de omzet")
-
-# Top 10 bedrijven qua omzet, rest als 'Overig'
-omzet_per_bedrijf = bedrijfsstats[["companyname", "totalpayed"]].copy()
-omzet_per_bedrijf = omzet_per_bedrijf.groupby("companyname", dropna=False)["totalpayed"].sum().reset_index()
-omzet_per_bedrijf = omzet_per_bedrijf.sort_values(by="totalpayed", ascending=False)
-top10 = omzet_per_bedrijf.head(10)
-rest = omzet_per_bedrijf[10:]["totalpayed"].sum()
-
-labels = top10["companyname"].tolist()
-values = top10["totalpayed"].tolist()
-if rest > 0:
-    labels.append("Overig")
-    values.append(rest)
+if omzet_optie == "Werkelijke omzet (facturen)":
+    st.subheader("🐋 Onze 'whales': bedrijven met het grootste deel van de werkelijke omzet (facturen)")
+    omzet_per_bedrijf = bedrijfsstats[["companyname", "totalpayed"]].copy()
+    omzet_per_bedrijf = omzet_per_bedrijf.groupby("companyname", dropna=False)["totalpayed"].sum().reset_index()
+    omzet_per_bedrijf = omzet_per_bedrijf.sort_values(by="totalpayed", ascending=False)
+    top10 = omzet_per_bedrijf.head(10)
+    rest = omzet_per_bedrijf[10:]["totalpayed"].sum()
+    labels = top10["companyname"].tolist()
+    values = top10["totalpayed"].tolist()
+    if rest > 0:
+        labels.append("Overig")
+        values.append(rest)
+    omzet_label = "Werkelijke Omzet (€)"
+    y_col = "totalpayed"
+else:
+    st.subheader("🐋 Onze 'whales': bedrijven met het grootste deel van de geplande omzet (offertes)")
+    omzet_per_bedrijf = bedrijfsstats[["companyname", "geplande_omzet"]].copy()
+    omzet_per_bedrijf = omzet_per_bedrijf.groupby("companyname", dropna=False)["geplande_omzet"].sum().reset_index()
+    omzet_per_bedrijf = omzet_per_bedrijf.sort_values(by="geplande_omzet", ascending=False)
+    top10 = omzet_per_bedrijf.head(10)
+    rest = omzet_per_bedrijf[10:]["geplande_omzet"].sum()
+    labels = top10["companyname"].tolist()
+    values = top10["geplande_omzet"].tolist()
+    if rest > 0:
+        labels.append("Overig")
+        values.append(rest)
+    omzet_label = "Geplande Omzet (€)"
+    y_col = "geplande_omzet"
 
 fig_pie = go.Figure(data=[go.Pie(labels=labels, values=values, hole=0.4, textinfo='label+percent', hovertemplate='%{label}: €%{value:,.0f}<extra></extra>')])
 fig_pie.update_layout(title="Omzetverdeling: top 10 bedrijven vs. rest", height=400, margin=dict(l=40, r=20, t=60, b=40))
