@@ -62,11 +62,11 @@ with st.container():
     )
     st.markdown('</div>', unsafe_allow_html=True)
 
-filter_tags = None
+filter_primary_tag = None
 if filter_optie == "Eigen bedrijven":
-    filter_tags = ["1 | Eigen webshop(s) / bedrijven", "Bedrijf | Algemeen mailadres"]
+    filter_primary_tag = "1 | Eigen webshop(s) / bedrijven"
 elif filter_optie == "Klanten":
-    filter_tags = ["1 | Externe opdrachten / contracten", "Bedrijf | Algemeen mailadres"]
+    filter_primary_tag = "1 | Externe opdrachten / contracten"
 
 st.markdown("""
 <style>
@@ -100,15 +100,15 @@ df_companies = load_data_df("companies", columns=["id", "companyname", "tag_name
 if not isinstance(df_companies, pd.DataFrame):
     df_companies = pd.concat(list(df_companies), ignore_index=True)
 
-# Helperfunctie voor exacte tag match
-def bedrijf_heeft_tag(tag_string, filter_tags):
+# Helperfunctie voor exacte tag match (alleen primaire tag)
+def bedrijf_heeft_tag(tag_string, filter_primary_tag):
     if not isinstance(tag_string, str):
         return False
     tags = [t.strip() for t in tag_string.split(",")]
-    return any(tag in tags for tag in filter_tags)
+    return filter_primary_tag in tags
 
-if filter_tags:
-    df_companies = df_companies[df_companies["tag_names"].apply(lambda x: bedrijf_heeft_tag(x, filter_tags))]
+if filter_primary_tag:
+    df_companies = df_companies[df_companies["tag_names"].apply(lambda x: bedrijf_heeft_tag(x, filter_primary_tag))]
 
 # --- Bedrijf ID's na filtering ---
 bedrijf_ids = df_companies["id"].unique().tolist()
