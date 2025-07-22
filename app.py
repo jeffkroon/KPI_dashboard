@@ -161,7 +161,10 @@ uren_per_bedrijf.columns = ["bedrijf_id", "totaal_uren"]
 df_projectlines_unit = load_data_df("projectlines_per_company", columns=["id", "bedrijf_id", "amountwritten", "unit_searchname"])
 if not isinstance(df_projectlines_unit, pd.DataFrame):
     df_projectlines_unit = pd.concat(list(df_projectlines_unit), ignore_index=True)
-df_projectlines_uur = df_projectlines_unit[df_projectlines_unit["unit_searchname"].str.lower() == "uur"].copy()
+df_projectlines_uur = df_projectlines_unit[
+    (df_projectlines_unit["unit_searchname"].str.lower() == "uur") &
+    (df_projectlines_unit.get("hidefortimewriting", False) == False)
+].copy()
 uren_per_bedrijf_uur = df_projectlines_uur.groupby("bedrijf_id")["amountwritten"].sum().reset_index()
 uren_per_bedrijf_uur.columns = ["bedrijf_id", "totaal_uren_uur"]
 

@@ -97,16 +97,20 @@ st.info(f"✅ Filtering actief: {len(bedrijf_ids)} bedrijven geselecteerd na fil
 df_employees = load_data_df("employees", columns=["id", "firstname", "lastname"])
 if not isinstance(df_employees, pd.DataFrame):
     df_employees = pd.concat(list(df_employees), ignore_index=True)
-df_projectlines = load_data_df("projectlines_per_company", columns=["id", "bedrijf_id", "amountwritten", "sellingprice", "amount"])
+df_projectlines = load_data_df("projectlines_per_company", columns=["id", "bedrijf_id", "amountwritten", "sellingprice", "amount", "unit_searchname", "hidefortimewriting"])
 if not isinstance(df_projectlines, pd.DataFrame):
     df_projectlines = pd.concat(list(df_projectlines), ignore_index=True)
+df_projectlines = df_projectlines[df_projectlines["bedrijf_id"].isin(bedrijf_ids)]
+# Filter alleen urenregels voor analyses van uren
+df_projectlines_uren = df_projectlines[
+    (df_projectlines["unit_searchname"].str.lower() == "uur") &
+    (df_projectlines["hidefortimewriting"] == False)
+].copy()
+# Laat alle regels staan voor omzetanalyses
 df_invoices = load_data_df("invoices", columns=["id", "company_id", "fase", "totalpayed", "status_searchname", "number", "date_date", "subject"])
 if not isinstance(df_invoices, pd.DataFrame):
     df_invoices = pd.concat(list(df_invoices), ignore_index=True)
-
-# --- Filter direct op bedrijf_ids na laden ---
 df_invoices = df_invoices[df_invoices["company_id"].isin(bedrijf_ids)]
-df_projectlines = df_projectlines[df_projectlines["bedrijf_id"].isin(bedrijf_ids)]
 
 # Kolomhernoemingen en numerieke conversies
 if 'bedrijf_id' not in df_projectlines.columns and 'company_id' in df_projectlines.columns:
@@ -151,8 +155,9 @@ else:
 # --- Pas filtering toe op bedrijfsstats direct na merge ---
 bedrijfsstats = bedrijfsstats[bedrijfsstats["bedrijf_id"].isin(bedrijf_ids)].copy()
 
-# Bereken gemiddeld tarief per klant (bedrijf)
-gemiddeld_tarief_per_klant = df_projectlines.groupby('bedrijf_id')["sellingprice"].mean().reset_index()
+#
+# Bereken gemiddeld tarief per klant (bedrijf) -- alleen op urenregels
+gemiddeld_tarief_per_klant = df_projectlines_uren.groupby('bedrijf_id')["sellingprice"].mean().reset_index()
 gemiddeld_tarief_per_klant.columns = ["bedrijf_id", "gemiddeld_tarief"]
 bedrijfsstats = bedrijfsstats.merge(gemiddeld_tarief_per_klant, on="bedrijf_id", how="left")
 
@@ -337,12 +342,9 @@ totale_uren_all = bedrijfsstats["totaal_uren"].sum()
 bedrijfsstats["% tijdsbesteding"] = (bedrijfsstats["totaal_uren"] / totale_uren_all * 100).round(1)
 
 #
+#
 # 2. Verwachte opbrengst berekenen: kostprijs * amount
-# Zorg dat df_projectlines geladen wordt zonder filtering op unit
-df_projectlines = load_data_df("projectlines_per_company", columns=["id", "bedrijf_id", "amountwritten", "sellingprice", "amount"])
-if not isinstance(df_projectlines, pd.DataFrame):
-    df_projectlines = pd.concat(list(df_projectlines), ignore_index=True)
-df_projectlines = df_projectlines[df_projectlines["bedrijf_id"].isin(bedrijf_ids)]
+# Gebruik df_projectlines (alle regels) voor omzetanalyses
 df_projectlines["sellingprice"] = pd.to_numeric(df_projectlines["sellingprice"], errors="coerce")
 df_projectlines["amount"] = pd.to_numeric(df_projectlines["amount"], errors="coerce")
 df_projectlines["verwachte_opbrengst"] = df_projectlines["sellingprice"] * df_projectlines["amount"]

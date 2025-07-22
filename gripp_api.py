@@ -1056,6 +1056,16 @@ def main():
         projectlines_raw['unit_searchname'] = projectlines_raw['unit'].apply(
             lambda x: x.get('searchname') if isinstance(x, dict) else None
         )
+
+    # === Toevoegen: Flatten de 'product' kolom in projectlines ===
+    if 'product' in projectlines_raw.columns:
+        print("🔧 Flattening 'product' data in projectlines...")
+        projectlines_raw['product_id'] = projectlines_raw['product'].apply(
+            lambda x: x.get('id') if isinstance(x, dict) else None
+        )
+        projectlines_raw['product_searchname'] = projectlines_raw['product'].apply(
+            lambda x: x.get('searchname') if isinstance(x, dict) else None
+        )
     
     datasets["gripp_projectlines"] = projectlines_raw
     #datasets["gripp_invoicelines"] = filter_invoicelines(invoicelines_raw)
