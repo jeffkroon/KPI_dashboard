@@ -38,7 +38,18 @@ def get_engine():
         st.stop()
     return create_engine(POSTGRES_URL)
 
+
+# --- Base Data Loading ---
+@st.cache_data(ttl=3600)
+def load_base_data():
+    df_employees = pd.read_sql("SELECT id, firstname, lastname FROM employees", engine)
+    df_employees['fullname'] = df_employees['firstname'] + ' ' + df_employees['lastname']
+    df_companies = pd.read_sql("SELECT id, companyname FROM companies", engine)
+    df_tasktypes = pd.read_sql("SELECT id, searchname FROM tasktypes", engine)
+    return df_employees, df_companies, df_tasktypes
+
 engine = get_engine()
+df_employees, df_companies, df_tasktypes = load_base_data()
 
 @st.cache_data(ttl=300)
 def load_filtered_data(project_ids, start_date, end_date):
@@ -79,29 +90,26 @@ def load_filtered_data(project_ids, start_date, end_date):
     relevant_task_ids = df_uren_base['task_id'].dropna().unique()
     relevant_project_ids = df_uren_base['offerprojectbase_id'].dropna().unique()
 
-    # 3. Fetch details for ONLY those relevant IDs
-    df_employees = pd.read_sql(f"SELECT id, firstname, lastname FROM employees WHERE id IN ({','.join(map(str, relevant_employee_ids))})", engine)
-    df_employees['fullname'] = df_employees['firstname'] + ' ' + df_employees['lastname']
+    # 3. Use cached base data for employees, companies, and tasktypes
+    # Employees, companies, and tasktypes are already loaded and cached
+    # Only filter employees to relevant ones
+    df_employees_filtered = df_employees[df_employees['id'].isin(relevant_employee_ids)].copy()
 
     df_projects_raw = pd.read_sql(f"SELECT id, name, company_id FROM projects WHERE id IN ({','.join(map(str, relevant_project_ids))})", engine)
-    df_companies = pd.read_sql("SELECT id, companyname FROM companies", engine)
     df_projects = df_projects_raw.merge(df_companies, left_on='company_id', right_on='id', how='left').rename(columns={'id_x': 'project_id'})
 
     df_tasks_raw = pd.read_sql(f"SELECT id, type FROM tasks WHERE id IN ({','.join(map(str, relevant_task_ids))})", engine)
-    df_tasktypes = pd.read_sql("SELECT id, searchname FROM tasktypes", engine)
-    
     def extract_tasktype_id(type_data):
         if pd.isna(type_data) or not isinstance(type_data, str): return None
         try: return ast.literal_eval(type_data).get('id')
         except: return None
-        
     df_tasks = df_tasks_raw.copy()
     df_tasks['tasktype_id'] = df_tasks['type'].apply(extract_tasktype_id)
     df_tasks = df_tasks[['id', 'tasktype_id']].dropna()
     df_tasks['tasktype_id'] = pd.to_numeric(df_tasks['tasktype_id'], downcast='integer', errors='coerce')
     df_tasks = df_tasks.merge(df_tasktypes, left_on='tasktype_id', right_on='id', how='left').rename(columns={'id_x': 'task_id', 'searchname': 'task_name'})
 
-    return df_uren_base, df_employees, df_projects, df_tasks
+    return df_uren_base, df_employees_filtered, df_projects, df_tasks
 
 # --- Load the data ---
 # df_employees, df_projects, df_tasks = load_base_data() # This line is removed
