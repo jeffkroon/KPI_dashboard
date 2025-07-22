@@ -69,12 +69,11 @@ if not POSTGRES_URL:
 df_projects_raw = load_data_df("projects", columns=["id", "company_id", "archived", "totalexclvat"])
 if not isinstance(df_projects_raw, pd.DataFrame):
     df_projects_raw = pd.concat(list(df_projects_raw), ignore_index=True)
-df_companies = load_data_df("companies", columns=["id", "companyname"])
+df_companies = load_data_df("companies", columns=["id", "companyname", "tag_names"])
 if not isinstance(df_companies, pd.DataFrame):
     df_companies = pd.concat(list(df_companies), ignore_index=True)
 
 # --- FILTERING OP TYPE (identiek aan app.py) ---
-df_companies["tag_names"] = load_data_df("companies", columns=["tag_names"])["tag_names"]
 
 if filter_keuze == "Eigen bedrijven":
     df_companies = df_companies[df_companies["tag_names"].apply(lambda x: bedrijf_heeft_tag(x, eigen_tag))]
