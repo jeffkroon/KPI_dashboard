@@ -64,9 +64,9 @@ with st.container():
 
 filter_tags = None
 if filter_optie == "Eigen bedrijven":
-    filter_tags = "1 | Eigen webshop(s) / bedrijven,Bedrijf | Algemeen mailadres"
+    filter_tags = ["1 | Eigen webshop(s) / bedrijven", "Bedrijf | Algemeen mailadres"]
 elif filter_optie == "Klanten":
-    filter_tags = "1 | Externe opdrachten / contracten,Bedrijf | Algemeen mailadres"
+    filter_tags = ["1 | Externe opdrachten / contracten", "Bedrijf | Algemeen mailadres"]
 
 st.markdown("""
 <style>
@@ -101,7 +101,8 @@ if not isinstance(df_companies, pd.DataFrame):
     df_companies = pd.concat(list(df_companies), ignore_index=True)
 
 if filter_tags:
-    df_companies = df_companies[df_companies["tag_names"] == filter_tags]
+    df_companies = df_companies[df_companies["tag_names"].notnull()]
+    df_companies = df_companies[df_companies["tag_names"].apply(lambda tags: any(tag in tags for tag in filter_tags))]
 
 df_employees = load_data_df("employees", columns=["id", "firstname", "lastname"])
 if not isinstance(df_employees, pd.DataFrame):
