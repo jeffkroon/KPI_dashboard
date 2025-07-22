@@ -326,34 +326,32 @@ verwachte_opbrengst_per_bedrijf.columns = ["bedrijf_id", "verwachte_opbrengst"]
 
 bedrijfsstats = bedrijfsstats.merge(verwachte_opbrengst_per_bedrijf, on="bedrijf_id", how="left").copy()
 
-bedrijfsstats["realisatie_ratio"] = (
-    bedrijfsstats["totalpayed"] / bedrijfsstats["verwachte_opbrengst"]
+ # Verbeterde realisatie-marge berekening
+bedrijfsstats["realisatie_marge"] = (
+    (bedrijfsstats["totalpayed"] - bedrijfsstats["verwachte_opbrengst"]) / bedrijfsstats["verwachte_opbrengst"]
 ).round(2)
 
-# Filter: verwijder rijen waarbij realisatie_ratio NaN is, verwachte_opbrengst 0 of leeg, of realisatie_ratio gelijk aan 0
+# Filter: enkel bedrijven met valide verwachte_opbrengst > 0
 bedrijfsstats = bedrijfsstats[
-    bedrijfsstats["realisatie_ratio"].notna() &
-    (bedrijfsstats["verwachte_opbrengst"] > 0) &
-    (bedrijfsstats["realisatie_ratio"] > 0)
+    bedrijfsstats["verwachte_opbrengst"] > 0
 ].copy()
 
 st.markdown("### 🧮 Extra KPI's")
 
-# Topbedrijf op basis van hoogste realisatie-ratio
+# Topbedrijf op basis van hoogste realisatie-marge
 taggr = bedrijfsstats.copy()
-taggr["realisatie_ratio"] = taggr["totalpayed"] / taggr["verwachte_opbrengst"] if "verwachte_opbrengst" in taggr.columns and "totalpayed" in taggr.columns else None
-
+taggr["realisatie_marge"] = taggr["realisatie_marge"] if "realisatie_marge" in taggr.columns else None
 
 # Vóór gebruik van .iloc[0] (bijvoorbeeld top_realisatie)
-if not bedrijfsstats.empty and "realisatie_ratio" in bedrijfsstats.columns:
-    sorted_realisatie = pd.DataFrame(bedrijfsstats).sort_values(by="realisatie_ratio", ascending=False)
+if not bedrijfsstats.empty and "realisatie_marge" in bedrijfsstats.columns:
+    sorted_realisatie = pd.DataFrame(bedrijfsstats).sort_values(by="realisatie_marge", ascending=False)
     if not sorted_realisatie.empty:
         top_realisatie = sorted_realisatie.iloc[0]
-        st.metric("🏆 Beste realisatie-ratio", f"{top_realisatie['realisatie_ratio']:.2f}", help=f"{top_realisatie['companyname']}")
+        st.metric("🏆 Beste realisatie-marge", f"{top_realisatie['realisatie_marge']:.2f}", help=f"{top_realisatie['companyname']}")
     else:
-        st.warning("Geen data beschikbaar voor realisatie-ratio.")
+        st.warning("Geen data beschikbaar voor realisatie-marge.")
 else:
-    st.warning("Geen data beschikbaar voor realisatie-ratio.")
+    st.warning("Geen data beschikbaar voor realisatie-marge.")
 
 # Vóór gebruik van .iloc[0] (bijvoorbeeld top_opbrengst)
 if not bedrijfsstats.empty and "totalpayed" in bedrijfsstats.columns:
@@ -377,33 +375,33 @@ if not bedrijfsstats.empty and "rendement_per_uur" in bedrijfsstats.columns:
 else:
     st.warning("Geen data beschikbaar voor hoogste werkelijk uurtarief.")
 
-# Uitleg over de realisatie-ratio in een expander
-with st.expander("ℹ️ Wat is de realisatie-ratio?"):
+ # Uitleg over de realisatie-marge in een expander
+with st.expander("ℹ️ Wat is de realisatie-marge?"):
     st.markdown("""
-    De realisatie-ratio vergelijkt de _werkelijke opbrengst_ van een bedrijf met de _verwachte opbrengst_ (gebaseerd op geoffreerde tarieven en hoeveelheden).  
-    - Een ratio van **1.0** betekent dat het project exact volgens verwachting is uitgevoerd.  
-    - Lager dan 1.0 betekent dat er minder opbrengst is gerealiseerd dan verwacht (bijvoorbeeld door korting, minder uren geschreven of verlies).  
-    - Hoger dan 1.0 betekent dat er meer is verdiend dan vooraf begroot (bijvoorbeeld door extra werk of hogere tarieven).
+    De realisatie-marge vergelijkt het verschil tussen _werkelijke opbrengst_ en _verwachte opbrengst_.  
+    - **0.00** betekent dat de opbrengst gelijk is aan verwachting.  
+    - Negatief betekent _minder_ opbrengst dan verwacht (verlies of korting).  
+    - Positief betekent _meer_ opbrengst dan verwacht (meerkosten of upsell).  
     """)
 
 col1, col2 = st.columns(2)
 # Alleen afronden bij presentatie, niet in data!
 col1.metric("Totale bestede uren", f"{totale_uren_all:.0f} uur")
-realisatie_gem = bedrijfsstats["realisatie_ratio"].mean()
-col2.metric("Gemiddelde realisatie-ratio", f"{realisatie_gem:.2f}")
+realisatie_gem = bedrijfsstats["realisatie_marge"].mean()
+col2.metric("Gemiddelde realisatie-marge", f"{realisatie_gem:.2f}")
 
 # Tabel tonen met nieuwe inzichten
 
-st.markdown("### 📋 Bedrijven met % tijdsbesteding en realisatie-ratio")
-df_extra = bedrijfsstats[["companyname", "totaal_uren", "% tijdsbesteding", "totalpayed", "verwachte_opbrengst", "realisatie_ratio"]]
-df_extra = df_extra.dropna(subset=["realisatie_ratio"]).copy()  # type: ignore
+st.markdown("### 📋 Bedrijven met % tijdsbesteding en realisatie-marge")
+df_extra = bedrijfsstats[["companyname", "totaal_uren", "% tijdsbesteding", "totalpayed", "verwachte_opbrengst", "realisatie_marge"]]
+df_extra = df_extra.dropna(subset=["realisatie_marge"]).copy()  # type: ignore
 # Alleen afronden bij presentatie, niet in data!
-st.dataframe(df_extra.sort_values("realisatie_ratio", ascending=True).style.format({  # type: ignore
+st.dataframe(df_extra.sort_values("realisatie_marge", ascending=True).style.format({  # type: ignore
     "totaal_uren": "{:.1f}",
     "% tijdsbesteding": "{:.1f}",
     "totalpayed": "€ {:.2f}",
     "verwachte_opbrengst": "€ {:.2f}",
-    "realisatie_ratio": "{:.2f}"
+    "realisatie_marge": "{:.2f}"
 }), use_container_width=True)
 
  # === Urenverdeling per bedrijf (percentage van totale uren) ===
@@ -473,10 +471,10 @@ top_klanten = df_rend[(df_rend["rendement_per_uur"] > mediaan_rendement) & (df_r
 st.markdown("### 🔮 AI Simulatie per Bedrijf – Wat als Scenario's & Aanbevelingen")
 
 # Voorbereiding data voor regressie
-reg_data = bedrijfsstats[["totaal_uren", "verwachte_opbrengst", "totalpayed", "realisatie_ratio", "rendement_per_uur"]].dropna()  # type: ignore
+reg_data = bedrijfsstats[["totaal_uren", "verwachte_opbrengst", "totalpayed", "realisatie_marge", "rendement_per_uur"]].dropna()  # type: ignore
 
 X = reg_data[["totaal_uren", "verwachte_opbrengst"]]
-y = reg_data["realisatie_ratio"]
+y = reg_data["realisatie_marge"]
 
 model = RandomForestRegressor(random_state=42)
 model.fit(X, y)
@@ -507,27 +505,27 @@ sim_uren = st.number_input("⚙️ Stel totaal bestede uren in", min_value=1, va
 sim_opbrengst = st.number_input("💰 Stel verwachte opbrengst in (€)", min_value=1, value=default_opbrengst)
 
 X_sim = pd.DataFrame([[sim_uren, sim_opbrengst]], columns=['totaal_uren', 'verwachte_opbrengst'])  # type: ignore
-sim_roi = model.predict(X_sim)[0]
+sim_marge = model.predict(X_sim)[0]
 
-st.metric("📈 Voorspelde realisatie-ratio", f"{sim_roi:.2f}")
-if sim_roi < 1.0:
-    st.warning("⚠️ Verwachte realisatie-ratio lager dan 1.0 – verlieslatend scenario.")
-elif sim_roi < 1.2:
-    st.info("ℹ️ Realisatie-ratio is marginaal – overweeg tariefverhoging of urenverlaging.")
+st.metric("📈 Voorspelde realisatie-marge", f"{sim_marge:.2f}")
+if sim_marge < 0:
+    st.warning("⚠️ Verwachte realisatie-marge lager dan 0 – verlieslatend scenario.")
+elif sim_marge < 0.2:
+    st.info("ℹ️ Realisatie-marge is marginaal – overweeg tariefverhoging of urenverlaging.")
 else:
-    st.success("✅ Verwachte realisatie-ratio is goed – rendabel project.")
+    st.success("✅ Verwachte realisatie-marge is goed – rendabel project.")
 
-# Suggestie bij lage realisatie-ratio
-if sim_roi < 1.2:
+# Suggestie bij lage realisatie-marge
+if sim_marge < 0.2:
     st.markdown("### 📌 AI-advies:")
-    ratio_verbeter = 1.5
-    nodig_opbrengst = ratio_verbeter * sim_uren
-    extra_opbrengst = nodig_opbrengst - sim_opbrengst
+    marge_verbeter = 0.5
+    nodig_opbrengst = sim_uren * sim_opbrengst + marge_verbeter * sim_opbrengst
+    extra_opbrengst = marge_verbeter * sim_opbrengst
     procent_tariefstijging = (extra_opbrengst / sim_opbrengst * 100)
-    st.write(f"📊 Om een realisatie-ratio van 1.5 te behalen, zou je de opbrengst moeten verhogen met ~€{extra_opbrengst:.0f} → dat is een tariefstijging van {procent_tariefstijging:.1f}%.")
+    st.write(f"📊 Om een realisatie-marge van 0.5 te behalen, zou je de opbrengst moeten verhogen met ~€{extra_opbrengst:.0f} → dat is een tariefstijging van {procent_tariefstijging:.1f}%.")
 
 # Elasticiteitsgrafiek
-st.markdown("### 📉 Elasticiteitsgrafiek: hoe verandert realisatie-ratio bij toenemende uren")
+st.markdown("### 📉 Elasticiteitsgrafiek: hoe verandert realisatie-marge bij toenemende uren")
 
 uren_range = np.arange(10, 200, 10)
 opbrengst = sim_opbrengst  # opbrengst constant
@@ -543,16 +541,16 @@ fig_elastic = px.line(
     y=realisatie_pred,
     labels={
         "x": "Totaal Uren",
-        "y": "Voorspelde realisatie-ratio"
+        "y": "Voorspelde realisatie-marge"
     },
-    title="Elasticiteit van realisatie-ratio bij variërende uren (opbrengst constant)"
+    title="Elasticiteit van realisatie-marge bij variërende uren (opbrengst constant)"
 )
-fig_elastic.add_hline(y=1.0, line_dash="dot", line_color="red")
-fig_elastic.add_hline(y=1.5, line_dash="dot", line_color="green")
+fig_elastic.add_hline(y=0.0, line_dash="dot", line_color="red")
+fig_elastic.add_hline(y=0.5, line_dash="dot", line_color="green")
 st.plotly_chart(fig_elastic, use_container_width=True)
 
 # === Feature Importance visualisatie ===
-st.markdown("### 🔍 Belangrijkste factoren die realisatie-ratio beïnvloeden (Feature Importance)")
+st.markdown("### 🔍 Belangrijkste factoren die realisatie-marge beïnvloeden (Feature Importance)")
 
 if importances_df is not None:
     fig_importance = px.bar(
@@ -560,7 +558,7 @@ if importances_df is not None:
         x='Importance',
         y='Feature',
         orientation='h',
-        title='Belang van input-variabelen voor realisatie-ratio voorspelling',
+        title='Belang van input-variabelen voor realisatie-marge voorspelling',
         labels={
             "Importance": "Belang",
             "Feature": "Kenmerk"
@@ -571,34 +569,34 @@ if importances_df is not None:
 
 
 # Pricing engine
-st.markdown("### 🧮 Scenario-analyse: Minimale opbrengst voor gewenste realisatie-ratio")
-desired_realisatie = st.slider("🎯 Gewenste realisatie-ratio (doelstelling)", min_value=1.0, max_value=3.0, step=0.1, value=1.5)
+st.markdown("### 🧮 Scenario-analyse: Minimale opbrengst voor gewenste realisatie-marge")
+desired_marge = st.slider("🎯 Gewenste realisatie-marge (doelstelling)", min_value=-1.0, max_value=3.0, step=0.01, value=0.2)
 
 # Laat de gebruiker het uurtarief altijd handmatig instellen, standaard op 95 euro
 uurtarief = st.number_input("💶 Uurtarief (€)", min_value=1.0, value=95.0, step=1.0)
 
-benodigde_opbrengst = sim_uren * uurtarief * desired_realisatie
+benodigde_opbrengst = sim_opbrengst * (1 + desired_marge)
 st.caption("📝 Je huidige verwachte opbrengst is gebaseerd op je eigen invoer hierboven.")
 huidige_opbrengst = sim_opbrengst
 
-st.write(f"Om een realisatie-ratio van {desired_realisatie:.1f} te halen bij {sim_uren} uur en een uurtarief van €{uurtarief:.2f}, is minimaal €{benodigde_opbrengst:,.0f} aan opbrengst nodig.")
-if sim_uren > 0 and desired_realisatie > 0:
+st.write(f"Om een realisatie-marge van {desired_marge:.2f} te halen bij {sim_uren} uur en een uurtarief van €{uurtarief:.2f}, is minimaal €{benodigde_opbrengst:,.0f} aan opbrengst nodig.")
+if sim_uren > 0:
     stijging_pct = (benodigde_opbrengst - huidige_opbrengst) / huidige_opbrengst * 100 if huidige_opbrengst > 0 else float('inf')
 
     if huidige_opbrengst <= 0:
         st.info("ℹ️ Opbrengst is €0, geen vergelijking mogelijk voor stijging.")
     elif huidige_opbrengst >= benodigde_opbrengst:
         if stijging_pct > 50:
-            st.warning(f"⚠️ Je voldoet wel aan de doelratio, maar de opbrengst ligt >50% boven de huidige → mogelijk onrealistisch scenario.")
+            st.warning(f"⚠️ Je voldoet wel aan de doelmarge, maar de opbrengst ligt >50% boven de huidige → mogelijk onrealistisch scenario.")
     else:
         verschil = benodigde_opbrengst - huidige_opbrengst
-        st.warning(f"🚀 Je zou je opbrengst moeten verhogen met €{verschil:.0f} (+{stijging_pct:.1f}%) om de doel-ratio te halen.")
-    # Historische ratiovergelijking veilig maken
-    historisch_ratio = None
-    if bedrijf_data is not None and "realisatie_ratio" in bedrijf_data:
-        historisch_ratio = bedrijf_data["realisatie_ratio"]
-    if historisch_ratio and desired_realisatie > historisch_ratio * 1.5:
-        st.info(f"📉 De gewenste ratio ({desired_realisatie:.1f}) ligt fors boven de historische realisatie-ratio van {historisch_ratio:.2f}. Overweeg realistischere planning.")
+        st.warning(f"🚀 Je zou je opbrengst moeten verhogen met €{verschil:.0f} (+{stijging_pct:.1f}%) om de doel-marge te halen.")
+    # Historische margevergelijking veilig maken
+    historisch_marge = None
+    if bedrijf_data is not None and "realisatie_marge" in bedrijf_data:
+        historisch_marge = bedrijf_data["realisatie_marge"]
+    if historisch_marge is not None and desired_marge > historisch_marge * 1.5:
+        st.info(f"📉 De gewenste marge ({desired_marge:.2f}) ligt fors boven de historische realisatie-marge van {historisch_marge:.2f}. Overweeg realistischere planning.")
 
     # Check op lage inputwaarden
     if sim_uren < 10 or sim_opbrengst < 500:
@@ -653,12 +651,12 @@ if bedrijf_info is not None:
     totaal_uren_str = f"{bedrijf_info['totaal_uren']:.1f}" if 'totaal_uren' in bedrijf_info else '-'
     werkelijke_opbrengst_str = f"€{bedrijf_info['totalpayed']:.2f}" if 'totalpayed' in bedrijf_info else '-'
     verwachte_opbrengst_str = f"€{bedrijf_info['verwachte_opbrengst']:.2f}" if 'verwachte_opbrengst' in bedrijf_info else '-'
-    realisatie_ratio_str = f"{bedrijf_info['realisatie_ratio']:.2f}" if 'realisatie_ratio' in bedrijf_info else '-'
+    realisatie_marge_str = f"{bedrijf_info['realisatie_marge']:.2f}" if 'realisatie_marge' in bedrijf_info else '-'
     rendement_per_uur_str = f"€{bedrijf_info['rendement_per_uur']:.2f}" if 'rendement_per_uur' in bedrijf_info else '-'
     tijdsbesteding_str = f"{bedrijf_info['% tijdsbesteding']:.1f}%" if '% tijdsbesteding' in bedrijf_info else '-'
     gemiddeld_tarief_str = f"€{bedrijf_info['gemiddeld_tarief']:.2f}" if 'gemiddeld_tarief' in bedrijf_info and pd.notnull(bedrijf_info['gemiddeld_tarief']) else '-'
 else:
-    totaal_uren_str = werkelijke_opbrengst_str = verwachte_opbrengst_str = realisatie_ratio_str = rendement_per_uur_str = tijdsbesteding_str = gemiddeld_tarief_str = '-'
+    totaal_uren_str = werkelijke_opbrengst_str = verwachte_opbrengst_str = realisatie_marge_str = rendement_per_uur_str = tijdsbesteding_str = gemiddeld_tarief_str = '-'
 
 advies_prompt = f"""
 Je bent een zakelijke AI-consultant. Geef beknopt maar concreet advies voor het volgende bedrijf:
@@ -668,7 +666,7 @@ Je bent een zakelijke AI-consultant. Geef beknopt maar concreet advies voor het 
 - Verwachte opbrengst: {verwachte_opbrengst_str}
 - Gemiddeld tarief per uur (op basis van alle taken): {gemiddeld_tarief_str}
 - Werketlijk uurtarief (wat we echt verdienen per uur, vereleken met onze vastgestelde prijs per uur): {rendement_per_uur_str}
-- realisatie-ratio: {realisatie_ratio_str}
+- realisatie-marge: {realisatie_marge_str}
 - % tijdsbesteding: {tijdsbesteding_str}
 
 Geef suggesties over klantprioriteit, verbeterpotentieel, tariefoptimalisatie of workloadplanning. Houd het zakelijk en feitelijk.
