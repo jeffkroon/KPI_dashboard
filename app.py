@@ -387,7 +387,7 @@ df_overschrijding = df_proj_agg[df_proj_agg["overschrijding_uren"] > 0].copy()
 df_overschrijding = df_overschrijding.sort_values("overschrijding_uren", ascending=False)
 
 # Toon tabel
-st.markdown("### 🚨 Projecten met overschrijding van geplande uren")
+st.markdown("### 🚨 Opdrachten met overschrijding van geplande uren")
 st.dataframe(
     df_overschrijding[["companyname", "name", "geplande_uren", "geschreven_uren", "overschrijding_uren", "overschrijding_pct"]],
     use_container_width=True
@@ -402,7 +402,7 @@ if not df_overschrijding.empty:
         y="overschrijding_uren",
         color="companyname",
         labels={"name": "Project", "overschrijding_uren": "Overschrijding (uren)", "companyname": "Bedrijf"},
-        title="Top 10 projecten met grootste overschrijding"
+        title="Top 10 opdrachten met grootste overschrijding"
     )
     st.plotly_chart(fig, use_container_width=True)
 
