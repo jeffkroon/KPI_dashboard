@@ -199,6 +199,11 @@ df_rend = df_rend.sort_values("tarief_per_uur", ascending=False).copy()  # type:
 
 # KPI-cards: top 3 bedrijven met hoogste tarief per uur (dynamisch label)
 titel_tarief = "Werkelijk uurtarief" if omzet_optie == "Werkelijke omzet (facturen)" else "Gepland uurtarief"
+# Dynamische omzetkolom op basis van omzet_optie
+if omzet_optie == "Werkelijke omzet (facturen)":
+    omzet_kolom = "totalpayed"
+else:
+    omzet_kolom = "geplande_omzet"
 st.markdown(f"### 🥇 Top 3 bedrijven op basis van {titel_tarief}")
 cols = st.columns(3)
 # Let op: afronden alleen bij presentatie, niet in berekening!
@@ -280,22 +285,23 @@ if isinstance(df_rend_present, pd.DataFrame):
 # === Analyse: welke bedrijven leveren veel op vs. kosten veel tijd ===
 st.markdown(f"### ⏱️ Tijdsbesteding versus Opbrengst per bedrijf")
 
-df_rend_clean = df_rend.dropna(subset=["tarief_per_uur", "totaal_uren", "totalpayed"])
+# Dynamisch droppen op omzet_kolom
+df_rend_clean = df_rend.dropna(subset=["tarief_per_uur", "totaal_uren", omzet_kolom])
 df_rend_clean = df_rend_clean[df_rend_clean["tarief_per_uur"] > 0]
 
 fig_scatter = px.scatter(
     df_rend_clean,
     x="totaal_uren",
-    y="totalpayed",
+    y=omzet_kolom,
     hover_name="companyname",
-    hover_data={titel_tarief: df_rend_clean["tarief_per_uur"]},
+    hover_data={titel_tarief: df_rend_clean["tarief_per_uur"], omzet_kolom: True},
     size="tarief_per_uur",
     color="tarief_per_uur",
     color_continuous_scale="Viridis",
     title=f"Tijdsinvestering vs Opbrengst per bedrijf (Hover voor details)",
     labels={
         "totaal_uren": "Totaal Uren",
-        "totalpayed": "Werkelijke Opbrengst",
+        omzet_kolom: "Opbrengst",
         "tarief_per_uur": titel_tarief,
         "companyname": "Bedrijf"
     }
@@ -310,14 +316,14 @@ fig_treemap = px.treemap(
     df_rend_clean,
     path=["companyname"],
     values="totaal_uren",
-    color="totalpayed",
-    hover_data={titel_tarief: df_rend_clean["tarief_per_uur"]},
+    color=omzet_kolom,
+    hover_data={titel_tarief: df_rend_clean["tarief_per_uur"], omzet_kolom: True},
     color_continuous_scale="RdYlGn",
     title=f"Treemap: tijdsinvestering (grootte) vs opbrengst (kleur) per bedrijf",
     labels={
         "companyname": "Bedrijf",
         "totaal_uren": "Totaal Uren",
-        "totalpayed": "Werkelijke Opbrengst",
+        omzet_kolom: "Opbrengst",
         "tarief_per_uur": titel_tarief
     }
 )
@@ -330,7 +336,13 @@ st.plotly_chart(fig_treemap, use_container_width=True)
 totale_uren_all = bedrijfsstats["totaal_uren"].sum()
 bedrijfsstats["% tijdsbesteding"] = (bedrijfsstats["totaal_uren"] / totale_uren_all * 100).round(1)
 
+#
 # 2. Verwachte opbrengst berekenen: kostprijs * amount
+# Zorg dat df_projectlines geladen wordt zonder filtering op unit
+df_projectlines = load_data_df("projectlines_per_company", columns=["id", "bedrijf_id", "amountwritten", "sellingprice", "amount"])
+if not isinstance(df_projectlines, pd.DataFrame):
+    df_projectlines = pd.concat(list(df_projectlines), ignore_index=True)
+df_projectlines = df_projectlines[df_projectlines["bedrijf_id"].isin(bedrijf_ids)]
 df_projectlines["sellingprice"] = pd.to_numeric(df_projectlines["sellingprice"], errors="coerce")
 df_projectlines["amount"] = pd.to_numeric(df_projectlines["amount"], errors="coerce")
 df_projectlines["verwachte_opbrengst"] = df_projectlines["sellingprice"] * df_projectlines["amount"]
@@ -444,10 +456,13 @@ st.plotly_chart(fig_uren, use_container_width=True)
 # === Pareto-analyse (80/20-regel) ===
 st.markdown("### 🧠 Pareto-analyse: Welk aantal bedrijven leveren het meeste op?")
 
-df_pareto = bedrijfsstats[["companyname", "totalpayed"]].copy()
-df_pareto = df_pareto.sort_values("totalpayed", ascending=False).reset_index(drop=True)  # type: ignore
-df_pareto["cumulatieve_opbrengst"] = df_pareto["totalpayed"].cumsum()
-totale_opbrengst = df_pareto["totalpayed"].sum()
+# Dynamische omzetlabel voor Pareto
+omzet_label = "Omzet (€)" if omzet_optie == "Geplande omzet (offerte)" else "Werkelijke Omzet (€)"
+
+df_pareto = bedrijfsstats[["companyname", omzet_kolom]].copy()
+df_pareto = df_pareto.sort_values(omzet_kolom, ascending=False).reset_index(drop=True)  # type: ignore
+df_pareto["cumulatieve_opbrengst"] = df_pareto[omzet_kolom].cumsum()
+totale_opbrengst = df_pareto[omzet_kolom].sum()
 df_pareto["cumulatief_percentage"] = (df_pareto["cumulatieve_opbrengst"] / totale_opbrengst * 100).round(2)
 
 fig_pareto = px.line(
@@ -459,9 +474,9 @@ fig_pareto = px.line(
         "x": "Aantal Bedrijven",
         "cumulatief_percentage": "Cumulatieve Opbrengst (%)",
         "companyname": "Bedrijf",
-        "totalpayed": "Werkelijke Opbrengst"
+        omzet_kolom: omzet_label
     },
-    title="Pareto-analyse: cumulatieve opbrengst over bedrijven"
+    title=f"Pareto-analyse: cumulatieve opbrengst over bedrijven ({omzet_label})"
 )
 fig_pareto.add_hline(y=80, line_dash="dash", line_color="red")
 fig_pareto.update_layout(xaxis_title="Top X bedrijven", yaxis_title="Cumulatieve % van totale opbrengst", height=500)
