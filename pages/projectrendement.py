@@ -86,7 +86,6 @@ if filter_primary_tag:
 bedrijf_ids = df_companies["id"].tolist()
 # Debug: Toon filtering resultaat
 st.info(f"✅ Filtering actief: {len(bedrijf_ids)} bedrijven geselecteerd na filtering op '{filter_keuze}'.")
-st.write("Geselecteerde bedrijven IDs:", bedrijf_ids)
 df_employees = load_data_df("employees", columns=["id", "firstname", "lastname"])
 if not isinstance(df_employees, pd.DataFrame):
     df_employees = pd.concat(list(df_employees), ignore_index=True)
