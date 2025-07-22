@@ -224,14 +224,22 @@ def filter_invoicelines(df: pd.DataFrame) -> pd.DataFrame:
 def filter_companies(df: pd.DataFrame) -> pd.DataFrame:
     keep_cols = [
         "id", "companyname", "legalname", "customernumber", "email", "phone", "website",
-        "invoiceaddress_street", "invoiceaddress_streetnumber", "invoiceaddress_zipcode", "invoiceaddress_city",
+        "invoiceaddress_street", "tags", "invoiceaddress_streetnumber", "invoiceaddress_zipcode", "invoiceaddress_city",
         "invoiceaddress_country", "vatnumber", "cocnumber",
         "accountmanager_id", "accountmanager_searchname",
         "createdon_date", "updatedon_date",
         "visitingaddress_street", "visitingaddress_streetnumber", "visitingaddress_zipcode", "visitingaddress_city"
     ]
     cols = [c for c in keep_cols if c in df.columns]
-    return pd.DataFrame(df[cols].copy())
+    df = df[cols].copy()
+
+    # Flatten tags naar twee nieuwe kolommen
+    df["tag_ids"] = df["tags"].apply(lambda x: ",".join([str(t["id"]) for t in x]) if isinstance(x, list) else None)
+    df["tag_names"] = df["tags"].apply(lambda x: ",".join([t["searchname"] for t in x]) if isinstance(x, list) else None)
+
+    df = df.drop(columns=["tags"])
+
+    return df
 
 def filter_tasktypes(df: pd.DataFrame) -> pd.DataFrame:
     keep_cols = [
@@ -423,7 +431,16 @@ def fetch_gripp_companies():
                 "method": "company.get",
                 "params": [
                     [],
-                    {"paging": {"firstresult": start, "maxresults": max_results}}
+                    {
+                        "paging": {"firstresult": start, "maxresults": max_results},
+                        "fields": [
+                            "id", "companyname", "legalname", "customernumber", "email", "phone", "website",
+                            "invoiceaddress_street", "tags", "invoiceaddress_streetnumber", "invoiceaddress_zipcode", "invoiceaddress_city",
+                            "invoiceaddress_country", "vatnumber", "cocnumber",
+                            "accountmanager", "createdon", "updatedon",
+                            "visitingaddress_street", "visitingaddress_streetnumber", "visitingaddress_zipcode", "visitingaddress_city"
+                        ]
+                    }
                 ]
             }]
             pytime.sleep(0.1)
@@ -737,8 +754,6 @@ def safe_to_sql(df: pd.DataFrame, table_name: str):
 
     print(f"🚀 Bulk insert '{table_name}' via staging COPY, rows: {df.shape[0]}")
     
-    # Gebruik een nieuwe engine voor elke operatie om SSL connection issues te voorkomen
-    # Verhoog statement_timeout naar 10 minuten (600000 ms)
     if not POSTGRES_URL:
         raise ValueError("POSTGRES_URL is not set")
     temp_engine = create_engine(f"{POSTGRES_URL}?options=-c statement_timeout=600000", pool_pre_ping=True, pool_recycle=300)

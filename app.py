@@ -34,6 +34,22 @@ if "access_token" in st.session_state:
 st.logo("images/dunion-logo-def_donker-06.png")
 st.title("Dunion KPI Dashboard – Overzicht")
 
+# --- FILTERING KNOPPEN VOOR BEDRIJVEN ---
+st.markdown("### 🔎 Filter Bedrijven op Type")
+
+filter_optie = st.radio(
+    "Selecteer Bedrijfstype:",
+    options=["Alle bedrijven", "Eigen bedrijven", "Klanten"],
+    index=0,
+    horizontal=True
+)
+
+filter_tags = None
+if filter_optie == "Eigen bedrijven":
+    filter_tags = "1 | Eigen webshop(s) / bedrijven,Bedrijf | Algemeen mailadres"
+elif filter_optie == "Klanten":
+    filter_tags = "1 | Externe opdrachten / contracten,Bedrijf | Algemeen mailadres"
+
 st.markdown("""
 <style>
 h1 {
@@ -60,9 +76,15 @@ except ImportError:
 df_projects_raw = load_data_df("projects", columns=["id", "company_id", "archived", "totalexclvat", "name"])
 if not isinstance(df_projects_raw, pd.DataFrame):
     df_projects_raw = pd.concat(list(df_projects_raw), ignore_index=True)
-df_companies = load_data_df("companies", columns=["id", "companyname"])
+
+# Filterbare companies dataset: voeg tag_names toe en filter indien nodig
+df_companies = load_data_df("companies", columns=["id", "companyname", "tag_names"])
 if not isinstance(df_companies, pd.DataFrame):
     df_companies = pd.concat(list(df_companies), ignore_index=True)
+
+if filter_tags:
+    df_companies = df_companies[df_companies["tag_names"] == filter_tags]
+
 df_employees = load_data_df("employees", columns=["id", "firstname", "lastname"])
 if not isinstance(df_employees, pd.DataFrame):
     df_employees = pd.concat(list(df_employees), ignore_index=True)
