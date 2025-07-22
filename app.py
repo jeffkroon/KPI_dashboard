@@ -98,6 +98,7 @@ except ImportError:
 df_projects_raw = load_data_df("projects", columns=["id", "company_id", "archived", "totalexclvat", "name"])
 if not isinstance(df_projects_raw, pd.DataFrame):
     df_projects_raw = pd.concat(list(df_projects_raw), ignore_index=True)
+df_projects_raw["totalexclvat"] = pd.to_numeric(df_projects_raw["totalexclvat"], errors="coerce").fillna(0)
 
 # Filterbare companies dataset: voeg tag_names toe en filter indien nodig
 df_companies = load_data_df("companies", columns=["id", "companyname", "tag_names"])
@@ -141,18 +142,6 @@ if not isinstance(df_invoices, pd.DataFrame):
 df_projectlines = df_projectlines[df_projectlines["bedrijf_id"].isin(bedrijf_ids)]
 df_invoices = df_invoices[df_invoices["company_id"].isin(bedrijf_ids)]
 
-# --- KPI CARDS ---
-col1, col2, col3, col4 = st.columns(4)
-with col1:
-    st.metric("🏢 Bedrijven", len(df_companies))
-with col2:
-    st.metric("📋 Opdrachten", len(df_projects_raw))
-with col3:
-    st.metric("📄 Facturen", len(df_invoices))
-with col4:
-    st.metric("⏰ Projectregels", len(df_projectlines))
-
-st.markdown("---")
 
 # --- DATA PREP ---
 # Zorg dat de juiste kolommen bestaan en numeriek zijn
@@ -205,9 +194,33 @@ bedrijfsstats["totalpayed"] = bedrijfsstats["totalpayed"].fillna(0)
 bedrijfsstats["werkelijk_tarief_per_uur"] = bedrijfsstats["totalpayed"].div(bedrijfsstats["totaal_uren"].replace(0, pd.NA)).fillna(0)
 # Voeg geplande omzet toe aan bedrijfsstats
 bedrijfsstats = bedrijfsstats.merge(geplande_omzet_per_bedrijf, on="bedrijf_id", how="left")
-bedrijfsstats["geplande_omzet"] = bedrijfsstats["geplande_omzet"].fillna(0)
-# Filter bedrijfsstats op bedrijf_ids (voor absolute veiligheid)
+bedrijfsstats["geplande_omzet"] = pd.to_numeric(bedrijfsstats["geplande_omzet"], errors="coerce").fillna(0)
+ # Filter bedrijfsstats op bedrijf_ids (voor absolute veiligheid)
 bedrijfsstats = bedrijfsstats[bedrijfsstats["bedrijf_id"].isin(bedrijf_ids)]
+
+# --- KPI CARDS ---
+col1, col2, col3, col4 = st.columns(4)
+with col1:
+    st.metric("🏢 Bedrijven", len(df_companies))
+with col2:
+    st.metric("📋 Opdrachten", len(df_projects_raw))
+with col3:
+    if omzet_optie == "Werkelijke omzet (facturen)":
+        omzet = bedrijfsstats["totalpayed"].sum()
+        st.metric("💶 Totale Werkelijke Omzet", f"€ {omzet:,.0f}")
+    else:
+        omzet = bedrijfsstats["geplande_omzet"].sum()
+        st.metric("💶 Totale Geplande Omzet", f"€ {omzet:,.0f}")
+with col4:
+    st.metric("⏰ Projectregels", len(df_projectlines))
+
+st.markdown("---")
+
+# Zet totaalomzet op basis van geselecteerde omzet_optie
+if omzet_optie == "Werkelijke omzet (facturen)":
+    bedrijfsstats["totaalomzet"] = bedrijfsstats["totalpayed"]
+else:
+    bedrijfsstats["totaalomzet"] = bedrijfsstats["geplande_omzet"]
 
 # --- SIMPELE KPI'S & LEUKE INZICHTEN ---
 st.markdown("""
@@ -327,36 +340,22 @@ if bedrijf_naam_selectie and bedrijf_id_selectie is not None:
 # --- FOOTER ---
 
 
+
 # --- WHALES PIE CHART: OMZETVERDELING PER BEDRIJF ---
 st.markdown("---")
-if omzet_optie == "Werkelijke omzet (facturen)":
-    st.subheader("🐋 Onze 'whales': bedrijven met het grootste deel van de werkelijke omzet (facturen)")
-    omzet_per_bedrijf = bedrijfsstats[["companyname", "totalpayed"]].copy()
-    omzet_per_bedrijf = omzet_per_bedrijf.groupby("companyname", dropna=False)["totalpayed"].sum().reset_index()
-    omzet_per_bedrijf = omzet_per_bedrijf.sort_values(by="totalpayed", ascending=False)
-    top10 = omzet_per_bedrijf.head(10)
-    rest = omzet_per_bedrijf[10:]["totalpayed"].sum()
-    labels = top10["companyname"].tolist()
-    values = top10["totalpayed"].tolist()
-    if rest > 0:
-        labels.append("Overig")
-        values.append(rest)
-    omzet_label = "Werkelijke Omzet (€)"
-    y_col = "totalpayed"
-else:
-    st.subheader("🐋 Onze 'whales': bedrijven met het grootste deel van de geplande omzet (offertes)")
-    omzet_per_bedrijf = bedrijfsstats[["companyname", "geplande_omzet"]].copy()
-    omzet_per_bedrijf = omzet_per_bedrijf.groupby("companyname", dropna=False)["geplande_omzet"].sum().reset_index()
-    omzet_per_bedrijf = omzet_per_bedrijf.sort_values(by="geplande_omzet", ascending=False)
-    top10 = omzet_per_bedrijf.head(10)
-    rest = omzet_per_bedrijf[10:]["geplande_omzet"].sum()
-    labels = top10["companyname"].tolist()
-    values = top10["geplande_omzet"].tolist()
-    if rest > 0:
-        labels.append("Overig")
-        values.append(rest)
-    omzet_label = "Geplande Omzet (€)"
-    y_col = "geplande_omzet"
+st.subheader("🐋 Onze 'whales': bedrijven met het grootste deel van de omzet")
+omzet_per_bedrijf = bedrijfsstats[["companyname", "totaalomzet"]].copy()
+omzet_per_bedrijf = omzet_per_bedrijf.groupby("companyname", dropna=False)["totaalomzet"].sum().reset_index()
+omzet_per_bedrijf = omzet_per_bedrijf.sort_values(by="totaalomzet", ascending=False)
+top10 = omzet_per_bedrijf.head(10)
+rest = omzet_per_bedrijf[10:]["totaalomzet"].sum()
+labels = top10["companyname"].tolist()
+values = top10["totaalomzet"].tolist()
+if rest > 0:
+    labels.append("Overig")
+    values.append(rest)
+omzet_label = "Omzet (€)"
+y_col = "totaalomzet"
 
 fig_pie = go.Figure(data=[go.Pie(labels=labels, values=values, hole=0.4, textinfo='label+percent', hovertemplate='%{label}: €%{value:,.0f}<extra></extra>')])
 fig_pie.update_layout(title="Omzetverdeling: top 10 bedrijven vs. rest", height=400, margin=dict(l=40, r=20, t=60, b=40))
