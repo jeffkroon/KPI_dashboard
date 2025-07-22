@@ -72,6 +72,10 @@ omzet_optie = st.radio("📊 Welke omzet wil je tonen?", options=["Werkelijke om
 df_projects_raw = load_data_df("projects", columns=["id", "company_id", "archived", "totalexclvat"])
 if not isinstance(df_projects_raw, pd.DataFrame):
     df_projects_raw = pd.concat(list(df_projects_raw), ignore_index=True)
+# --- Geplande omzet per bedrijf toevoegen direct na conversie naar DataFrame
+df_projects_raw["totalexclvat"] = pd.to_numeric(df_projects_raw["totalexclvat"], errors="coerce").fillna(0)
+geplande_omzet_per_bedrijf = df_projects_raw.groupby("company_id")["totalexclvat"].sum().reset_index()
+geplande_omzet_per_bedrijf.rename(columns={"company_id": "bedrijf_id", "totalexclvat": "geplande_omzet"}, inplace=True)
 df_companies = load_data_df("companies", columns=["id", "companyname", "tag_names"])
 if not isinstance(df_companies, pd.DataFrame):
     df_companies = pd.concat(list(df_companies), ignore_index=True)
@@ -135,14 +139,13 @@ bedrijfsstats = bedrijfsstats.merge(df_companies[["id", "companyname"]], left_on
 bedrijfsstats = bedrijfsstats.drop(columns=[col for col in ['id'] if col in bedrijfsstats.columns])
 bedrijfsstats["totaal_uren"] = bedrijfsstats["totaal_uren"].fillna(0)
 bedrijfsstats["totalpayed"] = bedrijfsstats["totalpayed"].fillna(0)
+# Voeg geplande_omzet toe aan bedrijfsstats en vul NaN met 0
+bedrijfsstats = bedrijfsstats.merge(geplande_omzet_per_bedrijf, on="bedrijf_id", how="left")
+bedrijfsstats["geplande_omzet"] = bedrijfsstats["geplande_omzet"].fillna(0)
 # Dynamische berekening tarief_per_uur op basis van omzet_optie
 if omzet_optie == "Werkelijke omzet (facturen)":
     bedrijfsstats["tarief_per_uur"] = bedrijfsstats["totalpayed"].div(bedrijfsstats["totaal_uren"].replace(0, pd.NA)).fillna(0)
 else:
-    # Geplande omzet = offertebedrag (bijv. som van verwachte_opbrengst)
-    # We zorgen dat 'geplande_omzet' bestaat, anders vullen we met verwachte_opbrengst
-    if "geplande_omzet" not in bedrijfsstats.columns:
-        bedrijfsstats["geplande_omzet"] = bedrijfsstats["verwachte_opbrengst"] if "verwachte_opbrengst" in bedrijfsstats.columns else 0
     bedrijfsstats["tarief_per_uur"] = bedrijfsstats["geplande_omzet"].div(bedrijfsstats["totaal_uren"].replace(0, pd.NA)).fillna(0)
 
 # --- Pas filtering toe op bedrijfsstats direct na merge ---
@@ -180,7 +183,6 @@ bedrijfsstats["rendement_per_uur"] = (
 
 # Voeg werkelijke omzet toe aan projects via een merge
 df_projects_raw = df_projects_raw[df_projects_raw["archived"] != True].copy()  # type: ignore
-df_projects_raw["totalexclvat"] = pd.to_numeric(df_projects_raw["totalexclvat"], errors="coerce")
 df_projects_raw = df_projects_raw.merge(bedrijfsstats, left_on="company_id", right_on="bedrijf_id", how="left")
 df_projects_raw["werkelijke_opbrengst"] = df_projects_raw["totalpayed"].fillna(0)
 df_projects_raw["totaal_uren"] = df_projects_raw["totaal_uren"].fillna(0)
