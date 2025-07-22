@@ -563,6 +563,6 @@ if st.button("Genereer AI-advies"):
 st.markdown("""
 <hr style="margin-top: 2em; margin-bottom: 0.5em; border: none; border-top: 1px solid #eee;" />
 <div style="text-align: center; color: #888; font-size: 1em; margin-bottom: 0.5em;">
-    Dunion Dashboard © 2024
+    Dunion Dashboard © 2025
 </div>
 """, unsafe_allow_html=True)
