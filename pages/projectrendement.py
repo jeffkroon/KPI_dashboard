@@ -77,11 +77,13 @@ if not isinstance(df_companies, pd.DataFrame):
 filter_primary_tag = None
 if filter_keuze == "Eigen bedrijven":
     filter_primary_tag = eigen_tag
+    df_companies = df_companies[df_companies["tag_names"].apply(lambda x: bedrijf_heeft_tag(x, filter_primary_tag))]
 elif filter_keuze == "Klanten":
     filter_primary_tag = klant_tag
-
-if filter_primary_tag:
     df_companies = df_companies[df_companies["tag_names"].apply(lambda x: bedrijf_heeft_tag(x, filter_primary_tag))]
+# Bij 'Alle bedrijven' nemen we alle bedrijven met een tag
+elif filter_keuze == "Alle bedrijven":
+    df_companies = df_companies[df_companies["tag_names"].notnull()]
 
 bedrijf_ids = df_companies["id"].tolist()
 # Debug: Toon filtering resultaat

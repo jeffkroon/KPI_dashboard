@@ -67,6 +67,7 @@ if filter_optie == "Eigen bedrijven":
     filter_primary_tag = "1 | Eigen webshop(s) / bedrijven"
 elif filter_optie == "Klanten":
     filter_primary_tag = "1 | Externe opdrachten / contracten"
+# Voor 'Alle bedrijven' laten we filter_primary_tag op None staan.
 
 st.markdown("""
 <style>
@@ -109,6 +110,12 @@ def bedrijf_heeft_tag(tag_string, filter_primary_tag):
 
 if filter_primary_tag:
     df_companies = df_companies[df_companies["tag_names"].apply(lambda x: bedrijf_heeft_tag(x, filter_primary_tag))]
+elif filter_optie == "Alle bedrijven":
+    # Neem alleen bedrijven mee met geldige tags (behalve lege tags)
+    df_companies = df_companies[
+        (df_companies["tag_names"].notna()) &
+        (df_companies["tag_names"].str.strip() != "")
+    ]
 
 # --- Bedrijf ID's na filtering ---
 bedrijf_ids = df_companies["id"].unique().tolist()
