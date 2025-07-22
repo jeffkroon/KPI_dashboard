@@ -84,6 +84,9 @@ if filter_primary_tag:
     df_companies = df_companies[df_companies["tag_names"].apply(lambda x: bedrijf_heeft_tag(x, filter_primary_tag))]
 
 bedrijf_ids = df_companies["id"].tolist()
+# Debug: Toon filtering resultaat
+st.info(f"✅ Filtering actief: {len(bedrijf_ids)} bedrijven geselecteerd na filtering op '{filter_keuze}'.")
+st.write("Geselecteerde bedrijven IDs:", bedrijf_ids)
 df_employees = load_data_df("employees", columns=["id", "firstname", "lastname"])
 if not isinstance(df_employees, pd.DataFrame):
     df_employees = pd.concat(list(df_employees), ignore_index=True)
@@ -611,23 +614,26 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 
 cluster_data = bedrijfsstats[["totaal_uren", "totalpayed", "rendement_per_uur"]].dropna()  # type: ignore
-scaled = StandardScaler().fit_transform(cluster_data)
-kmeans = KMeans(n_clusters=4, random_state=42).fit(scaled)
-cluster_data["cluster"] = kmeans.labels_
-fig_cluster = px.scatter_3d(
-    cluster_data,
-    x="totaal_uren", y="totalpayed", z="rendement_per_uur",
-    color="cluster",
-    title="3D Clustering van Bedrijven",
-    hover_name=bedrijfsstats.loc[cluster_data.index, "companyname"],
-    labels={
-        "totaal_uren": "Totaal Uren",
-        "totalpayed": "Werkelijke Opbrengst",
-        "rendement_per_uur": "Werkelijk uurtarief",
-        "cluster": "Cluster"
-    }
-)
-st.plotly_chart(fig_cluster, use_container_width=True)
+if len(cluster_data) < 4:
+    st.warning(f"❌ Niet genoeg bedrijven ({len(cluster_data)}) om clustering uit te voeren (minimaal 4 vereist). Clustering wordt overgeslagen.")
+else:
+    scaled = StandardScaler().fit_transform(cluster_data)
+    kmeans = KMeans(n_clusters=4, random_state=42).fit(scaled)
+    cluster_data["cluster"] = kmeans.labels_
+    fig_cluster = px.scatter_3d(
+        cluster_data,
+        x="totaal_uren", y="totalpayed", z="rendement_per_uur",
+        color="cluster",
+        title="3D Clustering van Bedrijven",
+        hover_name=bedrijfsstats.loc[cluster_data.index, "companyname"],
+        labels={
+            "totaal_uren": "Totaal Uren",
+            "totalpayed": "Werkelijke Opbrengst",
+            "rendement_per_uur": "Werkelijk uurtarief",
+            "cluster": "Cluster"
+        }
+    )
+    st.plotly_chart(fig_cluster, use_container_width=True)
 
  
 # === AI-adviseur: automatisch gegenereerd advies per bedrijf op basis van prestaties ===
