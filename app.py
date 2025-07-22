@@ -387,7 +387,7 @@ if "id" in df_companies.columns and "companyname" in df_companies.columns:
 
 # Bereken overschrijding
 df_proj_agg["overschrijding_uren"] = df_proj_agg["geschreven_uren"] - df_proj_agg["geplande_uren"]
-df_proj_agg["procent overschrijding"] = (
+df_proj_agg["overschrijding_pct"] = (
     (df_proj_agg["overschrijding_uren"] / df_proj_agg["geplande_uren"].replace(0, pd.NA)) * 100
 ).fillna(0)
 
