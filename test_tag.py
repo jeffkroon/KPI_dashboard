@@ -1,88 +1,40 @@
-import requests
-import os
+import pandas as pd
+from sqlalchemy import create_engine
 from dotenv import load_dotenv
+import os
 
+# Laad de omgeving
 load_dotenv()
+POSTGRES_URL = os.getenv("POSTGRES_URL")
+engine = create_engine(POSTGRES_URL)
 
-BASE_URL = "https://api.gripp.com/public/api3.php"
-GRIPP_API_KEY = os.getenv("GRIPP_API_KEY")
-HEADERS = {"Authorization": f"Bearer {GRIPP_API_KEY}"}
+# 1. Laad projecten
+df_projects = pd.read_sql("SELECT id, name FROM projects WHERE archived = FALSE", engine)
 
-def fetch_companies_with_tags_check():
-    payload = [{
-        "id": 1,
-        "method": "company.get",
-        "params": [
-            [],
-            {"paging": {"firstresult": 0, "maxresults": 10},
-             "fields": ["id", "companyname", "tags"]}
-        ]
-    }]
-    
-    response = requests.post(BASE_URL, headers=HEADERS, json=payload)
-    response.raise_for_status()
-    data = response.json()[0]["result"]["rows"]
-    
-    print("\n[DEBUG] Tags check per bedrijf:")
-    for company in data:
-        print(f"Company ID: {company.get('id')}, Tags: {company.get('tags')}")
+# 2. Laad urenregistraties
+df_uren = pd.read_sql("""
+    SELECT offerprojectbase_id, employee_id, amount 
+    FROM urenregistratie 
+    WHERE status_searchname = 'Gefiatteerd'
+""", engine)
 
+# 3. Laad projectlines
+df_projectlines = pd.read_sql("SELECT offerprojectbase_id FROM projectlines_per_company", engine)
 
-# Nieuwe functie om het aantal bedrijven per primaire tag te tellen
-def count_companies_by_primary_tag():
-    eigen_tag = "1 | Eigen webshop(s) / bedrijven"
-    klanten_tag = "1 | Externe opdrachten / contracten"
+# 4. Groepeer uren per project
+uren_per_project = df_uren.groupby('offerprojectbase_id')['employee_id'].nunique().reset_index()
+uren_per_project.columns = ['project_id', 'unique_employees']
 
-    eigen_count = 0
-    klanten_count = 0
-    total_companies = 0
-    firstresult = 0
-    batch_size = 250
+# 5. Tel projectlines per project
+projectlines_per_project = df_projectlines.groupby('offerprojectbase_id').size().reset_index(name='projectlines_count')
 
-    while True:
-        payload = [{
-            "id": 1,
-            "method": "company.get",
-            "params": [
-                [],
-                {"paging": {"firstresult": firstresult, "maxresults": batch_size},
-                 "fields": ["id", "companyname", "tags"]}
-            ]
-        }]
-        
-        response = requests.post(BASE_URL, headers=HEADERS, json=payload)
-        response.raise_for_status()
-        response_data = response.json()
+# 6. Combineer datasets
+df_check = uren_per_project.merge(projectlines_per_project, left_on='project_id', right_on='offerprojectbase_id', how='left').fillna(0)
 
-        if "result" not in response_data[0] or "rows" not in response_data[0]["result"]:
-            print("\n❌ API Error of geen data:", response_data)
-            break
+# 7. Filter: veel medewerkers maar geen projectlines
+df_suspect = df_check[(df_check['unique_employees'] >= 3) & (df_check['projectlines_count'] == 0)]
 
-        rows = response_data[0]["result"]["rows"]
-        if not rows:
-            break
-
-        total_companies += len(rows)
-
-        for company in rows:
-            tags = company.get("tags")
-            if isinstance(tags, list):
-                tag_names = [tag.get("searchname", "").strip() for tag in tags]
-                if eigen_tag in tag_names:
-                    eigen_count += 1
-                elif klanten_tag in tag_names:
-                    klanten_count += 1
-                elif "Bedrijf | Algemeen mailadres" in tag_names:
-                    print(f"🟡 Alleen Algemeen mailadres - ID {company.get('id')}, Naam: {company.get('companyname')}, Tags: {tag_names}")
-
-        if len(rows) < batch_size:
-            break  # laatste pagina bereikt
-        firstresult += batch_size
-
-    print(f"\n✅ [DEBUG] Totaal bedrijven opgehaald: {total_companies}")
-    print(f"[DEBUG] Aantal Eigen bedrijven: {eigen_count}")
-    print(f"[DEBUG] Aantal Klanten: {klanten_count}")
-
-if __name__ == "__main__":
-    fetch_companies_with_tags_check()
-    count_companies_by_primary_tag()
+# 8. Output
+resultaat = df_suspect.merge(df_projects, left_on='project_id', right_on='id')[['project_id', 'name', 'unique_employees']]
+print("\n❗ Verdachte projecten waar veel mensen uren op schrijven maar geen projectregels:\n")
+print(resultaat)
