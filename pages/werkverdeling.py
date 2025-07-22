@@ -62,7 +62,8 @@ def load_all_tasks():
         except: return None
 
     df_tasks_raw['tasktype_id'] = df_tasks_raw['type'].apply(extract_tasktype_id)
-    df_tasks_raw = df_tasks_raw[['id', 'tasktype_id']].dropna()
+    df_tasks_raw = df_tasks_raw.rename(columns={'id': 'task_id'})
+    df_tasks_raw = df_tasks_raw[['task_id', 'tasktype_id']].dropna()
     df_tasks_raw['tasktype_id'] = pd.to_numeric(df_tasks_raw['tasktype_id'], downcast='integer', errors='coerce')
     return df_tasks_raw.merge(df_tasktypes, left_on='tasktype_id', right_on='id', how='left').rename(columns={'searchname': 'task_name'})
 
