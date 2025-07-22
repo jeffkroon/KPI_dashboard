@@ -38,6 +38,23 @@ st.logo("images/dunion-logo-def_donker-06.png")
 
 st.title("projectrendement")
 
+st.markdown("## 🔎 Filter bedrijven op type")
+
+filter_keuze = st.radio(
+    "Selecteer een bedrijfstype",
+    ("Alle bedrijven", "Eigen bedrijven", "Klanten"),
+    horizontal=True
+)
+
+def bedrijf_heeft_tag(tag_lijst, zoekterm):
+    if not isinstance(tag_lijst, list):
+        return False
+    return any(tag.get("searchname") == zoekterm for tag in tag_lijst)
+
+# Tags logica
+eigen_tag = "1 | Eigen webshop(s) / bedrijven"
+klant_tag = "1 | Externe opdrachten / contracten"
+
 # --- LOAD DATA ---
 from sqlalchemy import create_engine
 from dotenv import load_dotenv
@@ -55,6 +72,16 @@ if not isinstance(df_projects_raw, pd.DataFrame):
 df_companies = load_data_df("companies", columns=["id", "companyname"])
 if not isinstance(df_companies, pd.DataFrame):
     df_companies = pd.concat(list(df_companies), ignore_index=True)
+
+# --- FILTERING OP TYPE (identiek aan app.py) ---
+df_companies["tags"] = load_data_df("companies", columns=["tags"])["tags"]
+
+if filter_keuze == "Eigen bedrijven":
+    df_companies = df_companies[df_companies["tags"].apply(lambda x: bedrijf_heeft_tag(x, eigen_tag))]
+elif filter_keuze == "Klanten":
+    df_companies = df_companies[df_companies["tags"].apply(lambda x: bedrijf_heeft_tag(x, klant_tag))]
+
+bedrijf_ids = df_companies["id"].tolist()
 df_employees = load_data_df("employees", columns=["id", "firstname", "lastname"])
 if not isinstance(df_employees, pd.DataFrame):
     df_employees = pd.concat(list(df_employees), ignore_index=True)
@@ -88,13 +115,16 @@ if 'company_id' in uren_per_bedrijf.columns:
 if 'company_id' in factuurbedrag_per_bedrijf.columns:
     factuurbedrag_per_bedrijf = factuurbedrag_per_bedrijf.rename(columns={'company_id': 'bedrijf_id'})
 
-# Combineer stats per bedrijf
+ # Combineer stats per bedrijf
 bedrijfsstats = uren_per_bedrijf.merge(factuurbedrag_per_bedrijf, on="bedrijf_id", how="outer")
 bedrijfsstats = bedrijfsstats.merge(df_companies[["id", "companyname"]], left_on="bedrijf_id", right_on="id", how="left")
 bedrijfsstats = bedrijfsstats.drop(columns=[col for col in ['id'] if col in bedrijfsstats.columns])
 bedrijfsstats["totaal_uren"] = bedrijfsstats["totaal_uren"].fillna(0)
 bedrijfsstats["totalpayed"] = bedrijfsstats["totalpayed"].fillna(0)
 bedrijfsstats["werkelijk_tarief_per_uur"] = bedrijfsstats["totalpayed"].div(bedrijfsstats["totaal_uren"].replace(0, pd.NA)).fillna(0)
+
+# --- Pas filtering toe op bedrijfsstats direct na merge ---
+bedrijfsstats = bedrijfsstats[bedrijfsstats["bedrijf_id"].isin(bedrijf_ids)].copy()
 
 # Bereken gemiddeld tarief per klant (bedrijf)
 gemiddeld_tarief_per_klant = df_projectlines.groupby('bedrijf_id')["sellingprice"].mean().reset_index()
