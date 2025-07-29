@@ -145,7 +145,13 @@ for col in ["amountwritten", "sellingprice"]:
 
 #
 # Bereken totaal uren per bedrijf direct in SQL (zoals in app.py) maar gefilterd op uur
-uren_per_bedrijf = load_data_df("projectlines_per_company", columns=["bedrijf_id", "SUM(CAST(amountwritten AS FLOAT)) as totaal_uren"], where="unit_searchname ILIKE 'uur'", group_by="bedrijf_id")
+# Consistent met project filtering keuze van gebruiker
+if toon_archived == "Nee, alleen actieve projecten":
+    # Alleen uren van actieve projecten
+    uren_per_bedrijf = load_data_df("projectlines_per_company", columns=["bedrijf_id", "SUM(CAST(amountwritten AS FLOAT)) as totaal_uren"], where="unit_searchname ILIKE 'uur' AND offerprojectbase_id IN (SELECT id FROM projects WHERE archived != True)", group_by="bedrijf_id")
+else:
+    # Alle uren (ook van gearchiveerde projecten)
+    uren_per_bedrijf = load_data_df("projectlines_per_company", columns=["bedrijf_id", "SUM(CAST(amountwritten AS FLOAT)) as totaal_uren"], where="unit_searchname ILIKE 'uur'", group_by="bedrijf_id")
 uren_per_bedrijf.columns = ["bedrijf_id", "totaal_uren"]
 uren_per_bedrijf = uren_per_bedrijf[uren_per_bedrijf["bedrijf_id"].isin(bedrijf_ids)]
 
