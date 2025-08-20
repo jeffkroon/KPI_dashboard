@@ -172,7 +172,8 @@ uren_per_bedrijf_uur.columns = ["bedrijf_id", "totaal_uren_uur"]
 uren_per_bedrijf = uren_per_bedrijf.merge(uren_per_bedrijf_uur, on="bedrijf_id", how="left")
 
 # Bereken totaal gefactureerd per bedrijf direct in SQL
-factuurbedrag_per_bedrijf = load_data_df("invoices", columns=["company_id", "SUM(CAST(totalpayed AS FLOAT)) as totalpayed"], where="fase = 'Factuur'", group_by="company_id")
+# Neem alle invoices mee, niet alleen fase='Factuur'
+factuurbedrag_per_bedrijf = load_data_df("invoices", columns=["company_id", "SUM(CAST(totalpayed AS FLOAT)) as totalpayed"], group_by="company_id")
 
 # Bereken geplande omzet per bedrijf (op basis van offertes/projecten)
 geplande_omzet_per_bedrijf = df_projects_raw.groupby("company_id")["totalexclvat"].sum().reset_index()

@@ -69,12 +69,8 @@ if not POSTGRES_URL:
 omzet_optie = st.radio("📊 Welke omzet wil je tonen?", options=["Werkelijke omzet (facturen)", "Geplande omzet (offerte)"], index=0, horizontal=True)
 
 # === ARCHIVEER FILTER SELECTIE ===
-toon_archived = st.radio(
-    "📁 Wil je ook gearchiveerde projecten meenemen?",
-    options=["Nee, alleen actieve projecten", "Ja, ook gearchiveerde projecten"],
-    index=0,
-    horizontal=True
-)
+# Alle projecten worden altijd getoond (gearchiveerd + niet gearchiveerd)
+toon_archived = "Ja, ook gearchiveerde projecten"
 
 # --- DATA EXACT ZOALS IN app.py ---
 df_projects_raw = load_data_df("projects", columns=["id", "company_id", "archived", "totalexclvat"])
@@ -84,10 +80,8 @@ if not isinstance(df_projects_raw, pd.DataFrame):
 df_projects_raw["totalexclvat"] = pd.to_numeric(df_projects_raw["totalexclvat"], errors="coerce").fillna(0)
 
 # === ARCHIVEER FILTERING OP PROJECTEN ===
-if toon_archived == "Nee, alleen actieve projecten":
-    df_projects_filtered = df_projects_raw[df_projects_raw["archived"] != True].copy()
-else:
-    df_projects_filtered = df_projects_raw.copy()
+# Alle projecten worden altijd meegenomen (gearchiveerd + niet gearchiveerd)
+df_projects_filtered = df_projects_raw.copy()
 
 # Geplande omzet per bedrijf op basis van gefilterde projecten
 geplande_omzet_per_bedrijf = df_projects_filtered.groupby("company_id")["totalexclvat"].sum().reset_index()
@@ -145,18 +139,14 @@ for col in ["amountwritten", "sellingprice"]:
 
 #
 # Bereken totaal uren per bedrijf direct in SQL (zoals in app.py) maar gefilterd op uur
-# Consistent met project filtering keuze van gebruiker
-if toon_archived == "Nee, alleen actieve projecten":
-    # Alleen uren van actieve projecten
-    uren_per_bedrijf = load_data_df("projectlines_per_company", columns=["bedrijf_id", "SUM(CAST(amountwritten AS FLOAT)) as totaal_uren"], where="unit_searchname ILIKE 'uur' AND offerprojectbase_id IN (SELECT id FROM projects WHERE archived != True)", group_by="bedrijf_id")
-else:
-    # Alle uren (ook van gearchiveerde projecten)
-    uren_per_bedrijf = load_data_df("projectlines_per_company", columns=["bedrijf_id", "SUM(CAST(amountwritten AS FLOAT)) as totaal_uren"], where="unit_searchname ILIKE 'uur'", group_by="bedrijf_id")
+# Alle uren worden altijd meegenomen (ook van gearchiveerde projecten)
+uren_per_bedrijf = load_data_df("projectlines_per_company", columns=["bedrijf_id", "SUM(CAST(amountwritten AS FLOAT)) as totaal_uren"], where="unit_searchname ILIKE 'uur'", group_by="bedrijf_id")
 uren_per_bedrijf.columns = ["bedrijf_id", "totaal_uren"]
 uren_per_bedrijf = uren_per_bedrijf[uren_per_bedrijf["bedrijf_id"].isin(bedrijf_ids)]
 
 # Bereken totaal gefactureerd per bedrijf direct in SQL
-factuurbedrag_per_bedrijf = load_data_df("invoices", columns=["company_id", "SUM(CAST(totalpayed AS FLOAT)) as totalpayed"], where="fase = 'Factuur'", group_by="company_id")
+# Neem alle invoices mee, niet alleen fase='Factuur'
+factuurbedrag_per_bedrijf = load_data_df("invoices", columns=["company_id", "SUM(CAST(totalpayed AS FLOAT)) as totalpayed"], group_by="company_id")
 factuurbedrag_per_bedrijf = factuurbedrag_per_bedrijf.rename(columns={"company_id": "bedrijf_id"})
 factuurbedrag_per_bedrijf = factuurbedrag_per_bedrijf[factuurbedrag_per_bedrijf["bedrijf_id"].isin(bedrijf_ids)]
 
