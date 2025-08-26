@@ -3,6 +3,8 @@ import pandas as pd
 import plotly.express as px
 from sqlalchemy import create_engine
 import os
+import subprocess
+import sys
 from dotenv import load_dotenv
 from datetime import datetime
 from typing import cast
@@ -33,6 +35,41 @@ if "access_token" in st.session_state:
 
 st.logo("images/dunion-logo-def_donker-06.png")
 st.title("Dunion KPI Dashboard – Overzicht")
+
+# --- DATABASE VERVERS KNOP ---
+st.markdown("### 🔄 Database Verversen")
+st.markdown("Klik op de knop hieronder om de database bij te werken met de nieuwste data uit Gripp.")
+
+def run_gripp_api():
+    """Voert gripp_api.py uit om de database te verversen"""
+    try:
+        # Voer gripp_api.py uit als een subprocess
+        result = subprocess.run([sys.executable, "gripp_api.py"], 
+                              capture_output=True, 
+                              text=True, 
+                              cwd=os.getcwd(),
+                              timeout=2100)  # 35 minuten timeout
+        
+        if result.returncode == 0:
+            st.success("✅ Database succesvol ververst! Alle data is bijgewerkt.")
+            st.info("📊 De pagina wordt automatisch herladen om de nieuwe data te tonen.")
+            # Wacht even en herlaad dan de pagina
+            st.rerun()
+        else:
+            st.error(f"❌ Fout bij verversen van database: {result.stderr}")
+            if result.stdout:
+                st.code(result.stdout, language="bash")
+    except subprocess.TimeoutExpired:
+        st.error("⏰ Database verversen duurde te lang (>5 minuten). Probeer het later opnieuw.")
+    except Exception as e:
+        st.error(f"❌ Onverwachte fout: {str(e)}")
+
+# Database ververs knop
+if st.button("🔄 Database Verversen", type="primary", use_container_width=True):
+    with st.spinner("Database wordt ververst... Dit kan enkele minuten duren."):
+        run_gripp_api()
+
+st.markdown("---")
 
 # --- FILTERING KNOPPEN VOOR BEDRIJVEN ---
 with st.container():
