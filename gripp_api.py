@@ -12,6 +12,9 @@ from sqlalchemy import create_engine
 from sqlalchemy import text
 from sqlalchemy import inspect
 import tempfile
+from fastapi import FastAPI
+
+app = FastAPI()
 
 # === Configuratieparameters ===
 load_dotenv()
@@ -942,211 +945,71 @@ def convert_date_columns(df):
             df[col] = df[col].dt.date
     return df
 
-def main():
-    # Test PostgreSQL-verbinding
+def main(force_refresh=True):
+    t0 = datetime.now()
     try:
-        with engine.connect() as conn:
-            result = conn.execute(text("SELECT version();"))
-            print("✅ Verbonden met Supabase PostgreSQL:", result.scalar())
-    except Exception as e:
-        print("❌ Fout bij verbinden met Supabase PostgreSQL:", e)
+        # 1. Data ophalen
+        print("🚀 Ophalen Gripp-data...")
+        projects_df = fetch_gripp_projects()
+        companies_df = fetch_gripp_companies()
+        employees_df = fetch_gripp_employees()
+        projectlines_df = fetch_gripp_projectlines()
+        invoices_df = fetch_gripp_invoices()
+        invoicelines_df = fetch_gripp_invoicelines()
+        hours_df = fetch_gripp_hours_data()
+        tasktypes_df = fetch_gripp_tasktypes()
+        tasks_df = fetch_gripp_tasks()
+        phases_df = fetch_gripp_projectphases()
 
-    # Ophalen en sanitiseren van datasets (alle fetch en clean eerst, vóór verwerking)
-    projects_raw = fetch_gripp_projects()
-    # Flatten dict-kolommen in projects_raw
-    for col in projects_raw.columns:
-        if projects_raw[col].apply(lambda x: isinstance(x, dict)).any():
-            expanded = projects_raw[col].apply(pd.Series)
-            expanded.columns = [f"{col}_{subcol}" for subcol in expanded.columns]
-            projects_raw = projects_raw.drop(columns=[col]).join(expanded)
-    print("[DEBUG] Eerste 3 projecten:")
-    print(projects_raw.head(3).to_dict())
-    employees_raw = fetch_gripp_employees()
-    companies_raw = fetch_gripp_companies()
-    tasktypes_raw = fetch_gripp_tasktypes()
-    tasks_raw = fetch_gripp_tasks()  # <-- NIEUW
-    hours_raw = fetch_gripp_hours_data()
+        # 2. Data verwerken (optioneel: filteren)
+        projects_df = filter_projects(projects_df)
+        companies_df = filter_companies(companies_df)
+        employees_df = filter_employees(employees_df)
+        projectlines_df = flatten_dict_column(projectlines_df)
+        projectlines_df = projectlines_df  # eventueel extra filtering
+        invoices_df = filter_invoices(invoices_df)
+        invoicelines_df = filter_invoicelines(invoicelines_df)
+        hours_df = filter_hours(hours_df)
+        tasktypes_df = filter_tasktypes(tasktypes_df)
+        tasks_df = filter_tasks(tasks_df)
+        phases_df = phases_df  # eventueel extra filtering
 
-    # === FIX: Flatten de 'task' kolom in urenregistratie ===
-    if 'task' in hours_raw.columns:
-        print("🔧 Flattening 'task' data in urenregistratie...")
-        hours_raw['task_id'] = hours_raw['task'].apply(
-            lambda x: x.get('id') if isinstance(x, dict) else None
-        )
-        hours_raw['task_searchname'] = hours_raw['task'].apply(
-            lambda x: x.get('searchname') if isinstance(x, dict) else None
-        )
-    invoices_raw = fetch_gripp_invoices()
-    # Forceer flatten voor alle kolommen die dicts kunnen bevatten
-    for col in invoices_raw.columns:
-        if invoices_raw[col].apply(lambda x: isinstance(x, dict)).any():
-            expanded = invoices_raw[col].apply(pd.Series)
-            expanded.columns = [f"{col}_{subcol}" for subcol in expanded.columns]
-            invoices_raw = invoices_raw.drop(columns=[col]).join(expanded)
-    # Kopieer date_date zoals voorheen
-    if not invoices_raw.empty and 'date' in invoices_raw.columns:
-        invoices_raw['date_date'] = invoices_raw['date']
-        invoices_raw['date_date'] = pd.to_datetime(invoices_raw['date_date'], errors='coerce').dt.date
-    #invoicelines_raw = fetch_gripp_invoicelines()
-
-    # Eerst datasets in dictionary plaatsen zodat fetch_gripp_projectlines er toegang toe heeft
-    # Flatten company data in projects voordat filtering
-    if not projects_raw.empty and 'company' in projects_raw.columns:
-        print("🔢 [DEBUG] Flattening company data in projects...")
-        projects_raw['company_id'] = projects_raw['company'].apply(
-            lambda x: x.get('id') if isinstance(x, dict) else x
-        )
-        projects_raw['company_searchname'] = projects_raw['company'].apply(
-            lambda x: x.get('searchname') if isinstance(x, dict) else x
-        )
-        print(f"🔢 [DEBUG] Sample company_id's: {projects_raw['company_id'].head(5).tolist()}")
-        print(f"🔢 [DEBUG] Sample company_searchname's: {projects_raw['company_searchname'].head(5).tolist()}")
-    
-    datasets["gripp_projects"] = filter_projects(projects_raw)
-    datasets["gripp_employees"] = filter_employees(employees_raw)
-    datasets["gripp_companies"] = filter_companies(companies_raw)
-    datasets["gripp_tasktypes"] = filter_tasktypes(tasktypes_raw)
-    datasets["gripp_tasks"] = filter_tasks(tasks_raw) # <-- NIEUW
-    datasets["gripp_hours_data"] = filter_hours(hours_raw)
-    datasets["gripp_invoices"] = filter_invoices(invoices_raw)
-    
-    # Nu projectlines ophalen (nadat projects beschikbaar zijn)
-    projectlines_raw = fetch_gripp_projectlines()
-    print(f"🔢 [DEBUG] Aantal projectlines direct uit API: {len(projectlines_raw)}")
-    
-    # Voeg bedrijfsinformatie toe aan projectlines
-    if not projectlines_raw.empty:
-        print(f"🔢 [DEBUG] Projectlines kolommen: {projectlines_raw.columns.tolist()}")
-        
-        # Gebruik offerprojectbase kolom (bevat dictionaries met ID's)
-        if 'offerprojectbase' in projectlines_raw.columns:
-            print(f"🔢 [DEBUG] Sample offerprojectbase waarden: {projectlines_raw['offerprojectbase'].head(5).tolist()}")
-            
-            # Extraheer ID's uit de dictionaries
-            projectlines_raw['offerprojectbase_id'] = projectlines_raw['offerprojectbase'].apply(
-                lambda x: x.get('id') if isinstance(x, dict) else x
-            )
-            print(f"🔢 [DEBUG] Sample offerprojectbase_id waarden: {projectlines_raw['offerprojectbase_id'].head(5).tolist()}")
-            
-            projectlines_raw = projectlines_raw.merge(
-                datasets["gripp_projects"][["id", "company_id", "company_searchname"]],
-                left_on="offerprojectbase_id",
-                right_on="id",
-                how="left",
-                suffixes=("", "_project")
-            )
-            projectlines_raw = projectlines_raw.drop(columns=["id_project"])
-            
-            # Hernoem kolommen voor consistentie met database
-            projectlines_raw = projectlines_raw.rename(columns={
-                "company_id": "bedrijf_id",
-                "company_searchname": "bedrijf_naam"
-            })
-            print(f"🔢 [DEBUG] Aantal projectlines na merge met bedrijfsinformatie: {len(projectlines_raw)}")
-            print(f"🔢 [DEBUG] Sample bedrijf_id's: {projectlines_raw['bedrijf_id'].head(5).tolist()}")
-        else:
-            print("⚠️ offerprojectbase kolom niet gevonden")
-
-    # === FIX: Flatten de 'unit' kolom in projectlines ===
-    if 'unit' in projectlines_raw.columns:
-        print("🔧 Flattening 'unit' data in projectlines...")
-        projectlines_raw['unit_id'] = projectlines_raw['unit'].apply(
-            lambda x: x.get('id') if isinstance(x, dict) else None
-        )
-        projectlines_raw['unit_searchname'] = projectlines_raw['unit'].apply(
-            lambda x: x.get('searchname') if isinstance(x, dict) else None
-        )
-
-    # === Toevoegen: Flatten de 'product' kolom in projectlines ===
-    if 'product' in projectlines_raw.columns:
-        print("🔧 Flattening 'product' data in projectlines...")
-        projectlines_raw['product_id'] = projectlines_raw['product'].apply(
-            lambda x: x.get('id') if isinstance(x, dict) else None
-        )
-        projectlines_raw['product_searchname'] = projectlines_raw['product'].apply(
-            lambda x: x.get('searchname') if isinstance(x, dict) else None
-        )
-    
-    datasets["gripp_projectlines"] = projectlines_raw
-    #datasets["gripp_invoicelines"] = filter_invoicelines(invoicelines_raw)
-
-    # Gebruik direct de verrijkte projectlines uit de fetch
-    combined_projectlines = datasets["gripp_projectlines"]
-
-    # Converteer date kolommen vóór database-write
-    if combined_projectlines is not None:
-        print("⏳ Writing 'projectlines_per_company' to the database...")
-        combined_projectlines = convert_date_columns(combined_projectlines)
-        print(f"🔢 [DEBUG] Aantal projectlines die naar de database gaan: {len(combined_projectlines.drop_duplicates(subset='id'))}")
-        safe_to_sql(combined_projectlines.drop_duplicates(subset="id"), "projectlines_per_company")
-        print("✅ Finished writing 'projectlines_per_company'.")
-    if datasets.get("gripp_projects") is not None:
-        print("⏳ Writing 'projects' to the database...")
-        cleaned_projects = datasets["gripp_projects"].drop_duplicates(subset="id")
-        print("[DEBUG] Voor safe_to_sql: eerste 10 projecten met phase_searchname:")
-        print(cleaned_projects[['id', 'name', 'phase_searchname']].head(10))
-        safe_to_sql(cleaned_projects, "projects")
-        print("✅ Finished writing 'projects'.")
-    if datasets.get("gripp_employees") is not None:
-        print("⏳ Writing 'employees' to the database...")
-        safe_to_sql(datasets["gripp_employees"].drop_duplicates(subset="id"), "employees")
-        print("✅ Finished writing 'employees'.")
-    if datasets.get("gripp_companies") is not None:
-        print("⏳ Writing 'companies' to the database...")
-        safe_to_sql(datasets["gripp_companies"].drop_duplicates(subset="id"), "companies")
-        print("✅ Finished writing 'companies'.")
-    if datasets.get("gripp_tasktypes") is not None:
-        print("⏳ Writing 'tasktypes' to the database...")
-        safe_to_sql(datasets["gripp_tasktypes"].drop_duplicates(subset="id"), "tasktypes")
-        print("✅ Finished writing 'tasktypes'.")
-    if datasets.get("gripp_tasks") is not None: # <-- NIEUW
-        print("⏳ Writing 'tasks' to the database...")
-        safe_to_sql(datasets["gripp_tasks"].drop_duplicates(subset="id"), "tasks") # <-- NIEUW
-        print("✅ Finished writing 'tasks'.")
-    if datasets.get("gripp_hours_data") is not None:
-        print("⏳ Writing 'urenregistratie' to the database...")
-        hours_data = convert_date_columns(datasets["gripp_hours_data"].drop_duplicates(subset="id"))
-        safe_to_sql(hours_data, "urenregistratie")
-        print("✅ Finished writing 'urenregistratie'.")
-    
-    if datasets.get("gripp_invoices") is not None:
-        print("⏳ Writing 'invoices' to the database...")
-        invoices_df = datasets["gripp_invoices"].drop_duplicates(subset="id").copy()
-
-        # Zet geneste kolommen in JSON (veilige serialisatie)
-        import numpy as np
-        json_cols = ["tags"]
-        def safe_json_serialize(x):
-            if isinstance(x, str):
-                return x
-            elif isinstance(x, np.ndarray):
-                return json.dumps(x.tolist())
-            elif isinstance(x, (dict, list)):
-                return json.dumps(x)
-            elif pd.isnull(x):
-                return None
-            else:
-                return str(x)
-        for col in json_cols:
-            if col in invoices_df.columns:
-                invoices_df[col] = invoices_df[col].apply(safe_json_serialize)
-
-        # Gebruik safe_to_sql voor consistente verwerking
+        # 3. Wegschrijven naar database
+        print("💾 Wegschrijven naar database...")
+        safe_to_sql(projects_df, "projects")
+        safe_to_sql(companies_df, "companies")
+        safe_to_sql(employees_df, "employees")
+        safe_to_sql(projectlines_df, "projectlines")
         safe_to_sql(invoices_df, "invoices")
-        print("✅ Finished writing 'invoices'.")
-    #if datasets.get("gripp_invoicelines") is not None:
-        #safe_to_sql(datasets["gripp_invoicelines"].drop_duplicates(subset="id"), "invoicelines")
+        safe_to_sql(invoicelines_df, "invoicelines")
+        safe_to_sql(hours_df, "urenregistratie")
+        safe_to_sql(tasktypes_df, "tasktypes")
+        safe_to_sql(tasks_df, "tasks")
+        safe_to_sql(phases_df, "projectphases")
 
-    # Debug: inspecteer de inhoud en het type van de kolom 'phase_id' en 'phase_searchname'
-    print("[DEBUG] Eerste 10 waarden van 'phase_id' en 'phase_searchname':")
-    print(projects_raw[['phase_id', 'phase_searchname']].head(10))
-    print("[DEBUG] Type-overzicht van 'phase_id':")
-    print(projects_raw['phase_id'].apply(type).value_counts())
-    # Verrijk projects_raw met phase_searchname (direct uit dict)
-    if (not projects_raw.empty) and ('phase' in projects_raw.columns):
-        projects_raw['phase_searchname'] = projects_raw['phase'].apply(
-            lambda x: x.get('searchname') if isinstance(x, dict) else None
-        )
+        rows = sum([
+            len(projects_df),
+            len(companies_df),
+            len(employees_df),
+            len(projectlines_df),
+            len(invoices_df),
+            len(invoicelines_df),
+            len(hours_df),
+            len(tasktypes_df),
+            len(tasks_df),
+            len(phases_df)
+        ])
+        dt_ms = int((datetime.now() - t0).total_seconds() * 1000)
+        print(f"✅ Refresh klaar: {rows} rows verwerkt in {dt_ms} ms.")
+        return {"status": "ok", "rows_processed": rows, "duration_ms": dt_ms}
+    except Exception as e:
+        print(f"❌ Fout tijdens refresh: {e}")
+        return {"status": "fail", "error": str(e)}
+
+@app.post("/run-refresh")
+def run_refresh_endpoint():
+    result = main(force_refresh=True)
+    return result
 
 if __name__ == "__main__":
     main()

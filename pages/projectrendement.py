@@ -73,19 +73,19 @@ omzet_optie = st.radio("📊 Welke omzet wil je tonen?", options=["Werkelijke om
 toon_archived = "Ja, ook gearchiveerde projecten"
 
 # --- DATA EXACT ZOALS IN app.py ---
-df_projects_raw = load_data_df("projects", columns=["id", "company_id", "archived", "totalexclvat"])
+df_projects_raw = load_data_df("projects", columns=["id", "company_id", "archived", "totalinclvat"])
 if not isinstance(df_projects_raw, pd.DataFrame):
     df_projects_raw = pd.concat(list(df_projects_raw), ignore_index=True)
 # --- Geplande omzet per bedrijf toevoegen direct na conversie naar DataFrame
-df_projects_raw["totalexclvat"] = pd.to_numeric(df_projects_raw["totalexclvat"], errors="coerce").fillna(0)
+df_projects_raw["totalinclvat"] = pd.to_numeric(df_projects_raw["totalinclvat"], errors="coerce").fillna(0)
 
 # === ARCHIVEER FILTERING OP PROJECTEN ===
 # Alle projecten worden altijd meegenomen (gearchiveerd + niet gearchiveerd)
 df_projects_filtered = df_projects_raw.copy()
 
 # Geplande omzet per bedrijf op basis van gefilterde projecten
-geplande_omzet_per_bedrijf = df_projects_filtered.groupby("company_id")["totalexclvat"].sum().reset_index()
-geplande_omzet_per_bedrijf.rename(columns={"company_id": "bedrijf_id", "totalexclvat": "geplande_omzet"}, inplace=True)
+geplande_omzet_per_bedrijf = df_projects_filtered.groupby("company_id")["totalinclvat"].sum().reset_index()
+geplande_omzet_per_bedrijf.rename(columns={"company_id": "bedrijf_id", "totalinclvat": "geplande_omzet"}, inplace=True)
 df_companies = load_data_df("companies", columns=["id", "companyname", "tag_names"])
 if not isinstance(df_companies, pd.DataFrame):
     df_companies = pd.concat(list(df_companies), ignore_index=True)
