@@ -132,10 +132,10 @@ except ImportError:
     st.warning("📛 'streamlit-extras' is niet geïnstalleerd of niet vindbaar door je environment.")
 
 # --- LOAD DATA ---
-df_projects_raw = load_data_df("projects", columns=["id", "company_id", "archived", "totalinclvat", "name"])
+df_projects_raw = load_data_df("projects", columns=["id", "company_id", "archived", "totalexclvat", "name"])
 if not isinstance(df_projects_raw, pd.DataFrame):
     df_projects_raw = pd.concat(list(df_projects_raw), ignore_index=True)
-df_projects_raw["totalinclvat"] = pd.to_numeric(df_projects_raw["totalinclvat"], errors="coerce").fillna(0)
+df_projects_raw["totalexclvat"] = pd.to_numeric(df_projects_raw["totalexclvat"], errors="coerce").fillna(0)
 
 # Filterbare companies dataset: voeg tag_names toe en filter indien nodig
 df_companies = load_data_df("companies", columns=["id", "companyname", "tag_names"])
