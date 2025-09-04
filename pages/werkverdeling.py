@@ -23,8 +23,8 @@ require_email_whitelist(ALLOWED_EMAILS)
 if "access_token" in st.session_state:
     st.sidebar.write(f"Ingelogd als: {st.session_state.get('user_email', '')}")
     if st.sidebar.button("Logout"):
-        st.session_state.clear()
-        st.rerun()
+        from utils.auth import safe_logout
+        safe_logout()
 st.logo("images/dunion-logo-def_donker-06.png")
 
 # --- 2. DATABASE CONNECTION & BASE DATA LOADING ---

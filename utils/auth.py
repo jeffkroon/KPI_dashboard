@@ -1,5 +1,6 @@
 import streamlit as st
 import os
+import time
 try:
     from supabase import create_client, Client
 except ImportError:
@@ -12,30 +13,82 @@ if not SUPABASE_URL or not SUPABASE_KEY:
     st.error("Supabase credentials ontbreken. Zet SUPABASE_URL en SUPABASE_KEY als environment variables.")
     st.stop()
 
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+# Maak Supabase client met betere configuratie voor token refresh
+supabase: Client = create_client(
+    SUPABASE_URL, 
+    SUPABASE_KEY,
+    options={
+        "auth": {
+            "autoRefreshToken": True,
+            "persistSession": True,
+            "detectSessionInUrl": True
+        }
+    }
+)
+
+def safe_logout():
+    """Veilige logout functie die de session state wist en naar login redirect"""
+    try:
+        # Probeer de Supabase sessie te beëindigen
+        if "access_token" in st.session_state:
+            supabase.auth.sign_out()
+    except:
+        pass  # Ignore errors during logout
+    
+    # Wis alle session state
+    st.session_state.clear()
+    st.success("✅ Uitgelogd!")
+    st.rerun()
 
 def require_login():
     query_params = st.query_params.to_dict()
     if "access_token" in query_params:
         access_token = query_params["access_token"]
         st.session_state["access_token"] = access_token
+        st.session_state["login_time"] = time.time()  # Sla login tijd op
         st.success("✅ Ingelogd via Supabase OAuth!")
         st.query_params.clear()  # Leeg de query params
         st.rerun()
 
     if "access_token" in st.session_state:
+        # Controleer eerst of de login recent genoeg is (binnen 24 uur)
+        login_time = st.session_state.get("login_time", 0)
+        current_time = time.time()
+        if current_time - login_time > 86400:  # 24 uur in seconden
+            st.warning("Sessie verlopen. Log opnieuw in.")
+            safe_logout()
+            st.markdown(
+                '[Log in via de loginpagina](https://kpi-dashboard-1-bmk5.onrender.com/login.html)'
+            )
+            st.stop()
+        
         try:
             user_resp = supabase.auth.get_user(st.session_state["access_token"])
         except Exception as e:
-            st.error(f"Authenticatie fout: {e}")
-            st.session_state.clear()
-            st.stop()
+            # Probeer eerst een refresh van de token
+            try:
+                refresh_resp = supabase.auth.refresh_session(st.session_state["access_token"])
+                if hasattr(refresh_resp, "session") and refresh_resp.session:
+                    st.session_state["access_token"] = refresh_resp.session.access_token
+                    st.session_state["login_time"] = time.time()
+                    user_resp = supabase.auth.get_user(st.session_state["access_token"])
+                else:
+                    raise Exception("Token refresh failed")
+            except Exception as refresh_error:
+                # Als refresh ook faalt, toon een vriendelijkere foutmelding
+                st.error(f"Authenticatie verlopen. Log opnieuw in.")
+                safe_logout()
+                st.markdown(
+                    '[Log in via de loginpagina](https://kpi-dashboard-1-bmk5.onrender.com/login.html)'
+                )
+                st.stop()
+        
         if hasattr(user_resp, "user") and user_resp.user and hasattr(user_resp.user, "email"):
             st.session_state["user_email"] = user_resp.user.email
             return True
         else:
             st.error("Kon gebruikersinfo niet ophalen. Probeer opnieuw in te loggen.")
-            st.session_state.clear()
+            safe_logout()
             st.stop()
     else:
         st.markdown(
