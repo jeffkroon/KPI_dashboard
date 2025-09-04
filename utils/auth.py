@@ -12,7 +12,18 @@ if not SUPABASE_URL or not SUPABASE_KEY:
     st.error("Supabase credentials ontbreken. Zet SUPABASE_URL en SUPABASE_KEY als environment variables.")
     st.stop()
 
-supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+# Maak Supabase client met betere configuratie voor token refresh
+supabase: Client = create_client(
+    SUPABASE_URL, 
+    SUPABASE_KEY,
+    options={
+        "auth": {
+            "autoRefreshToken": True,
+            "persistSession": True,
+            "detectSessionInUrl": True
+        }
+    }
+)
 
 def require_login():
     query_params = st.query_params.to_dict()
