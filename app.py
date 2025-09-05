@@ -213,8 +213,8 @@ uren_per_bedrijf = uren_per_bedrijf.merge(uren_per_bedrijf_uur, on="bedrijf_id",
 factuurbedrag_per_bedrijf = load_data_df("invoices", columns=["company_id", "SUM(CAST(totalpayed AS FLOAT)) as totalpayed"], group_by="company_id")
 
 # Bereken geplande omzet per bedrijf (op basis van offertes/projecten)
-geplande_omzet_per_bedrijf = df_projects_raw.groupby("company_id")["totalinclvat"].sum().reset_index()
-geplande_omzet_per_bedrijf.rename(columns={"company_id": "bedrijf_id", "totalinclvat": "geplande_omzet"}, inplace=True)
+geplande_omzet_per_bedrijf = df_projects_raw.groupby("company_id")["totalexlvat"].sum().reset_index()
+geplande_omzet_per_bedrijf.rename(columns={"company_id": "bedrijf_id", "totalexlvat": "geplande_omzet"}, inplace=True)
 
 # Zorg dat beide DataFrames een kolom 'bedrijf_id' hebben vóór de merge
 if 'company_id' in uren_per_bedrijf.columns:
