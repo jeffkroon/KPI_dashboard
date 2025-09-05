@@ -17,11 +17,9 @@ supabase: Client = create_client(
     SUPABASE_URL, 
     SUPABASE_KEY,
     options={
-        "auth": {
-            "autoRefreshToken": True,
-            "persistSession": True,
-            "detectSessionInUrl": True
-        }
+        "auto_refresh_token": True,
+        "persist_session": True,
+        "detect_session_in_url": True
     }
 )
 
