@@ -18,7 +18,7 @@ scikit-learn==1.7.0
 sendgrid==6.12.4
 SQLAlchemy==2.0.41
 streamlit==1.45.1
-supabase==2.16.0
+supabase==1.0.4
 psycopg2-binary
 streamlit-extras
 fastapi
