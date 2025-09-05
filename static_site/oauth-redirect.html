@@ -15,7 +15,7 @@
     supabaseClient.auth.getSession().then(({ data: { session } }) => {
       if (session && session.access_token) {
         // Redirect naar je Streamlit app met access_token in de URL
-        window.location.href = "https://kpi-dashboard-hc4e.onrender.com/?access_token=" + session.access_token;
+        window.location.href = "https://kpi-dashboard-1-bmk5.onrender.com/?access_token=" + session.access_token;
       } else {
         document.body.innerHTML = '<h2>Login mislukt. Probeer opnieuw.</h2>';
       }
