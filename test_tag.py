@@ -15,7 +15,7 @@ print(f"Bedrijf ID voor 'EV Administratie & Advies B.V.': {company_id}")
 
 # Load projectlines dataset
 df_projectlines = load_data_df("projectlines_per_company", columns=["bedrijf_id", "amount", "amountwritten", "sellingprice", "unit_searchname", "description"])
-df_projectlines["totalexclvat"] = pd.to_numeric(df_projectlines["sellingprice"], errors="coerce").fillna(0) * pd.to_numeric(df_projectlines["amount"], errors="coerce").fillna(0)
+df_projectlines["totalinclvat"] = pd.to_numeric(df_projectlines["sellingprice"], errors="coerce").fillna(0) * pd.to_numeric(df_projectlines["amount"], errors="coerce").fillna(0)
 
 # Filter projectlines for the target company
 df_target_projectlines = df_projectlines[df_projectlines["bedrijf_id"] == company_id]
