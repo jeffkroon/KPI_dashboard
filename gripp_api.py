@@ -180,7 +180,9 @@ def filter_invoices(df: pd.DataFrame) -> pd.DataFrame:
     keep_cols = [
         "id",
         "number",
-        "subject",         # <-- toegevoegd
+        "status",
+        "subject", 
+        "reportdate", # <-- toegevoegd
         "description",
         "date_date",
         "status_searchname",
@@ -196,7 +198,6 @@ def filter_invoices(df: pd.DataFrame) -> pd.DataFrame:
         "company",
         # "invoicelines",    # niet toevoegen
         "tags",
-        "status"
     ]
     cols = [c for c in keep_cols if c in df.columns]
     return pd.DataFrame(df[cols].copy())
