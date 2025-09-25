@@ -327,9 +327,10 @@ with st.expander("🔍 Debug: Data Filtering Info"):
 # === OUDE PROJECTLINES UREN LOGICA VERWIJDERD ===
 # We gebruiken nu urenregistratie voor accurate uren data
 
-# Bereken totaal gefactureerd per bedrijf direct in SQL
-# Neem alle invoices mee, niet alleen fase='Factuur'
-factuurbedrag_per_bedrijf = load_data_df("invoices", columns=["company_id", "SUM(CAST(totalpayed AS FLOAT)) as totalpayed"], group_by="company_id")
+# Bereken totaal gefactureerd per bedrijf uit gefilterde data
+# Gebruik de gefilterde invoices (df_invoices) in plaats van alle invoices
+factuurbedrag_per_bedrijf = df_invoices.groupby("company_id")["totalpayed"].sum().reset_index()
+factuurbedrag_per_bedrijf.rename(columns={"company_id": "bedrijf_id", "totalpayed": "totalpayed"}, inplace=True)
 
 # Bereken geplande omzet per bedrijf (op basis van offertes/projecten)
 geplande_omzet_per_bedrijf = df_projects_raw.groupby("company_id")["totalinclvat"].sum().reset_index()
