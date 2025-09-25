@@ -310,7 +310,9 @@ with st.expander("🔍 Debug: Data Filtering Info"):
         st.write("**Invoice date range:**")
         st.write(f"- Min date: {df_invoices['reportdate_date'].min()}")
         st.write(f"- Max date: {df_invoices['reportdate_date'].max()}")
-        st.write(f"- Total invoice amount: €{df_invoices['totalpayed'].sum():,.2f}")
+        # Convert to numeric first, then sum
+        total_amount = pd.to_numeric(df_invoices['totalpayed'], errors='coerce').sum()
+        st.write(f"- Total invoice amount: €{total_amount:,.2f}")
     
     if len(df_invoices) == 0:
         st.warning("⚠️ Geen facturen gevonden voor deze periode!")
