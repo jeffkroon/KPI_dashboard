@@ -173,7 +173,7 @@ with st.container():
     with filter_col1:
         date_range = st.date_input(
             "📅 Analyseperiode",
-            value=None,  # Start with no default selection
+            value=(),  # Empty tuple for range selection
             min_value=date(2020, 1, 1),
             max_value=max_date,
             help="Selecteer de periode die u wilt analyseren.",
