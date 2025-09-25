@@ -835,7 +835,9 @@ def _process_batch(df: pd.DataFrame, table_name: str, temp_engine):
                 df.loc[:, "bedrijf_id"] = None
 
             # Filter DataFrame kolommen en zorg voor juiste volgorde
-            filtered_df = df[[col for col in db_columns if col in df.columns]]
+            # FIX: Zorg dat de kolommen in dezelfde volgorde staan als in de database
+            available_cols = [col for col in db_columns if col in df.columns]
+            filtered_df = df[available_cols].reindex(columns=available_cols)
 
             # Export naar CSV met float_format om .0 te verwijderen
             filtered_df.to_csv(tmp.name, index=False, header=True, float_format='%.0f')
