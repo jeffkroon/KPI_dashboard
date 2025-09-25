@@ -169,6 +169,9 @@ with st.container():
         "Juli", "Augustus", "September", "Oktober", "November", "December"
     ]
     
+    # Maak keys dynamisch op basis van omzet optie om caching te voorkomen
+    key_suffix = "_werkelijk" if omzet_optie == "Werkelijke omzet (facturen)" else "_gepland"
+    
     # Create two columns for from/to selection
     col1, col2 = st.columns(2)
     
@@ -179,14 +182,14 @@ with st.container():
             months,
             index=current_month - 1,
             help="Start maand van de periode",
-            key="from_month"
+            key=f"from_month{key_suffix}"
         )
         from_year = st.selectbox(
             "Jaar:",
             list(range(2020, current_year + 2)),
             index=current_year - 2020,
             help="Start jaar van de periode",
-            key="from_year"
+            key=f"from_year{key_suffix}"
         )
     
     with col2:
@@ -196,14 +199,14 @@ with st.container():
             months,
             index=current_month - 1,
             help="Eind maand van de periode",
-            key="to_month"
+            key=f"to_month{key_suffix}"
         )
         to_year = st.selectbox(
             "Jaar:",
             list(range(2020, current_year + 2)),
             index=current_year - 2020,
             help="Eind jaar van de periode",
-            key="to_year"
+            key=f"to_year{key_suffix}"
         )
     
     # Convert to month numbers and create date objects
@@ -217,6 +220,12 @@ with st.container():
         end_date = datetime(to_year + 1, 1, 1) - timedelta(days=1)
     else:
         end_date = datetime(to_year, to_month + 1, 1) - timedelta(days=1)
+    
+    # Reset periode knop
+    col_reset1, col_reset2, col_reset3 = st.columns([1, 2, 1])
+    with col_reset2:
+        if st.button("🔄 Reset Periode naar Huidige Maand", help="Reset alle datum selectors naar de huidige maand/jaar"):
+            st.rerun()
     
     # Validate date range
     if start_date > end_date:
