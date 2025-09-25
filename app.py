@@ -352,8 +352,8 @@ factuurbedrag_per_bedrijf = factuurbedrag_per_bedrijf[factuurbedrag_per_bedrijf[
 bedrijfsstats = uren_per_bedrijf.merge(factuurbedrag_per_bedrijf, on="bedrijf_id", how="outer")
 bedrijfsstats = bedrijfsstats.merge(df_companies[["id", "companyname"]], left_on="bedrijf_id", right_on="id", how="left")
 bedrijfsstats = bedrijfsstats.drop(columns=[col for col in ['id'] if col in bedrijfsstats.columns])
-bedrijfsstats["totaal_uren"] = bedrijfsstats["totaal_uren"].fillna(0)
-bedrijfsstats["totalpayed"] = bedrijfsstats["totalpayed"].fillna(0)
+bedrijfsstats["totaal_uren"] = pd.to_numeric(bedrijfsstats["totaal_uren"], errors="coerce").fillna(0)
+bedrijfsstats["totalpayed"] = pd.to_numeric(bedrijfsstats["totalpayed"], errors="coerce").fillna(0)
 
 # Voeg geplande omzet toe aan bedrijfsstats VOORDAT tarief_per_uur wordt berekend
 bedrijfsstats = bedrijfsstats.merge(geplande_omzet_per_bedrijf, on="bedrijf_id", how="left")
@@ -397,6 +397,9 @@ if omzet_optie == "Werkelijke omzet (facturen)":
     bedrijfsstats["totaalomzet"] = bedrijfsstats["totalpayed"]
 else:
     bedrijfsstats["totaalomzet"] = bedrijfsstats["geplande_omzet"]
+
+# Zorg dat totaalomzet numeriek is
+bedrijfsstats["totaalomzet"] = pd.to_numeric(bedrijfsstats["totaalomzet"], errors="coerce").fillna(0)
 
 # --- SIMPELE KPI'S & LEUKE INZICHTEN ---
 st.markdown("""
