@@ -160,30 +160,43 @@ elif filter_optie == "Alle bedrijven":
 with st.container():
     st.markdown('<div class="filter-box"><h4>📅 Periode Filter</h4>', unsafe_allow_html=True)
     
-    # EXACT copy from werkverdeling.py
-    filter_col1, filter_col2 = st.columns([1, 2])
-    with filter_col1:
-        max_date = date.today()
-        min_date_default = max_date - timedelta(days=30)
-        date_range = st.date_input(
-            "📅 Analyseperiode",
-            (min_date_default, max_date),
-            min_value=date(2020, 1, 1),
-            max_value=max_date,
-            help="Selecteer de periode die u wilt analyseren.",
-            key="dashboard_analyseperiode"
-        )
-        if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
-            start_date, end_date = date_range
-        else:
-            start_date, end_date = min_date_default, max_date
-    
-    with filter_col2:
-        # Placeholder for future filters
-        st.write("")  # Empty space
+    max_date = date.today()
+    min_date_default = max_date - timedelta(days=30)
+
+    if "dashboard_start_date" not in st.session_state:
+        st.session_state["dashboard_start_date"] = min_date_default
+    if "dashboard_end_date" not in st.session_state:
+        st.session_state["dashboard_end_date"] = max_date
+
+    # Keep the picker inside a form so the app only reruns after the user submits.
+    with st.form("dashboard_period_filter"):
+        filter_col1, filter_col2 = st.columns([1, 2])
+        with filter_col1:
+            date_range = st.date_input(
+                "📅 Analyseperiode",
+                (
+                    st.session_state["dashboard_start_date"],
+                    st.session_state["dashboard_end_date"],
+                ),
+                min_value=date(2020, 1, 1),
+                max_value=max_date,
+                help="Selecteer de periode die u wilt analyseren.",
+                key="dashboard_analyseperiode",
+            )
+
+        with filter_col2:
+            st.write("")
+            apply_period = st.form_submit_button(
+                "Periode toepassen", use_container_width=True
+            )
+
+    if apply_period and isinstance(date_range, (list, tuple)) and len(date_range) == 2:
+        st.session_state["dashboard_start_date"], st.session_state["dashboard_end_date"] = date_range
     
     # Use date objects directly like werkverdeling.py
     # Convert to datetime objects only for pandas filtering
+    start_date = st.session_state["dashboard_start_date"]
+    end_date = st.session_state["dashboard_end_date"]
     start_date_dt = pd.to_datetime(start_date)
     end_date_dt = pd.to_datetime(end_date)
     
