@@ -6,7 +6,7 @@ import os
 import subprocess
 import sys
 from dotenv import load_dotenv
-from datetime import datetime, date
+from datetime import datetime, timedelta, date
 from typing import cast
 import plotly.graph_objects as go
 from utils.auth import require_login, require_email_whitelist
@@ -158,11 +158,11 @@ elif filter_optie == "Alle bedrijven":
         (df_companies["tag_names"].str.strip() != "")
     ]
 
-# --- MAAND FILTER ---
+# --- PERIODE FILTER ---
 with st.container():
-    st.markdown('<div class="filter-box"><h4>📅 Maandfilter</h4>', unsafe_allow_html=True)
+    st.markdown('<div class="filter-box"><h4>📅 Periode Filter</h4>', unsafe_allow_html=True)
     
-    # Get available months from data
+    # Get current date
     current_year = datetime.now().year
     current_month = datetime.now().month
     
@@ -172,23 +172,62 @@ with st.container():
         "Juli", "Augustus", "September", "Oktober", "November", "December"
     ]
     
-    # Default to current month/year
-    selected_month_name = st.selectbox(
-        "Selecteer maand:",
-        months,
-        index=current_month - 1,
-        help="Filter alle data op deze maand en jaar"
-    )
+    # Create two columns for from/to selection
+    col1, col2 = st.columns(2)
     
-    selected_year = st.selectbox(
-        "Selecteer jaar:",
-        list(range(2020, current_year + 2)),
-        index=current_year - 2020,
-        help="Filter alle data op dit jaar"
-    )
+    with col1:
+        st.markdown("**Van:**")
+        from_month_name = st.selectbox(
+            "Maand:",
+            months,
+            index=current_month - 1,
+            help="Start maand van de periode",
+            key="from_month"
+        )
+        from_year = st.selectbox(
+            "Jaar:",
+            list(range(2020, current_year + 2)),
+            index=current_year - 2020,
+            help="Start jaar van de periode",
+            key="from_year"
+        )
     
-    # Convert to month number
-    selected_month = months.index(selected_month_name) + 1
+    with col2:
+        st.markdown("**Tot:**")
+        to_month_name = st.selectbox(
+            "Maand:",
+            months,
+            index=current_month - 1,
+            help="Eind maand van de periode",
+            key="to_month"
+        )
+        to_year = st.selectbox(
+            "Jaar:",
+            list(range(2020, current_year + 2)),
+            index=current_year - 2020,
+            help="Eind jaar van de periode",
+            key="to_year"
+        )
+    
+    # Convert to month numbers and create date objects
+    from_month = months.index(from_month_name) + 1
+    to_month = months.index(to_month_name) + 1
+    
+    # Create start and end dates
+    start_date = datetime(from_year, from_month, 1)
+    # End date is last day of the selected month
+    if to_month == 12:
+        end_date = datetime(to_year + 1, 1, 1) - timedelta(days=1)
+    else:
+        end_date = datetime(to_year, to_month + 1, 1) - timedelta(days=1)
+    
+    # Validate date range
+    if start_date > end_date:
+        st.error("⚠️ Start datum moet voor eind datum liggen!")
+        st.stop()
+    
+    # Display selected period
+    st.info(f"📊 Geselecteerde periode: {from_month_name} {from_year} tot {to_month_name} {to_year}")
     
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -213,12 +252,12 @@ if not isinstance(df_invoices, pd.DataFrame):
 df_projectlines = df_projectlines[df_projectlines["bedrijf_id"].isin(bedrijf_ids)]
 df_invoices = df_invoices[df_invoices["company_id"].isin(bedrijf_ids)]
 
-# --- Filter invoices op geselecteerde maand/jaar ---
+# --- Filter invoices op geselecteerde periode ---
 if 'reportdate_date' in df_invoices.columns:
     df_invoices['reportdate_date'] = pd.to_datetime(df_invoices['reportdate_date'], errors='coerce')
     df_invoices = df_invoices[
-        (df_invoices['reportdate_date'].dt.month == selected_month) &
-        (df_invoices['reportdate_date'].dt.year == selected_year)
+        (df_invoices['reportdate_date'] >= start_date) &
+        (df_invoices['reportdate_date'] <= end_date)
     ]
 
 
@@ -233,17 +272,17 @@ for col in ["amountwritten", "sellingprice"]:
         df_projectlines[col] = pd.to_numeric(df_projectlines[col], errors="coerce")
 
 # Bereken totaal uren per bedrijf met datumfilter via urenregistratie
-# Laad urenregistratie data en filter op maand/jaar
+# Laad urenregistratie data en filter op periode
 df_urenregistratie = load_data_df("urenregistratie", columns=["employee_id", "offerprojectbase_id", "amount", "date_date", "status_searchname"])
 if not isinstance(df_urenregistratie, pd.DataFrame):
     df_urenregistratie = pd.concat(list(df_urenregistratie), ignore_index=True)
 
-# Filter uren op geselecteerde maand/jaar en alleen gefiatteerde uren
+# Filter uren op geselecteerde periode en alleen gefiatteerde uren
 if 'date_date' in df_urenregistratie.columns:
     df_urenregistratie['date_date'] = pd.to_datetime(df_urenregistratie['date_date'], errors='coerce')
     df_urenregistratie_filtered = df_urenregistratie[
-        (df_urenregistratie['date_date'].dt.month == selected_month) &
-        (df_urenregistratie['date_date'].dt.year == selected_year) &
+        (df_urenregistratie['date_date'] >= start_date) &
+        (df_urenregistratie['date_date'] <= end_date) &
         (df_urenregistratie['status_searchname'] == 'Gefiatteerd')
     ]
 else:
