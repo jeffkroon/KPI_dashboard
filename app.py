@@ -163,14 +163,15 @@ with st.container():
     # EXACT copy from werkverdeling.py
     filter_col1, filter_col2 = st.columns([1, 2])
     with filter_col1:
-        max_date = datetime.today()
+        max_date = date.today()
         min_date_default = max_date - timedelta(days=30)
         date_range = st.date_input(
             "📅 Analyseperiode",
             (min_date_default, max_date),
-            min_value=datetime(2020, 1, 1),
+            min_value=date(2020, 1, 1),
             max_value=max_date,
-            help="Selecteer de periode die u wilt analyseren."
+            help="Selecteer de periode die u wilt analyseren.",
+            key="dashboard_analyseperiode"
         )
         if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
             start_date, end_date = date_range
