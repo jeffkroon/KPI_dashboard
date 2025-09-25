@@ -190,8 +190,10 @@ with st.container():
                 "Periode toepassen", use_container_width=True
             )
 
-    if apply_period and isinstance(date_range, (list, tuple)) and len(date_range) == 2:
-        st.session_state["dashboard_start_date"], st.session_state["dashboard_end_date"] = date_range
+        # Update session state immediately when form is submitted
+        if apply_period and isinstance(date_range, (list, tuple)) and len(date_range) == 2:
+            st.session_state["dashboard_start_date"], st.session_state["dashboard_end_date"] = date_range
+            st.rerun()  # Force a rerun to update the display
     
     # Use date objects directly like werkverdeling.py
     # Convert to datetime objects only for pandas filtering
