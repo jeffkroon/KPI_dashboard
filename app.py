@@ -232,20 +232,22 @@ for col in ["amountwritten", "sellingprice"]:
     if col in df_projectlines.columns:
         df_projectlines[col] = pd.to_numeric(df_projectlines[col], errors="coerce")
 
- # Bereken totaal uren per bedrijf met datumfilter
+# Bereken totaal uren per bedrijf met datumfilter via urenregistratie
 # Laad urenregistratie data en filter op maand/jaar
 df_urenregistratie = load_data_df("urenregistratie", columns=["employee_id", "offerprojectbase_id", "amount", "date_date", "status_searchname"])
 if not isinstance(df_urenregistratie, pd.DataFrame):
     df_urenregistratie = pd.concat(list(df_urenregistratie), ignore_index=True)
 
-# Filter uren op geselecteerde maand/jaar
+# Filter uren op geselecteerde maand/jaar en alleen gefiatteerde uren
 if 'date_date' in df_urenregistratie.columns:
     df_urenregistratie['date_date'] = pd.to_datetime(df_urenregistratie['date_date'], errors='coerce')
-    df_urenregistratie = df_urenregistratie[
+    df_urenregistratie_filtered = df_urenregistratie[
         (df_urenregistratie['date_date'].dt.month == selected_month) &
         (df_urenregistratie['date_date'].dt.year == selected_year) &
         (df_urenregistratie['status_searchname'] == 'Gefiatteerd')
     ]
+else:
+    df_urenregistratie_filtered = df_urenregistratie[df_urenregistratie['status_searchname'] == 'Gefiatteerd']
 
 # Laad projecten om company_id te krijgen
 df_projects_for_uren = load_data_df("projects", columns=["id", "company_id"])
@@ -253,8 +255,8 @@ if not isinstance(df_projects_for_uren, pd.DataFrame):
     df_projects_for_uren = pd.concat(list(df_projects_for_uren), ignore_index=True)
 
 # Merge uren met projecten om company_id te krijgen
-if not df_urenregistratie.empty and not df_projects_for_uren.empty:
-    df_uren_with_company = df_urenregistratie.merge(
+if not df_urenregistratie_filtered.empty and not df_projects_for_uren.empty:
+    df_uren_with_company = df_urenregistratie_filtered.merge(
         df_projects_for_uren, 
         left_on="offerprojectbase_id", 
         right_on="id", 
@@ -266,23 +268,11 @@ if not df_urenregistratie.empty and not df_projects_for_uren.empty:
     uren_per_bedrijf = df_uren_with_company.groupby("company_id")["amount"].sum().reset_index()
     uren_per_bedrijf.columns = ["bedrijf_id", "totaal_uren"]
 else:
-    # Fallback naar projectlines als geen urenregistratie data
-    uren_per_bedrijf = load_data_df("projectlines_per_company", columns=["bedrijf_id", "SUM(CAST(amountwritten AS FLOAT)) as totaal_uren"], group_by="bedrijf_id")
-    uren_per_bedrijf.columns = ["bedrijf_id", "totaal_uren"]
+    # Fallback: lege DataFrame als geen urenregistratie data
+    uren_per_bedrijf = pd.DataFrame(columns=["bedrijf_id", "totaal_uren"])
 
-# === Alleen uren van projectonderdelen met unit_searchname == 'uur' ===
-df_projectlines_unit = load_data_df("projectlines_per_company", columns=["id", "bedrijf_id", "amountwritten", "unit_searchname"])
-if not isinstance(df_projectlines_unit, pd.DataFrame):
-    df_projectlines_unit = pd.concat(list(df_projectlines_unit), ignore_index=True)
-df_projectlines_uur = df_projectlines_unit[
-    (df_projectlines_unit["unit_searchname"].str.lower() == "uur") &
-    (df_projectlines_unit.get("hidefortimewriting", False) == False)
-].copy()
-uren_per_bedrijf_uur = df_projectlines_uur.groupby("bedrijf_id")["amountwritten"].sum().reset_index()
-uren_per_bedrijf_uur.columns = ["bedrijf_id", "totaal_uren_uur"]
-
-# Merge deze gefilterde uren met uren_per_bedrijf (of bedrijfsstats indien aanwezig)
-uren_per_bedrijf = uren_per_bedrijf.merge(uren_per_bedrijf_uur, on="bedrijf_id", how="left")
+# === OUDE PROJECTLINES UREN LOGICA VERWIJDERD ===
+# We gebruiken nu urenregistratie voor accurate uren data
 
 # Bereken totaal gefactureerd per bedrijf direct in SQL
 # Neem alle invoices mee, niet alleen fase='Factuur'
@@ -505,20 +495,59 @@ fig_uren = px.bar(
 fig_uren.update_layout(yaxis={'categoryorder':'total ascending'}, height=400, margin=dict(l=40, r=20, t=60, b=40))
 st.plotly_chart(fig_uren, use_container_width=True)
 
-# --- OVERSCHRIJDINGEN PER PROJECT (offerprojectbase_id) ---
+# --- OVERSCHRIJDINGEN PER PROJECT (urenregistratie vs projectlines) ---
 
-# Zorg dat amount en amountwritten numeriek zijn
-for col in ["amount", "amountwritten"]:
-    if col in df_projectlines.columns:
-        df_projectlines[col] = pd.to_numeric(df_projectlines[col], errors="coerce")
+# Laad projectlines voor geplande uren
+df_projectlines_planned = load_data_df("projectlines_per_company", columns=["offerprojectbase_id", "bedrijf_id", "amount", "unit_searchname"])
+if not isinstance(df_projectlines_planned, pd.DataFrame):
+    df_projectlines_planned = pd.concat(list(df_projectlines_planned), ignore_index=True)
 
-# Groepeer per project (offerprojectbase_id)
-df_proj_agg = df_projectlines.groupby(
+# Filter alleen projectlines met unit 'uur' voor geplande uren
+df_projectlines_uur_planned = df_projectlines_planned[
+    (df_projectlines_planned["unit_searchname"].str.lower() == "uur") &
+    (df_projectlines_planned["bedrijf_id"].isin(bedrijf_ids))
+].copy()
+
+# Zorg dat amount numeriek is
+df_projectlines_uur_planned["amount"] = pd.to_numeric(df_projectlines_uur_planned["amount"], errors="coerce")
+
+# Groepeer geplande uren per project
+df_planned_uren = df_projectlines_uur_planned.groupby(
     ["offerprojectbase_id", "bedrijf_id"], dropna=False
 ).agg(
-    geplande_uren=("amount", "sum"),
-    geschreven_uren=("amountwritten", "sum")
+    geplande_uren=("amount", "sum")
 ).reset_index()
+
+# Bereken werkelijk gewerkte uren per project uit urenregistratie
+if not df_urenregistratie.empty and not df_projects_for_uren.empty:
+    df_uren_with_company_full = df_urenregistratie.merge(
+        df_projects_for_uren, 
+        left_on="offerprojectbase_id", 
+        right_on="id", 
+        how="left"
+    )
+    # Filter op bedrijf_ids en gefiatteerde uren
+    df_uren_with_company_full = df_uren_with_company_full[
+        (df_uren_with_company_full["company_id"].isin(bedrijf_ids)) &
+        (df_uren_with_company_full["status_searchname"] == 'Gefiatteerd')
+    ]
+    df_uren_with_company_full["amount"] = pd.to_numeric(df_uren_with_company_full["amount"], errors="coerce")
+    
+    # Groepeer werkelijk gewerkte uren per project
+    df_werkelijk_uren = df_uren_with_company_full.groupby(
+        ["offerprojectbase_id", "company_id"], dropna=False
+    ).agg(
+        geschreven_uren=("amount", "sum")
+    ).reset_index()
+    df_werkelijk_uren.columns = ["offerprojectbase_id", "bedrijf_id", "geschreven_uren"]
+else:
+    # Fallback: lege DataFrame
+    df_werkelijk_uren = pd.DataFrame(columns=["offerprojectbase_id", "bedrijf_id", "geschreven_uren"])
+
+# Merge geplande en werkelijk gewerkte uren
+df_proj_agg = df_planned_uren.merge(df_werkelijk_uren, on=["offerprojectbase_id", "bedrijf_id"], how="outer")
+df_proj_agg["geplande_uren"] = df_proj_agg["geplande_uren"].fillna(0)
+df_proj_agg["geschreven_uren"] = df_proj_agg["geschreven_uren"].fillna(0)
 
 # Voeg projectnaam toe
 if "id" in df_projects_raw.columns and "name" in df_projects_raw.columns:
