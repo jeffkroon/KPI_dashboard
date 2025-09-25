@@ -19,6 +19,7 @@ python-dotenv==1.1.1
 PyYAML==6.0.2
 requests==2.32.4
 streamlit==1.38.0
+streamlit-extras
 schedule==1.2.2
 sendgrid==6.12.4
 SQLAlchemy==2.0.41
