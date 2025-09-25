@@ -159,32 +159,20 @@ elif filter_optie == "Alle bedrijven":
 with st.container():
     st.markdown('<div class="filter-box"><h4>📅 Periode Filter</h4>', unsafe_allow_html=True)
     
-    # Get current date
-    current_date = datetime.now().date()
-    default_start = current_date.replace(day=1)  # First day of current month
-    default_end = current_date  # Today
+    # Get current date - exactly like werkverdeling.py
+    max_date = datetime.now().date()
+    min_date_default = max_date.replace(day=1)  # First day of current month
     
-    # Maak keys dynamisch op basis van omzet optie om caching te voorkomen
-    key_suffix = "_werkelijk" if omzet_optie == "Werkelijke omzet (facturen)" else "_gepland"
-    
-    # Initialize session state for date range if not exists
-    if f"date_range{key_suffix}" not in st.session_state:
-        st.session_state[f"date_range{key_suffix}"] = (default_start, default_end)
-    
-    # Use date_input like in werkverdeling.py
+    # Use date_input exactly like werkverdeling.py (no session state, no key)
     date_range = st.date_input(
         "📅 Analyseperiode",
-        value=st.session_state[f"date_range{key_suffix}"],
+        (min_date_default, max_date),
         min_value=date(2020, 1, 1),
-        max_value=current_date,
-        help="Selecteer de periode die u wilt analyseren.",
-        key=f"date_range{key_suffix}"
+        max_value=max_date,
+        help="Selecteer de periode die u wilt analyseren."
     )
     
-    # Update session state with the selected range
-    st.session_state[f"date_range{key_suffix}"] = date_range
-    
-    # Handle date range selection
+    # Handle date range selection - exactly like werkverdeling.py
     if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
         start_date, end_date = date_range
         # Convert to datetime objects for compatibility with existing code
@@ -192,8 +180,8 @@ with st.container():
         end_date = datetime.combine(end_date, datetime.max.time())
     else:
         # Fallback to current month
-        start_date = datetime.combine(default_start, datetime.min.time())
-        end_date = datetime.combine(default_end, datetime.max.time())
+        start_date = datetime.combine(min_date_default, datetime.min.time())
+        end_date = datetime.combine(max_date, datetime.max.time())
     
     # Debug: Show what dates are actually being used
     st.write(f"🔍 Debug: date_range = {date_range}")
@@ -203,8 +191,6 @@ with st.container():
     col_reset1, col_reset2, col_reset3 = st.columns([1, 2, 1])
     with col_reset2:
         if st.button("🔄 Reset Periode naar Huidige Maand", help="Reset alle datum selectors naar de huidige maand/jaar"):
-            # Reset session state to current month
-            st.session_state[f"date_range{key_suffix}"] = (default_start, default_end)
             st.rerun()
     
     # Validate date range
