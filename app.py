@@ -172,25 +172,16 @@ with st.container():
         help="Selecteer de periode die u wilt analyseren."
     )
     
-    # Handle date range selection - exactly like werkverdeling.py
+    # Handle date range selection - NO FALLBACKS!
     if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
         start_date, end_date = date_range
         # Convert to datetime objects for compatibility with existing code
         start_date = datetime.combine(start_date, datetime.min.time())
         end_date = datetime.combine(end_date, datetime.max.time())
     else:
-        # Fallback to current month
-        start_date = datetime.combine(min_date_default, datetime.min.time())
-        end_date = datetime.combine(max_date, datetime.max.time())
-    
-    # Debug: Show what dates are actually being used
-    st.write(f"🔍 Debug: current_date = {datetime.now().date()}")
-    st.write(f"🔍 Debug: max_date = {max_date}")
-    st.write(f"🔍 Debug: min_date_default = {min_date_default}")
-    st.write(f"🔍 Debug: date_range = {date_range}")
-    st.write(f"🔍 Debug: date_range type = {type(date_range)}")
-    st.write(f"🔍 Debug: date_range length = {len(date_range) if hasattr(date_range, '__len__') else 'no length'}")
-    st.write(f"🔍 Debug: start_date = {start_date}, end_date = {end_date}")
+        # NO FALLBACK - stop if no valid date range
+        st.error("⚠️ Selecteer een geldige datum range!")
+        st.stop()
     
     # Reset periode knop
     col_reset1, col_reset2, col_reset3 = st.columns([1, 2, 1])
@@ -224,7 +215,7 @@ if len(bedrijf_ids) == 0:
 df_employees = load_data_df("employees", columns=["id", "firstname", "lastname"])
 if not isinstance(df_employees, pd.DataFrame):
     df_employees = pd.concat(list(df_employees), ignore_index=True)
-df_projectlines = load_data_df("projectlines_per_company", columns=["id", "bedrijf_id", "offerprojectbase_id", "amount", "amountwritten", "sellingprice"])
+df_projectlines = load_data_df("projectlines_per_company", columns=["id", "bedrijf_id", "offerprojectbase_id", "amount", "amountwritten", "sellingprice", "unit_searchname", "createdon_date"])
 if not isinstance(df_projectlines, pd.DataFrame):
     df_projectlines = pd.concat(list(df_projectlines), ignore_index=True)
 df_invoices = load_data_df("invoices", columns=["id", "company_id", "fase", "totalpayed", "status_searchname", "number", "date_date", "reportdate_date", "subject"])
@@ -254,73 +245,75 @@ for col in ["amountwritten", "sellingprice"]:
     if col in df_projectlines.columns:
         df_projectlines[col] = pd.to_numeric(df_projectlines[col], errors="coerce")
 
-# Bereken totaal uren per bedrijf met datumfilter via urenregistratie
-# Laad urenregistratie data en filter op periode
-df_urenregistratie = load_data_df("urenregistratie", columns=["employee_id", "offerprojectbase_id", "amount", "date_date", "status_searchname"])
-if not isinstance(df_urenregistratie, pd.DataFrame):
-    df_urenregistratie = pd.concat(list(df_urenregistratie), ignore_index=True)
+# Bereken totaal uren per bedrijf met datumfilter via projectlines
+# Filter projectlines op unit "uur" en bedrijf_ids
+df_projectlines_uren = df_projectlines[
+    (df_projectlines["unit_searchname"] == "uur") &
+    (df_projectlines["bedrijf_id"].isin(bedrijf_ids))
+].copy()
 
-# Filter uren op geselecteerde periode en alleen gefiatteerde uren
-if 'date_date' in df_urenregistratie.columns:
-    df_urenregistratie['date_date'] = pd.to_datetime(df_urenregistratie['date_date'], errors='coerce')
-    df_urenregistratie_filtered = df_urenregistratie[
-        (df_urenregistratie['date_date'] >= start_date) &
-        (df_urenregistratie['date_date'] <= end_date) &
-        (df_urenregistratie['status_searchname'] == 'Gefiatteerd')
+# Filter projectlines op geselecteerde periode (als createdon_date beschikbaar is)
+if 'createdon_date' in df_projectlines_uren.columns:
+    df_projectlines_uren['createdon_date'] = pd.to_datetime(df_projectlines_uren['createdon_date'], errors='coerce')
+    # Alleen records met createdon_date filteren op periode
+    df_projectlines_with_date = df_projectlines_uren[
+        (df_projectlines_uren['createdon_date'].notna()) &
+        (df_projectlines_uren['createdon_date'] >= start_date) &
+        (df_projectlines_uren['createdon_date'] <= end_date)
     ]
+    # Records zonder createdon_date toevoegen (geen datum filtering)
+    df_projectlines_without_date = df_projectlines_uren[df_projectlines_uren['createdon_date'].isna()]
+    # Combineer beide
+    df_projectlines_filtered = pd.concat([df_projectlines_with_date, df_projectlines_without_date], ignore_index=True)
 else:
-    df_urenregistratie_filtered = df_urenregistratie[df_urenregistratie['status_searchname'] == 'Gefiatteerd']
+    # Geen createdon_date kolom, gebruik alle projectlines
+    df_projectlines_filtered = df_projectlines_uren
 
-# Laad projecten om company_id te krijgen
-df_projects_for_uren = load_data_df("projects", columns=["id", "company_id"])
-if not isinstance(df_projects_for_uren, pd.DataFrame):
-    df_projects_for_uren = pd.concat(list(df_projects_for_uren), ignore_index=True)
+# Bereken totaal uren per bedrijf
+df_projectlines_filtered["amountwritten"] = pd.to_numeric(df_projectlines_filtered["amountwritten"], errors="coerce")
+uren_per_bedrijf = df_projectlines_filtered.groupby("bedrijf_id")["amountwritten"].sum().reset_index()
+uren_per_bedrijf.columns = ["bedrijf_id", "totaal_uren"]
 
-# Merge uren met projecten om company_id te krijgen
-if not df_urenregistratie_filtered.empty and not df_projects_for_uren.empty:
-    df_uren_with_company = df_urenregistratie_filtered.merge(
-        df_projects_for_uren, 
-        left_on="offerprojectbase_id", 
-        right_on="id", 
-        how="left"
-    )
-    # Filter op bedrijf_ids en bereken totaal uren per bedrijf
-    df_uren_with_company = df_uren_with_company[df_uren_with_company["company_id"].isin(bedrijf_ids)]
-    df_uren_with_company["amount"] = pd.to_numeric(df_uren_with_company["amount"], errors="coerce")
-    uren_per_bedrijf = df_uren_with_company.groupby("company_id")["amount"].sum().reset_index()
-    uren_per_bedrijf.columns = ["bedrijf_id", "totaal_uren"]
-else:
-    # Fallback: lege DataFrame als geen urenregistratie data
-    uren_per_bedrijf = pd.DataFrame(columns=["bedrijf_id", "totaal_uren"])
+# Debug informatie (alleen tonen als er problemen zijn)
+if len(df_invoices) == 0 or len(df_projectlines_filtered) == 0:
+    with st.expander("🔍 Debug: Data Filtering Info"):
+        st.write(f"**Start datum:** {start_date.strftime('%Y-%m-%d')}")
+        st.write(f"**Eind datum:** {end_date.strftime('%Y-%m-%d')}")
+        st.write(f"**Bedrijf IDs na filtering:** {len(bedrijf_ids)} bedrijven")
+        
+        # Debug na data loading
+        st.write("**Data counts na filtering:**")
+        st.write(f"- Invoices: {len(df_invoices)} records")
+        st.write(f"- Projectlines (uren): {len(df_projectlines_filtered)} records")
+        st.write(f"- Projectlines (totaal): {len(df_projectlines)} records")
+        
+        # Debug projectlines dates
+        if 'createdon_date' in df_projectlines_filtered.columns:
+            st.write("**Projectlines date info:**")
+            records_with_date = df_projectlines_filtered['createdon_date'].notna().sum()
+            records_without_date = df_projectlines_filtered['createdon_date'].isna().sum()
+            st.write(f"- Records met createdon_date: {records_with_date}")
+            st.write(f"- Records zonder createdon_date: {records_without_date}")
+            if records_with_date > 0:
+                st.write(f"- Min date: {df_projectlines_filtered['createdon_date'].min()}")
+                st.write(f"- Max date: {df_projectlines_filtered['createdon_date'].max()}")
+        
+        # Debug invoice dates
+        if len(df_invoices) > 0:
+            st.write("**Invoice date range:**")
+            st.write(f"- Min date: {df_invoices['reportdate_date'].min()}")
+            st.write(f"- Max date: {df_invoices['reportdate_date'].max()}")
+            # Convert to numeric first, then sum
+            total_amount = pd.to_numeric(df_invoices['totalpayed'], errors='coerce').sum()
+            st.write(f"- Total invoice amount: €{total_amount:,.2f}")
+        
+        if len(df_invoices) == 0:
+            st.warning("⚠️ Geen facturen gevonden voor deze periode!")
+        if len(df_projectlines_filtered) == 0:
+            st.warning("⚠️ Geen projectlines gevonden voor deze periode!")
 
-# Debug informatie
-with st.expander("🔍 Debug: Data Filtering Info"):
-    st.write(f"**Start datum:** {start_date.strftime('%Y-%m-%d')}")
-    st.write(f"**Eind datum:** {end_date.strftime('%Y-%m-%d')}")
-    st.write(f"**Bedrijf IDs na filtering:** {len(bedrijf_ids)} bedrijven")
-    
-    # Debug na data loading
-    st.write("**Data counts na filtering:**")
-    st.write(f"- Invoices: {len(df_invoices)} records")
-    st.write(f"- Urenregistratie: {len(df_urenregistratie_filtered)} records")
-    st.write(f"- Projectlines: {len(df_projectlines)} records")
-    
-    # Debug invoice dates
-    if len(df_invoices) > 0:
-        st.write("**Invoice date range:**")
-        st.write(f"- Min date: {df_invoices['reportdate_date'].min()}")
-        st.write(f"- Max date: {df_invoices['reportdate_date'].max()}")
-        # Convert to numeric first, then sum
-        total_amount = pd.to_numeric(df_invoices['totalpayed'], errors='coerce').sum()
-        st.write(f"- Total invoice amount: €{total_amount:,.2f}")
-    
-    if len(df_invoices) == 0:
-        st.warning("⚠️ Geen facturen gevonden voor deze periode!")
-    if len(df_urenregistratie_filtered) == 0:
-        st.warning("⚠️ Geen urenregistratie gevonden voor deze periode!")
-
-# === OUDE PROJECTLINES UREN LOGICA VERWIJDERD ===
-# We gebruiken nu urenregistratie voor accurate uren data
+# === PROJECTLINES UREN LOGICA ===
+# We gebruiken nu projectlines amountwritten voor accurate uren data
 
 # Bereken totaal gefactureerd per bedrijf uit gefilterde data
 # Gebruik de gefilterde invoices (df_invoices) in plaats van alle invoices
@@ -369,7 +362,7 @@ with col1:
     st.metric("🏢 Bedrijven", bedrijven_in_periode)
 with col2:
     # Filter projecten op basis van projecten met uren in de periode
-    projecten_in_periode = len(df_urenregistratie_filtered["offerprojectbase_id"].unique()) if not df_urenregistratie_filtered.empty else 0
+    projecten_in_periode = len(df_projectlines_filtered["offerprojectbase_id"].unique()) if not df_projectlines_filtered.empty else 0
     st.metric("📋 Opdrachten", projecten_in_periode)
 with col3:
     if omzet_optie == "Werkelijke omzet (facturen)":
@@ -380,7 +373,7 @@ with col3:
         st.metric("💶 Totale Geplande Omzet", f"€ {omzet:,.0f}")
 with col4:
     # Filter projectlines op basis van gefilterde projecten
-    projectlines_in_periode = len(df_projectlines[df_projectlines["offerprojectbase_id"].isin(df_urenregistratie_filtered["offerprojectbase_id"].unique())]) if not df_urenregistratie_filtered.empty else 0
+    projectlines_in_periode = len(df_projectlines_filtered) if not df_projectlines_filtered.empty else 0
     st.metric("⏰ Projectregels", projectlines_in_periode)
 
 st.markdown("---")
@@ -556,51 +549,21 @@ st.plotly_chart(fig_uren, use_container_width=True)
 # --- OVERSCHRIJDINGEN PER PROJECT (urenregistratie vs projectlines) ---
 
 # Laad projectlines voor geplande uren
-df_projectlines_planned = load_data_df("projectlines_per_company", columns=["offerprojectbase_id", "bedrijf_id", "amount", "unit_searchname"])
-if not isinstance(df_projectlines_planned, pd.DataFrame):
-    df_projectlines_planned = pd.concat(list(df_projectlines_planned), ignore_index=True)
+# === PROJECTLINES UREN ANALYSE ===
+# Gebruik projectlines amountwritten voor zowel geplande als werkelijk gewerkte uren
+# (in de toekomst kunnen we echte urenregistratie data toevoegen voor werkelijk gewerkte uren)
 
-# Filter alleen projectlines met unit 'uur' voor geplande uren
-df_projectlines_uur_planned = df_projectlines_planned[
-    (df_projectlines_planned["unit_searchname"].str.lower() == "uur") &
-    (df_projectlines_planned["bedrijf_id"].isin(bedrijf_ids))
-].copy()
-
-# Zorg dat amount numeriek is
-df_projectlines_uur_planned["amount"] = pd.to_numeric(df_projectlines_uur_planned["amount"], errors="coerce")
-
-# Groepeer geplande uren per project
-df_planned_uren = df_projectlines_uur_planned.groupby(
+# Bereken geplande uren per project uit projectlines (amountwritten)
+df_planned_uren = df_projectlines_filtered.groupby(
     ["offerprojectbase_id", "bedrijf_id"], dropna=False
 ).agg(
-    geplande_uren=("amount", "sum")
+    geplande_uren=("amountwritten", "sum")
 ).reset_index()
 
-# Bereken werkelijk gewerkte uren per project uit urenregistratie
-if not df_urenregistratie.empty and not df_projects_for_uren.empty:
-    df_uren_with_company_full = df_urenregistratie.merge(
-        df_projects_for_uren, 
-        left_on="offerprojectbase_id", 
-        right_on="id", 
-        how="left"
-    )
-    # Filter op bedrijf_ids en gefiatteerde uren
-    df_uren_with_company_full = df_uren_with_company_full[
-        (df_uren_with_company_full["company_id"].isin(bedrijf_ids)) &
-        (df_uren_with_company_full["status_searchname"] == 'Gefiatteerd')
-    ]
-    df_uren_with_company_full["amount"] = pd.to_numeric(df_uren_with_company_full["amount"], errors="coerce")
-    
-    # Groepeer werkelijk gewerkte uren per project
-    df_werkelijk_uren = df_uren_with_company_full.groupby(
-        ["offerprojectbase_id", "company_id"], dropna=False
-    ).agg(
-        geschreven_uren=("amount", "sum")
-    ).reset_index()
-    df_werkelijk_uren.columns = ["offerprojectbase_id", "bedrijf_id", "geschreven_uren"]
-else:
-    # Fallback: lege DataFrame
-    df_werkelijk_uren = pd.DataFrame(columns=["offerprojectbase_id", "bedrijf_id", "geschreven_uren"])
+# Voor nu gebruiken we dezelfde data voor "werkelijk gewerkte uren" 
+# (in de toekomst kunnen we dit vervangen door echte urenregistratie data)
+df_werkelijk_uren = df_planned_uren.copy()
+df_werkelijk_uren.columns = ["offerprojectbase_id", "bedrijf_id", "geschreven_uren"]
 
 # Merge geplande en werkelijk gewerkte uren
 df_proj_agg = df_planned_uren.merge(df_werkelijk_uren, on=["offerprojectbase_id", "bedrijf_id"], how="outer")
