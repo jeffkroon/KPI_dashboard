@@ -160,92 +160,38 @@ with st.container():
     st.markdown('<div class="filter-box"><h4>📅 Periode Filter</h4>', unsafe_allow_html=True)
     
     # Get current date
-    current_year = datetime.now().year
-    current_month = datetime.now().month
-    
-    # Create month options
-    months = [
-        "Januari", "Februari", "Maart", "April", "Mei", "Juni",
-        "Juli", "Augustus", "September", "Oktober", "November", "December"
-    ]
+    current_date = datetime.now().date()
+    default_start = current_date.replace(day=1)  # First day of current month
+    default_end = current_date  # Today
     
     # Maak keys dynamisch op basis van omzet optie om caching te voorkomen
     key_suffix = "_werkelijk" if omzet_optie == "Werkelijke omzet (facturen)" else "_gepland"
     
-    # Initialize session state for date persistence (without rerun triggers)
-    if f"from_month_index{key_suffix}" not in st.session_state:
-        st.session_state[f"from_month_index{key_suffix}"] = current_month - 1
-    if f"from_year_index{key_suffix}" not in st.session_state:
-        st.session_state[f"from_year_index{key_suffix}"] = current_year - 2020
-    if f"to_month_index{key_suffix}" not in st.session_state:
-        st.session_state[f"to_month_index{key_suffix}"] = current_month - 1
-    if f"to_year_index{key_suffix}" not in st.session_state:
-        st.session_state[f"to_year_index{key_suffix}"] = current_year - 2020
+    # Use date_input like in werkverdeling.py
+    date_range = st.date_input(
+        "📅 Analyseperiode",
+        (default_start, default_end),
+        min_value=date(2020, 1, 1),
+        max_value=current_date,
+        help="Selecteer de periode die u wilt analyseren.",
+        key=f"date_range{key_suffix}"
+    )
     
-    # Create two columns for from/to selection
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("**Van:**")
-        from_month_name = st.selectbox(
-            "Maand:",
-            months,
-            index=st.session_state[f"from_month_index{key_suffix}"],
-            help="Start maand van de periode",
-            key=f"from_month{key_suffix}"
-        )
-        from_year = st.selectbox(
-            "Jaar:",
-            list(range(2020, current_year + 2)),
-            index=st.session_state[f"from_year_index{key_suffix}"],
-            help="Start jaar van de periode",
-            key=f"from_year{key_suffix}"
-        )
-    
-    with col2:
-        st.markdown("**Tot:**")
-        to_month_name = st.selectbox(
-            "Maand:",
-            months,
-            index=st.session_state[f"to_month_index{key_suffix}"],
-            help="Eind maand van de periode",
-            key=f"to_month{key_suffix}"
-        )
-        to_year = st.selectbox(
-            "Jaar:",
-            list(range(2020, current_year + 2)),
-            index=st.session_state[f"to_year_index{key_suffix}"],
-            help="Eind jaar van de periode",
-            key=f"to_year{key_suffix}"
-        )
-    
-    # Update session state with current selections (for persistence)
-    st.session_state[f"from_month_index{key_suffix}"] = months.index(from_month_name)
-    st.session_state[f"from_year_index{key_suffix}"] = list(range(2020, current_year + 2)).index(from_year)
-    st.session_state[f"to_month_index{key_suffix}"] = months.index(to_month_name)
-    st.session_state[f"to_year_index{key_suffix}"] = list(range(2020, current_year + 2)).index(to_year)
-    
-    # Convert to month numbers and create date objects
-    from_month = months.index(from_month_name) + 1
-    to_month = months.index(to_month_name) + 1
-    
-    # Create start and end dates
-    start_date = datetime(from_year, from_month, 1)
-    # End date is last day of the selected month
-    if to_month == 12:
-        end_date = datetime(to_year + 1, 1, 1) - timedelta(days=1)
+    # Handle date range selection
+    if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
+        start_date, end_date = date_range
+        # Convert to datetime objects for compatibility with existing code
+        start_date = datetime.combine(start_date, datetime.min.time())
+        end_date = datetime.combine(end_date, datetime.max.time())
     else:
-        end_date = datetime(to_year, to_month + 1, 1) - timedelta(days=1)
+        # Fallback to current month
+        start_date = datetime.combine(default_start, datetime.min.time())
+        end_date = datetime.combine(default_end, datetime.max.time())
     
     # Reset periode knop
     col_reset1, col_reset2, col_reset3 = st.columns([1, 2, 1])
     with col_reset2:
         if st.button("🔄 Reset Periode naar Huidige Maand", help="Reset alle datum selectors naar de huidige maand/jaar"):
-            # Reset session state to current month/year
-            st.session_state[f"from_month_index{key_suffix}"] = current_month - 1
-            st.session_state[f"from_year_index{key_suffix}"] = current_year - 2020
-            st.session_state[f"to_month_index{key_suffix}"] = current_month - 1
-            st.session_state[f"to_year_index{key_suffix}"] = current_year - 2020
             st.rerun()
     
     # Validate date range
@@ -254,6 +200,10 @@ with st.container():
         st.stop()
     
     # Display selected period
+    months = [
+        "Januari", "Februari", "Maart", "April", "Mei", "Juni",
+        "Juli", "Augustus", "September", "Oktober", "November", "December"
+    ]
     start_month_name = months[start_date.month - 1]
     end_month_name = months[end_date.month - 1]
     st.info(f"📊 Geselecteerde periode: {start_month_name} {start_date.year} tot {end_month_name} {end_date.year}")
