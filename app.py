@@ -6,7 +6,7 @@ import os
 import subprocess
 import sys
 from dotenv import load_dotenv
-from datetime import datetime
+from datetime import datetime, date
 from typing import cast
 import plotly.graph_objects as go
 from utils.auth import require_login, require_email_whitelist
@@ -158,6 +158,40 @@ elif filter_optie == "Alle bedrijven":
         (df_companies["tag_names"].str.strip() != "")
     ]
 
+# --- MAAND FILTER ---
+with st.container():
+    st.markdown('<div class="filter-box"><h4>📅 Maandfilter</h4>', unsafe_allow_html=True)
+    
+    # Get available months from data
+    current_year = datetime.now().year
+    current_month = datetime.now().month
+    
+    # Create month options
+    months = [
+        "Januari", "Februari", "Maart", "April", "Mei", "Juni",
+        "Juli", "Augustus", "September", "Oktober", "November", "December"
+    ]
+    
+    # Default to current month/year
+    selected_month_name = st.selectbox(
+        "Selecteer maand:",
+        months,
+        index=current_month - 1,
+        help="Filter alle data op deze maand en jaar"
+    )
+    
+    selected_year = st.selectbox(
+        "Selecteer jaar:",
+        list(range(2020, current_year + 2)),
+        index=current_year - 2020,
+        help="Filter alle data op dit jaar"
+    )
+    
+    # Convert to month number
+    selected_month = months.index(selected_month_name) + 1
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+
 # --- Bedrijf ID's na filtering ---
 bedrijf_ids = df_companies["id"].unique().tolist()
 
@@ -171,13 +205,21 @@ if not isinstance(df_employees, pd.DataFrame):
 df_projectlines = load_data_df("projectlines_per_company", columns=["id", "bedrijf_id", "offerprojectbase_id", "amount", "amountwritten", "sellingprice"])
 if not isinstance(df_projectlines, pd.DataFrame):
     df_projectlines = pd.concat(list(df_projectlines), ignore_index=True)
-df_invoices = load_data_df("invoices", columns=["id", "company_id", "fase", "totalpayed", "status_searchname", "number", "date_date", "subject"])
+df_invoices = load_data_df("invoices", columns=["id", "company_id", "fase", "totalpayed", "status_searchname", "number", "date_date", "reportdate_date", "subject"])
 if not isinstance(df_invoices, pd.DataFrame):
     df_invoices = pd.concat(list(df_invoices), ignore_index=True)
 
 # --- Filter projectlines en invoices op bedrijf_ids ---
 df_projectlines = df_projectlines[df_projectlines["bedrijf_id"].isin(bedrijf_ids)]
 df_invoices = df_invoices[df_invoices["company_id"].isin(bedrijf_ids)]
+
+# --- Filter invoices op geselecteerde maand/jaar ---
+if 'reportdate_date' in df_invoices.columns:
+    df_invoices['reportdate_date'] = pd.to_datetime(df_invoices['reportdate_date'], errors='coerce')
+    df_invoices = df_invoices[
+        (df_invoices['reportdate_date'].dt.month == selected_month) &
+        (df_invoices['reportdate_date'].dt.year == selected_year)
+    ]
 
 
 # --- DATA PREP ---
@@ -190,9 +232,43 @@ for col in ["amountwritten", "sellingprice"]:
     if col in df_projectlines.columns:
         df_projectlines[col] = pd.to_numeric(df_projectlines[col], errors="coerce")
 
- # Bereken totaal uren per bedrijf direct in SQL
-uren_per_bedrijf = load_data_df("projectlines_per_company", columns=["bedrijf_id", "SUM(CAST(amountwritten AS FLOAT)) as totaal_uren"], group_by="bedrijf_id")
-uren_per_bedrijf.columns = ["bedrijf_id", "totaal_uren"]
+ # Bereken totaal uren per bedrijf met datumfilter
+# Laad urenregistratie data en filter op maand/jaar
+df_urenregistratie = load_data_df("urenregistratie", columns=["employee_id", "offerprojectbase_id", "amount", "date_date", "status_searchname"])
+if not isinstance(df_urenregistratie, pd.DataFrame):
+    df_urenregistratie = pd.concat(list(df_urenregistratie), ignore_index=True)
+
+# Filter uren op geselecteerde maand/jaar
+if 'date_date' in df_urenregistratie.columns:
+    df_urenregistratie['date_date'] = pd.to_datetime(df_urenregistratie['date_date'], errors='coerce')
+    df_urenregistratie = df_urenregistratie[
+        (df_urenregistratie['date_date'].dt.month == selected_month) &
+        (df_urenregistratie['date_date'].dt.year == selected_year) &
+        (df_urenregistratie['status_searchname'] == 'Gefiatteerd')
+    ]
+
+# Laad projecten om company_id te krijgen
+df_projects_for_uren = load_data_df("projects", columns=["id", "company_id"])
+if not isinstance(df_projects_for_uren, pd.DataFrame):
+    df_projects_for_uren = pd.concat(list(df_projects_for_uren), ignore_index=True)
+
+# Merge uren met projecten om company_id te krijgen
+if not df_urenregistratie.empty and not df_projects_for_uren.empty:
+    df_uren_with_company = df_urenregistratie.merge(
+        df_projects_for_uren, 
+        left_on="offerprojectbase_id", 
+        right_on="id", 
+        how="left"
+    )
+    # Filter op bedrijf_ids en bereken totaal uren per bedrijf
+    df_uren_with_company = df_uren_with_company[df_uren_with_company["company_id"].isin(bedrijf_ids)]
+    df_uren_with_company["amount"] = pd.to_numeric(df_uren_with_company["amount"], errors="coerce")
+    uren_per_bedrijf = df_uren_with_company.groupby("company_id")["amount"].sum().reset_index()
+    uren_per_bedrijf.columns = ["bedrijf_id", "totaal_uren"]
+else:
+    # Fallback naar projectlines als geen urenregistratie data
+    uren_per_bedrijf = load_data_df("projectlines_per_company", columns=["bedrijf_id", "SUM(CAST(amountwritten AS FLOAT)) as totaal_uren"], group_by="bedrijf_id")
+    uren_per_bedrijf.columns = ["bedrijf_id", "totaal_uren"]
 
 # === Alleen uren van projectonderdelen met unit_searchname == 'uur' ===
 df_projectlines_unit = load_data_df("projectlines_per_company", columns=["id", "bedrijf_id", "amountwritten", "unit_searchname"])
