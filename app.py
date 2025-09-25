@@ -223,8 +223,10 @@ with st.container():
         st.error("⚠️ Start datum moet voor eind datum liggen!")
         st.stop()
     
-# Display selected period
-st.info(f"📊 Geselecteerde periode: {from_month_name} {from_year} tot {to_month_name} {to_year}")
+    # Display selected period
+    start_month_name = months[start_date.month - 1]
+    end_month_name = months[end_date.month - 1]
+    st.info(f"📊 Geselecteerde periode: {start_month_name} {start_date.year} tot {end_month_name} {end_date.year}")
 
 st.markdown('</div>', unsafe_allow_html=True)
 
@@ -378,10 +380,10 @@ with col2:
     st.metric("📋 Opdrachten", projecten_in_periode)
 with col3:
     if omzet_optie == "Werkelijke omzet (facturen)":
-        omzet = bedrijfsstats["totalpayed"].sum()
+        omzet = pd.to_numeric(bedrijfsstats["totalpayed"], errors="coerce").sum()
         st.metric("💶 Totale Werkelijke Omzet", f"€ {omzet:,.0f}")
     else:
-        omzet = bedrijfsstats["geplande_omzet"].sum()
+        omzet = pd.to_numeric(bedrijfsstats["geplande_omzet"], errors="coerce").sum()
         st.metric("💶 Totale Geplande Omzet", f"€ {omzet:,.0f}")
 with col4:
     # Filter projectlines op basis van gefilterde projecten
@@ -506,7 +508,7 @@ if bedrijf_naam_selectie and bedrijf_id_selectie is not None:
         display_df = facturen_bedrijf[display_columns].copy()
         assert isinstance(display_df, pd.DataFrame), "display_df moet een DataFrame zijn"
         display_df.columns = ["Factuurnummer", "Datum", "Status", "Bedrag (€)", "Onderwerp"]
-        display_df["Bedrag (€)"] = display_df["Bedrag (€)"].apply(lambda x: f"€ {x:,.2f}" if pd.notna(x) else "€ 0.00")
+        display_df["Bedrag (€)"] = display_df["Bedrag (€)"].apply(lambda x: f"€ {float(x):,.2f}" if pd.notna(x) else "€ 0.00")
         st.dataframe(display_df, use_container_width=True)
     else:
         st.info(f"Geen facturen gevonden voor {bedrijf_naam_selectie}.")
@@ -522,7 +524,7 @@ omzet_per_bedrijf = bedrijfsstats[["companyname", "totaalomzet"]].copy()
 omzet_per_bedrijf = omzet_per_bedrijf.groupby("companyname", dropna=False)["totaalomzet"].sum().reset_index()
 omzet_per_bedrijf = omzet_per_bedrijf.sort_values(by="totaalomzet", ascending=False)
 top10 = omzet_per_bedrijf.head(10)
-rest = omzet_per_bedrijf[10:]["totaalomzet"].sum()
+rest = pd.to_numeric(omzet_per_bedrijf[10:]["totaalomzet"], errors="coerce").sum()
 labels = top10["companyname"].tolist()
 values = top10["totaalomzet"].tolist()
 if rest > 0:
