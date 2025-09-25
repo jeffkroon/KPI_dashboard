@@ -270,43 +270,57 @@ df_projectlines_filtered["amountwritten"] = pd.to_numeric(df_projectlines_filter
 uren_per_bedrijf = df_projectlines_filtered.groupby("bedrijf_id")["amountwritten"].sum().reset_index()
 uren_per_bedrijf.columns = ["bedrijf_id", "totaal_uren"]
 
-# Debug informatie (alleen tonen als er problemen zijn)
-if len(df_invoices) == 0 or len(df_projectlines_filtered) == 0:
-    with st.expander("🔍 Debug: Data Filtering Info"):
-        st.write(f"**Start datum:** {start_date.strftime('%Y-%m-%d')}")
-        st.write(f"**Eind datum:** {end_date.strftime('%Y-%m-%d')}")
-        st.write(f"**Bedrijf IDs na filtering:** {len(bedrijf_ids)} bedrijven")
-        
-        # Debug na data loading
-        st.write("**Data counts na filtering:**")
-        st.write(f"- Invoices: {len(df_invoices)} records")
-        st.write(f"- Projectlines (uren): {len(df_projectlines_filtered)} records")
-        st.write(f"- Projectlines (totaal): {len(df_projectlines)} records")
-        
-        # Debug projectlines dates
-        if 'createdon_date' in df_projectlines_filtered.columns:
-            st.write("**Projectlines date info:**")
-            records_with_date = df_projectlines_filtered['createdon_date'].notna().sum()
-            records_without_date = df_projectlines_filtered['createdon_date'].isna().sum()
-            st.write(f"- Records met createdon_date: {records_with_date}")
-            st.write(f"- Records zonder createdon_date: {records_without_date}")
-            if records_with_date > 0:
-                st.write(f"- Min date: {df_projectlines_filtered['createdon_date'].min()}")
-                st.write(f"- Max date: {df_projectlines_filtered['createdon_date'].max()}")
-        
-        # Debug invoice dates
-        if len(df_invoices) > 0:
-            st.write("**Invoice date range:**")
-            st.write(f"- Min date: {df_invoices['reportdate_date'].min()}")
-            st.write(f"- Max date: {df_invoices['reportdate_date'].max()}")
-            # Convert to numeric first, then sum
-            total_amount = pd.to_numeric(df_invoices['totalpayed'], errors='coerce').sum()
-            st.write(f"- Total invoice amount: €{total_amount:,.2f}")
-        
-        if len(df_invoices) == 0:
-            st.warning("⚠️ Geen facturen gevonden voor deze periode!")
-        if len(df_projectlines_filtered) == 0:
-            st.warning("⚠️ Geen projectlines gevonden voor deze periode!")
+# Debug informatie - ALTIJD TONEN om te zien wat er gebeurt
+with st.expander("🔍 Debug: Data Filtering Info"):
+    st.write(f"**Start datum:** {start_date.strftime('%Y-%m-%d')}")
+    st.write(f"**Eind datum:** {end_date.strftime('%Y-%m-%d')}")
+    st.write(f"**Bedrijf IDs na filtering:** {len(bedrijf_ids)} bedrijven")
+    
+    # Debug na data loading
+    st.write("**Data counts na filtering:**")
+    st.write(f"- Invoices: {len(df_invoices)} records")
+    st.write(f"- Projectlines (uren): {len(df_projectlines_filtered)} records")
+    st.write(f"- Projectlines (totaal): {len(df_projectlines)} records")
+    
+    # Debug projectlines dates
+    if 'createdon_date' in df_projectlines_filtered.columns:
+        st.write("**Projectlines date info:**")
+        records_with_date = df_projectlines_filtered['createdon_date'].notna().sum()
+        records_without_date = df_projectlines_filtered['createdon_date'].isna().sum()
+        st.write(f"- Records met createdon_date: {records_with_date}")
+        st.write(f"- Records zonder createdon_date: {records_without_date}")
+        if records_with_date > 0:
+            st.write(f"- Min date: {df_projectlines_filtered['createdon_date'].min()}")
+            st.write(f"- Max date: {df_projectlines_filtered['createdon_date'].max()}")
+    
+    # Debug invoice dates
+    if len(df_invoices) > 0:
+        st.write("**Invoice date range:**")
+        st.write(f"- Min date: {df_invoices['reportdate_date'].min()}")
+        st.write(f"- Max date: {df_invoices['reportdate_date'].max()}")
+        # Convert to numeric first, then sum
+        total_amount = pd.to_numeric(df_invoices['totalpayed'], errors='coerce').sum()
+        st.write(f"- Total invoice amount: €{total_amount:,.2f}")
+    
+    # Debug: Laat ook zien wat er in de RAW data zit (zonder filtering)
+    st.write("**RAW data (zonder datum filtering):**")
+    df_invoices_raw = load_data_df("invoices", columns=["id", "company_id", "fase", "totalpayed", "status_searchname", "number", "date_date", "reportdate_date", "subject"])
+    if not isinstance(df_invoices_raw, pd.DataFrame):
+        df_invoices_raw = pd.concat(list(df_invoices_raw), ignore_index=True)
+    df_invoices_raw = df_invoices_raw[df_invoices_raw["company_id"].isin(bedrijf_ids)]
+    
+    if 'reportdate_date' in df_invoices_raw.columns:
+        df_invoices_raw['reportdate_date'] = pd.to_datetime(df_invoices_raw['reportdate_date'], errors='coerce')
+        st.write(f"- RAW invoices: {len(df_invoices_raw)} records")
+        if len(df_invoices_raw) > 0:
+            st.write(f"- RAW invoice date range: {df_invoices_raw['reportdate_date'].min()} tot {df_invoices_raw['reportdate_date'].max()}")
+            total_raw = pd.to_numeric(df_invoices_raw['totalpayed'], errors='coerce').sum()
+            st.write(f"- RAW total amount: €{total_raw:,.2f}")
+    
+    if len(df_invoices) == 0:
+        st.warning("⚠️ Geen facturen gevonden voor deze periode!")
+    if len(df_projectlines_filtered) == 0:
+        st.warning("⚠️ Geen projectlines gevonden voor deze periode!")
 
 # === PROJECTLINES UREN LOGICA ===
 # We gebruiken nu projectlines amountwritten voor accurate uren data
