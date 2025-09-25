@@ -163,29 +163,22 @@ with st.container():
     max_date = datetime.now().date()
     min_date_default = max_date.replace(day=1)  # First day of current month
     
-    # Use date_input exactly like werkverdeling.py (no session state, no key)
+    # Use date_input with key to remember selection
     date_range = st.date_input(
         "📅 Analyseperiode",
         (min_date_default, max_date),
         min_value=date(2020, 1, 1),
         max_value=max_date,
+        key="date_range_selector",
         help="Selecteer de periode die u wilt analyseren."
     )
     
     # Handle date range selection - NO FALLBACKS!
     if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
         start_date, end_date = date_range
-        # Debug: show what we got from the date_input
-        st.write(f"🔍 Debug: Raw date_range = {date_range}")
-        st.write(f"🔍 Debug: start_date (before conversion) = {start_date}, type = {type(start_date)}")
-        st.write(f"🔍 Debug: end_date (before conversion) = {end_date}, type = {type(end_date)}")
-        
         # Convert to datetime objects for compatibility with existing code
         start_date = datetime.combine(start_date, datetime.min.time())
         end_date = datetime.combine(end_date, datetime.max.time())
-        
-        st.write(f"🔍 Debug: start_date (after conversion) = {start_date}")
-        st.write(f"🔍 Debug: end_date (after conversion) = {end_date}")
     else:
         # NO FALLBACK - stop if no valid date range
         st.error("⚠️ Selecteer een geldige datum range!")
