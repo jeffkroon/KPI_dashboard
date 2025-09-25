@@ -184,7 +184,12 @@ with st.container():
         end_date = datetime.combine(max_date, datetime.max.time())
     
     # Debug: Show what dates are actually being used
+    st.write(f"🔍 Debug: current_date = {datetime.now().date()}")
+    st.write(f"🔍 Debug: max_date = {max_date}")
+    st.write(f"🔍 Debug: min_date_default = {min_date_default}")
     st.write(f"🔍 Debug: date_range = {date_range}")
+    st.write(f"🔍 Debug: date_range type = {type(date_range)}")
+    st.write(f"🔍 Debug: date_range length = {len(date_range) if hasattr(date_range, '__len__') else 'no length'}")
     st.write(f"🔍 Debug: start_date = {start_date}, end_date = {end_date}")
     
     # Reset periode knop
