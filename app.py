@@ -126,10 +126,7 @@ if not POSTGRES_URL:
     raise ValueError("POSTGRES_URL is not set in the environment.")
 engine = create_engine(POSTGRES_URL)
 
-try:
-    from streamlit_extras.metric_cards import style_metric_cards
-except ImportError:
-    st.warning("📛 'streamlit-extras' is niet geïnstalleerd of niet vindbaar door je environment.")
+# Streamlit-extras is optioneel en wordt niet gebruikt in deze app
 
 # --- LOAD DATA ---
 df_projects_raw = load_data_df("projects", columns=["id", "company_id", "archived", "totalinclvat", "name"])
@@ -226,10 +223,10 @@ with st.container():
         st.error("⚠️ Start datum moet voor eind datum liggen!")
         st.stop()
     
-    # Display selected period
-    st.info(f"📊 Geselecteerde periode: {from_month_name} {from_year} tot {to_month_name} {to_year}")
-    
-    st.markdown('</div>', unsafe_allow_html=True)
+# Display selected period
+st.info(f"📊 Geselecteerde periode: {from_month_name} {from_year} tot {to_month_name} {to_year}")
+
+st.markdown('</div>', unsafe_allow_html=True)
 
 # --- Bedrijf ID's na filtering ---
 bedrijf_ids = df_companies["id"].unique().tolist()
@@ -309,6 +306,23 @@ if not df_urenregistratie_filtered.empty and not df_projects_for_uren.empty:
 else:
     # Fallback: lege DataFrame als geen urenregistratie data
     uren_per_bedrijf = pd.DataFrame(columns=["bedrijf_id", "totaal_uren"])
+
+# Debug informatie
+with st.expander("🔍 Debug: Data Filtering Info"):
+    st.write(f"**Start datum:** {start_date.strftime('%Y-%m-%d')}")
+    st.write(f"**Eind datum:** {end_date.strftime('%Y-%m-%d')}")
+    st.write(f"**Bedrijf IDs na filtering:** {len(bedrijf_ids)} bedrijven")
+    
+    # Debug na data loading
+    st.write("**Data counts na filtering:**")
+    st.write(f"- Invoices: {len(df_invoices)} records")
+    st.write(f"- Urenregistratie: {len(df_urenregistratie_filtered)} records")
+    st.write(f"- Projectlines: {len(df_projectlines)} records")
+    
+    if len(df_invoices) == 0:
+        st.warning("⚠️ Geen facturen gevonden voor deze periode!")
+    if len(df_urenregistratie_filtered) == 0:
+        st.warning("⚠️ Geen urenregistratie gevonden voor deze periode!")
 
 # === OUDE PROJECTLINES UREN LOGICA VERWIJDERD ===
 # We gebruiken nu urenregistratie voor accurate uren data
