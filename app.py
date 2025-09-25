@@ -305,6 +305,13 @@ with st.expander("🔍 Debug: Data Filtering Info"):
     st.write(f"- Urenregistratie: {len(df_urenregistratie_filtered)} records")
     st.write(f"- Projectlines: {len(df_projectlines)} records")
     
+    # Debug invoice dates
+    if len(df_invoices) > 0:
+        st.write("**Invoice date range:**")
+        st.write(f"- Min date: {df_invoices['reportdate_date'].min()}")
+        st.write(f"- Max date: {df_invoices['reportdate_date'].max()}")
+        st.write(f"- Total invoice amount: €{df_invoices['totalpayed'].sum():,.2f}")
+    
     if len(df_invoices) == 0:
         st.warning("⚠️ Geen facturen gevonden voor deze periode!")
     if len(df_urenregistratie_filtered) == 0:
