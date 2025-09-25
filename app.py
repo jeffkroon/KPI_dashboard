@@ -92,10 +92,11 @@ with st.container():
 
     st.markdown('<div class="filter-box"><h4>🔎 Filter Bedrijven op Type</h4>', unsafe_allow_html=True)
     filter_optie = st.radio(
-        "",
+        "Bedrijfstype",
         options=["Alle bedrijven", "Eigen bedrijven", "Klanten"],
         index=0,
-        horizontal=True
+        horizontal=True,
+        label_visibility="collapsed"
     )
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -177,13 +178,12 @@ with st.container():
             start_date, end_date = min_date_default, max_date
     
     with filter_col2:
-        # Reset periode knop
-        if st.button("🔄 Reset Periode naar Laatste 30 Dagen", help="Reset alle datum selectors naar de laatste 30 dagen"):
-            st.rerun()
+        # Placeholder for future filters
+        st.write("")  # Empty space
     
-    # Convert to datetime objects for compatibility with existing code
-    start_date = datetime.combine(start_date, datetime.min.time())
-    end_date = datetime.combine(end_date, datetime.max.time())
+    # Convert to datetime objects for compatibility with existing code (ONLY for filtering)
+    start_date_dt = datetime.combine(start_date, datetime.min.time())
+    end_date_dt = datetime.combine(end_date, datetime.max.time())
     
     # Validate date range
     if start_date > end_date:
@@ -226,8 +226,8 @@ df_invoices = df_invoices[df_invoices["company_id"].isin(bedrijf_ids)]
 if 'reportdate_date' in df_invoices.columns:
     df_invoices['reportdate_date'] = pd.to_datetime(df_invoices['reportdate_date'], errors='coerce')
     df_invoices = df_invoices[
-        (df_invoices['reportdate_date'] >= start_date) &
-        (df_invoices['reportdate_date'] <= end_date)
+        (df_invoices['reportdate_date'] >= start_date_dt) &
+        (df_invoices['reportdate_date'] <= end_date_dt)
     ]
 
 
@@ -254,8 +254,8 @@ if 'createdon_date' in df_projectlines_uren.columns:
     # Alleen records met createdon_date filteren op periode
     df_projectlines_with_date = df_projectlines_uren[
         (df_projectlines_uren['createdon_date'].notna()) &
-        (df_projectlines_uren['createdon_date'] >= start_date) &
-        (df_projectlines_uren['createdon_date'] <= end_date)
+        (df_projectlines_uren['createdon_date'] >= start_date_dt) &
+        (df_projectlines_uren['createdon_date'] <= end_date_dt)
     ]
     # Records zonder createdon_date toevoegen (geen datum filtering)
     df_projectlines_without_date = df_projectlines_uren[df_projectlines_uren['createdon_date'].isna()]
@@ -357,7 +357,7 @@ bedrijfsstats["geplande_omzet"] = pd.to_numeric(bedrijfsstats["geplande_omzet"],
 
 # Dynamische tariefberekening afhankelijk van omzet_optie
 if omzet_optie == "Werkelijke omzet (facturen)":
-    bedrijfsstats["tarief_per_uur"] = bedrijfsstats["totalpayed"].div(bedrijfsstats["totaal_uren"].replace(0, pd.NA)).fillna(0)
+    bedrijfsstats["tarief_per_uur"] = bedrijfsstats["totalpayed"].div(bedrijfsstats["totaal_uren"].replace(0, pd.NA)).fillna(0).infer_objects(copy=False)
 else:
     bedrijfsstats["tarief_per_uur"] = bedrijfsstats["geplande_omzet"].div(bedrijfsstats["totaal_uren"].replace(0, pd.NA)).fillna(0)
 
