@@ -172,6 +172,16 @@ with st.container():
     # Maak keys dynamisch op basis van omzet optie om caching te voorkomen
     key_suffix = "_werkelijk" if omzet_optie == "Werkelijke omzet (facturen)" else "_gepland"
     
+    # Initialize session state for date persistence (without rerun triggers)
+    if f"from_month_index{key_suffix}" not in st.session_state:
+        st.session_state[f"from_month_index{key_suffix}"] = current_month - 1
+    if f"from_year_index{key_suffix}" not in st.session_state:
+        st.session_state[f"from_year_index{key_suffix}"] = current_year - 2020
+    if f"to_month_index{key_suffix}" not in st.session_state:
+        st.session_state[f"to_month_index{key_suffix}"] = current_month - 1
+    if f"to_year_index{key_suffix}" not in st.session_state:
+        st.session_state[f"to_year_index{key_suffix}"] = current_year - 2020
+    
     # Create two columns for from/to selection
     col1, col2 = st.columns(2)
     
@@ -180,14 +190,14 @@ with st.container():
         from_month_name = st.selectbox(
             "Maand:",
             months,
-            index=current_month - 1,
+            index=st.session_state[f"from_month_index{key_suffix}"],
             help="Start maand van de periode",
             key=f"from_month{key_suffix}"
         )
         from_year = st.selectbox(
             "Jaar:",
             list(range(2020, current_year + 2)),
-            index=current_year - 2020,
+            index=st.session_state[f"from_year_index{key_suffix}"],
             help="Start jaar van de periode",
             key=f"from_year{key_suffix}"
         )
@@ -197,17 +207,23 @@ with st.container():
         to_month_name = st.selectbox(
             "Maand:",
             months,
-            index=current_month - 1,
+            index=st.session_state[f"to_month_index{key_suffix}"],
             help="Eind maand van de periode",
             key=f"to_month{key_suffix}"
         )
         to_year = st.selectbox(
             "Jaar:",
             list(range(2020, current_year + 2)),
-            index=current_year - 2020,
+            index=st.session_state[f"to_year_index{key_suffix}"],
             help="Eind jaar van de periode",
             key=f"to_year{key_suffix}"
         )
+    
+    # Update session state with current selections (for persistence)
+    st.session_state[f"from_month_index{key_suffix}"] = months.index(from_month_name)
+    st.session_state[f"from_year_index{key_suffix}"] = list(range(2020, current_year + 2)).index(from_year)
+    st.session_state[f"to_month_index{key_suffix}"] = months.index(to_month_name)
+    st.session_state[f"to_year_index{key_suffix}"] = list(range(2020, current_year + 2)).index(to_year)
     
     # Convert to month numbers and create date objects
     from_month = months.index(from_month_name) + 1
@@ -225,6 +241,11 @@ with st.container():
     col_reset1, col_reset2, col_reset3 = st.columns([1, 2, 1])
     with col_reset2:
         if st.button("🔄 Reset Periode naar Huidige Maand", help="Reset alle datum selectors naar de huidige maand/jaar"):
+            # Reset session state to current month/year
+            st.session_state[f"from_month_index{key_suffix}"] = current_month - 1
+            st.session_state[f"from_year_index{key_suffix}"] = current_year - 2020
+            st.session_state[f"to_month_index{key_suffix}"] = current_month - 1
+            st.session_state[f"to_year_index{key_suffix}"] = current_year - 2020
             st.rerun()
     
     # Validate date range
