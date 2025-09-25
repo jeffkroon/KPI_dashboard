@@ -496,7 +496,7 @@ if bedrijf_naam_selectie and bedrijf_id_selectie is not None:
     facturen_bedrijf = df_invoices[(df_invoices["company_id"] == bedrijf_id_selectie) & (df_invoices["status_searchname"] == "Verzonden")].copy()
     if not facturen_bedrijf.empty:
         facturen_bedrijf["totalpayed"] = pd.to_numeric(facturen_bedrijf["totalpayed"], errors="coerce")
-        display_columns = ["number", "date_date", "status_searchname", "totalpayed", "subject"]
+        display_columns = ["number", "reportdate_date", "status_searchname", "totalpayed", "subject"]
         display_df = facturen_bedrijf[display_columns].copy()
         assert isinstance(display_df, pd.DataFrame), "display_df moet een DataFrame zijn"
         display_df.columns = ["Factuurnummer", "Datum", "Status", "Bedrag (€)", "Onderwerp"]
