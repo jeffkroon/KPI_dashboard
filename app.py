@@ -160,34 +160,28 @@ with st.container():
     st.markdown('<div class="filter-box"><h4>📅 Periode Filter</h4>', unsafe_allow_html=True)
     
     # Get current date - exactly like werkverdeling.py
-    max_date = datetime.now().date()
-    min_date_default = max_date.replace(day=1)  # First day of current month
-    
-    # Use date_input with key to remember selection
+    max_date = datetime.today()
+    min_date_default = max_date - timedelta(days=30)
     date_range = st.date_input(
         "📅 Analyseperiode",
         (min_date_default, max_date),
-        min_value=date(2020, 1, 1),
+        min_value=datetime(2020, 1, 1),
         max_value=max_date,
-        key="date_range_selector",
         help="Selecteer de periode die u wilt analyseren."
     )
-    
-    # Handle date range selection - NO FALLBACKS!
     if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
         start_date, end_date = date_range
-        # Convert to datetime objects for compatibility with existing code
-        start_date = datetime.combine(start_date, datetime.min.time())
-        end_date = datetime.combine(end_date, datetime.max.time())
     else:
-        # NO FALLBACK - stop if no valid date range
-        st.error("⚠️ Selecteer een geldige datum range!")
-        st.stop()
+        start_date, end_date = min_date_default, max_date
+    
+    # Convert to datetime objects for compatibility with existing code
+    start_date = datetime.combine(start_date, datetime.min.time())
+    end_date = datetime.combine(end_date, datetime.max.time())
     
     # Reset periode knop
     col_reset1, col_reset2, col_reset3 = st.columns([1, 2, 1])
     with col_reset2:
-        if st.button("🔄 Reset Periode naar Huidige Maand", help="Reset alle datum selectors naar de huidige maand/jaar"):
+        if st.button("🔄 Reset Periode naar Laatste 30 Dagen", help="Reset alle datum selectors naar de laatste 30 dagen"):
             st.rerun()
     
     # Validate date range
