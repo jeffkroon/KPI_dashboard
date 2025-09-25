@@ -175,9 +175,17 @@ with st.container():
     # Handle date range selection - NO FALLBACKS!
     if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
         start_date, end_date = date_range
+        # Debug: show what we got from the date_input
+        st.write(f"🔍 Debug: Raw date_range = {date_range}")
+        st.write(f"🔍 Debug: start_date (before conversion) = {start_date}, type = {type(start_date)}")
+        st.write(f"🔍 Debug: end_date (before conversion) = {end_date}, type = {type(end_date)}")
+        
         # Convert to datetime objects for compatibility with existing code
         start_date = datetime.combine(start_date, datetime.min.time())
         end_date = datetime.combine(end_date, datetime.max.time())
+        
+        st.write(f"🔍 Debug: start_date (after conversion) = {start_date}")
+        st.write(f"🔍 Debug: end_date (after conversion) = {end_date}")
     else:
         # NO FALLBACK - stop if no valid date range
         st.error("⚠️ Selecteer een geldige datum range!")
