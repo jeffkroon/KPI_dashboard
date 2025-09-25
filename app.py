@@ -369,9 +369,13 @@ bedrijfsstats = bedrijfsstats[bedrijfsstats["bedrijf_id"].isin(bedrijf_ids)]
 # --- KPI CARDS ---
 col1, col2, col3, col4 = st.columns(4)
 with col1:
-    st.metric("🏢 Bedrijven", len(df_companies))
+    # Filter bedrijven op basis van gefilterde data
+    bedrijven_in_periode = len(bedrijfsstats[bedrijfsstats["totaal_uren"] > 0])
+    st.metric("🏢 Bedrijven", bedrijven_in_periode)
 with col2:
-    st.metric("📋 Opdrachten", len(df_projects_raw))
+    # Filter projecten op basis van projecten met uren in de periode
+    projecten_in_periode = len(df_urenregistratie_filtered["offerprojectbase_id"].unique()) if not df_urenregistratie_filtered.empty else 0
+    st.metric("📋 Opdrachten", projecten_in_periode)
 with col3:
     if omzet_optie == "Werkelijke omzet (facturen)":
         omzet = bedrijfsstats["totalpayed"].sum()
@@ -380,7 +384,9 @@ with col3:
         omzet = bedrijfsstats["geplande_omzet"].sum()
         st.metric("💶 Totale Geplande Omzet", f"€ {omzet:,.0f}")
 with col4:
-    st.metric("⏰ Projectregels", len(df_projectlines))
+    # Filter projectlines op basis van gefilterde projecten
+    projectlines_in_periode = len(df_projectlines[df_projectlines["offerprojectbase_id"].isin(df_urenregistratie_filtered["offerprojectbase_id"].unique())]) if not df_urenregistratie_filtered.empty else 0
+    st.metric("⏰ Projectregels", projectlines_in_periode)
 
 st.markdown("---")
 
