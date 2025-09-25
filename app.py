@@ -181,9 +181,10 @@ with st.container():
         # Placeholder for future filters
         st.write("")  # Empty space
     
-    # Convert to datetime objects for compatibility with existing code (ONLY for filtering)
-    start_date_dt = datetime.combine(start_date, datetime.min.time())
-    end_date_dt = datetime.combine(end_date, datetime.max.time())
+    # Use date objects directly like werkverdeling.py
+    # Convert to datetime objects only for pandas filtering
+    start_date_dt = pd.to_datetime(start_date)
+    end_date_dt = pd.to_datetime(end_date)
     
     # Validate date range
     if start_date > end_date:
