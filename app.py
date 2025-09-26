@@ -238,6 +238,10 @@ def load_filtered_invoices(start_date_str, end_date_str, bedrijf_ids):
     """
     df_invoices = pd.read_sql(invoices_query, engine)
     df_invoices = df_invoices[df_invoices["company_id"].isin(bedrijf_ids)]
+    
+    # Convert totalpayed to numeric
+    df_invoices['totalpayed'] = pd.to_numeric(df_invoices['totalpayed'], errors='coerce').fillna(0)
+    
     return df_invoices
 
 @st.cache_data(ttl=300)
@@ -405,6 +409,9 @@ if len(df_invoices) > 0:
 
 factuurbedrag_per_bedrijf = df_invoices.groupby("company_id")["totalpayed"].sum().reset_index()
 factuurbedrag_per_bedrijf.rename(columns={"company_id": "bedrijf_id", "totalpayed": "totalpayed"}, inplace=True)
+
+# Ensure totalpayed is numeric
+factuurbedrag_per_bedrijf["totalpayed"] = pd.to_numeric(factuurbedrag_per_bedrijf["totalpayed"], errors="coerce").fillna(0)
 
 st.write(f"🔍 DEBUG: factuurbedrag_per_bedrijf: {len(factuurbedrag_per_bedrijf)} records")
 if len(factuurbedrag_per_bedrijf) > 0:
