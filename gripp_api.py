@@ -1074,12 +1074,24 @@ def main():
         projectlines_raw['createdon_date'] = projectlines_raw['createdon'].apply(
             lambda x: x.get('date') if isinstance(x, dict) else None
         )
+        projectlines_raw['createdon_timezone_type'] = projectlines_raw['createdon'].apply(
+            lambda x: x.get('timezone_type') if isinstance(x, dict) else None
+        )
+        projectlines_raw['createdon_timezone'] = projectlines_raw['createdon'].apply(
+            lambda x: x.get('timezone') if isinstance(x, dict) else None
+        )
     
     # === FIX: Flatten de 'updatedon' kolom in projectlines ===
     if 'updatedon' in projectlines_raw.columns:
         print("🔧 Flattening 'updatedon' data in projectlines...")
         projectlines_raw['updatedon_date'] = projectlines_raw['updatedon'].apply(
             lambda x: x.get('date') if isinstance(x, dict) else None
+        )
+        projectlines_raw['updatedon_timezone_type'] = projectlines_raw['updatedon'].apply(
+            lambda x: x.get('timezone_type') if isinstance(x, dict) else None
+        )
+        projectlines_raw['updatedon_timezone'] = projectlines_raw['updatedon'].apply(
+            lambda x: x.get('timezone') if isinstance(x, dict) else None
         )
     
     # === FIX: Flatten de 'amountwritten' kolom in projectlines ===
