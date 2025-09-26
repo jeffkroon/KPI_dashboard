@@ -201,6 +201,12 @@ with st.container():
     # Convert to datetime objects for pandas filtering
     start_date_dt = pd.to_datetime(start_date)
     end_date_dt = pd.to_datetime(end_date)
+    
+    # Debug: Toon de datetime objecten
+    st.write(f"🔍 DEBUG: start_date_dt = {start_date_dt}")
+    st.write(f"🔍 DEBUG: end_date_dt = {end_date_dt}")
+    st.write(f"🔍 DEBUG: type(start_date_dt) = {type(start_date_dt)}")
+    st.write(f"🔍 DEBUG: type(end_date_dt) = {type(end_date_dt)}")
 
 st.markdown('</div>', unsafe_allow_html=True)
 
