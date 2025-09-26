@@ -183,12 +183,15 @@ with st.container():
     start_default = st.session_state.get("dashboard_start_date", min_date_default)
     end_default = st.session_state.get("dashboard_end_date", max_date)
 
+    # Remove any legacy widget state injected by other scripts/tools
+    if "app_dashboard_date_range" in st.session_state:
+        st.session_state.pop("app_dashboard_date_range")
+
     date_range = st.date_input(
         "📅 Analyseperiode",
-        (start_default, end_default),
+        value=(start_default, end_default),
         min_value=date(2020, 1, 1),
         max_value=max_date,
-        key="app_dashboard_date_range",
         help="Selecteer de periode die u wilt analyseren."
     )
 
@@ -196,6 +199,12 @@ with st.container():
         start_date, end_date = date_range
     else:
         start_date, end_date = start_default, end_default
+
+    # Normalize to plain date objects to avoid timestamp bleed-through
+    if isinstance(start_date, datetime):
+        start_date = start_date.date()
+    if isinstance(end_date, datetime):
+        end_date = end_date.date()
 
     st.session_state["dashboard_start_date"] = start_date
     st.session_state["dashboard_end_date"] = end_date
