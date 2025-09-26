@@ -181,9 +181,9 @@ with st.container():
     min_date_default = max_date - timedelta(days=30)
 
     if "app_dashboard_date_range" not in st.session_state:
-        st.session_state.app_dashboard_date_range = (min_date_default, max_date)
+        st.session_state["app_dashboard_date_range"] = (min_date_default, max_date)
 
-    start_default, end_default = st.session_state.app_dashboard_date_range
+    start_default, end_default = st.session_state["app_dashboard_date_range"]
     if isinstance(start_default, datetime):
         start_default = start_default.date()
     if isinstance(end_default, datetime):
@@ -193,17 +193,17 @@ with st.container():
     start_default = max(start_default, date(2020, 1, 1))
     end_default = min(end_default, max_date)
 
-    st.session_state.app_dashboard_date_range = (start_default, end_default)
+    st.session_state["app_dashboard_date_range"] = (start_default, end_default)
 
-    date_range = st.date_input(
+    st.date_input(
         "📅 Analyseperiode",
-        value=(start_default, end_default),
         min_value=date(2020, 1, 1),
         max_value=max_date,
         key="app_dashboard_date_range",
         help="Selecteer de periode die u wilt analyseren."
     )
 
+    date_range = st.session_state.get("app_dashboard_date_range", (start_default, end_default))
     if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
         start_date, end_date = date_range
     else:
@@ -213,6 +213,8 @@ with st.container():
         start_date = start_date.date()
     if isinstance(end_date, datetime):
         end_date = end_date.date()
+
+    st.session_state["app_dashboard_date_range"] = (start_date, end_date)
 
     st.session_state["dashboard_start_date"] = start_date
     st.session_state["dashboard_end_date"] = end_date
