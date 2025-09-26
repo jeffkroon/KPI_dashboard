@@ -350,8 +350,8 @@ if 'createdon_date' in df_projectlines_uren.columns:
     # Alleen records met createdon_date filteren op periode
     df_projectlines_with_date = df_projectlines_uren[
         (df_projectlines_uren['createdon_date'].notna()) &
-        (df_projectlines_uren['createdon_date'] >= start_date_dt) &
-        (df_projectlines_uren['createdon_date'] <= end_date_dt)
+        (df_projectlines_uren['createdon_date'] >= start_datetime) &
+        (df_projectlines_uren['createdon_date'] <= end_datetime)
     ]
     # Records zonder createdon_date toevoegen (geen datum filtering)
     df_projectlines_without_date = df_projectlines_uren[df_projectlines_uren['createdon_date'].isna()]
