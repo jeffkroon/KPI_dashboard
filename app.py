@@ -184,6 +184,7 @@ with st.container():
         (min_date_default, max_date),
         min_value=datetime(2020, 1, 1),
         max_value=max_date,
+        key="app_dashboard_date_range",
         help="Selecteer de periode die u wilt analyseren."
     )
     if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
