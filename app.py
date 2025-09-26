@@ -171,34 +171,40 @@ elif filter_optie == "Alle bedrijven":
 with st.container():
     st.markdown('<div class="filter-box"><h4>📅 Periode Filter</h4>', unsafe_allow_html=True)
     
-    max_date = datetime.today()
-    min_date_default = max_date - timedelta(days=30)
+    # Initialize session state for dates
+    if "app_start_date" not in st.session_state:
+        st.session_state["app_start_date"] = datetime.today() - timedelta(days=30)
+    if "app_end_date" not in st.session_state:
+        st.session_state["app_end_date"] = datetime.today()
     
-    # Use a unique key to prevent conflicts with werkverdeling.py
-    date_range = st.date_input(
-        "📅 Dashboard Periode",
-        (min_date_default, max_date),
-        min_value=datetime(2020, 1, 1),
-        max_value=max_date,
-        key="app_dashboard_date_range",  # Unique key different from werkverdeling
-        help="Selecteer de periode die u wilt analyseren."
-    )
+    # Date inputs with session state
+    col1, col2 = st.columns(2)
+    with col1:
+        start_date = st.date_input(
+            "Start datum",
+            value=st.session_state["app_start_date"].date(),
+            min_value=date(2020, 1, 1),
+            max_value=date.today(),
+            key="app_start_date_input"
+        )
+    with col2:
+        end_date = st.date_input(
+            "Eind datum", 
+            value=st.session_state["app_end_date"].date(),
+            min_value=date(2020, 1, 1),
+            max_value=date.today(),
+            key="app_end_date_input"
+        )
     
-    # Handle date range properly
-    if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
-        start_date, end_date = date_range
-    elif isinstance(date_range, datetime.date):
-        # Single date selected, use it as both start and end
-        start_date = end_date = date_range
-    else:
-        # Fallback to default
-        start_date, end_date = min_date_default.date(), max_date.date()
+    # Update session state when dates change
+    if start_date != st.session_state["app_start_date"].date():
+        st.session_state["app_start_date"] = datetime.combine(start_date, datetime.min.time())
+    if end_date != st.session_state["app_end_date"].date():
+        st.session_state["app_end_date"] = datetime.combine(end_date, datetime.min.time())
     
-    # Ensure we have date objects, not datetime objects
-    if hasattr(start_date, 'date'):
-        start_date = start_date.date()
-    if hasattr(end_date, 'date'):
-        end_date = end_date.date()
+    # Use session state dates
+    start_date = st.session_state["app_start_date"].date()
+    end_date = st.session_state["app_end_date"].date()
     
     # Convert to datetime objects for pandas filtering
     start_date_dt = pd.to_datetime(start_date)
