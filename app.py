@@ -180,31 +180,31 @@ with st.container():
     max_date = date.today()
     min_date_default = max_date - timedelta(days=30)
 
-    start_default = st.session_state.get("dashboard_start_date", min_date_default)
-    end_default = st.session_state.get("dashboard_end_date", max_date)
+    if "app_dashboard_date_range" not in st.session_state:
+        st.session_state.app_dashboard_date_range = (min_date_default, max_date)
 
-    # Remove any legacy widget state injected by other scripts/tools
-    if "app_dashboard_date_range" in st.session_state:
-        st.session_state.pop("app_dashboard_date_range")
+    start_default, end_default = st.session_state.app_dashboard_date_range
+    if isinstance(start_default, datetime):
+        start_default = start_default.date()
+    if isinstance(end_default, datetime):
+        end_default = end_default.date()
+    st.session_state.app_dashboard_date_range = (start_default, end_default)
 
     date_range = st.date_input(
         "📅 Analyseperiode",
-        value=(start_default, end_default),
+        value=st.session_state.app_dashboard_date_range,
         min_value=date(2020, 1, 1),
         max_value=max_date,
+        key="app_dashboard_date_range",
         help="Selecteer de periode die u wilt analyseren."
     )
 
-    if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
-        start_date, end_date = date_range
-    else:
-        start_date, end_date = start_default, end_default
-
-    # Normalize to plain date objects to avoid timestamp bleed-through
+    start_date, end_date = st.session_state.app_dashboard_date_range
     if isinstance(start_date, datetime):
         start_date = start_date.date()
     if isinstance(end_date, datetime):
         end_date = end_date.date()
+    st.session_state.app_dashboard_date_range = (start_date, end_date)
 
     st.session_state["dashboard_start_date"] = start_date
     st.session_state["dashboard_end_date"] = end_date
