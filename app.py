@@ -199,7 +199,6 @@ with st.container():
         value=st.session_state["dashboard_date_range"],
         min_value=min_allowed,
         max_value=max_date,
-        key="dashboard_date_range",
         help="Selecteer de periode die u wilt analyseren."
     )
 
