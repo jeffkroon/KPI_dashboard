@@ -173,62 +173,48 @@ elif filter_optie == "Alle bedrijven":
         (df_companies["tag_names"].str.strip() != "")
     ]
 
-# --- 📅 Periode Filter (stabiele versie) ---
+# --- 📅 Periode Filter (Form + Commit-knop) ---
 from datetime import datetime, timedelta, date
-from typing import cast
 
 with st.container():
     st.markdown('<div class="filter-box"><h4>📅 Periode Filter</h4>', unsafe_allow_html=True)
 
-    # Defaults als 'date' (NIET datetime) zodat de widget stabiel blijft
-    today_d = date.today()
-    default_start_d = today_d - timedelta(days=30)
-    default_end_d = today_d
+    # 1) Init persistente state
+    if "period_start" not in st.session_state:
+        st.session_state.period_start = date.today() - timedelta(days=30)
+    if "period_end" not in st.session_state:
+        st.session_state.period_end = date.today()
 
-    # Init alleen 1x
-    if "dashboard_date_range" not in st.session_state:
-        st.session_state["dashboard_date_range"] = (default_start_d, default_end_d)
+    with st.form("periode_form", clear_on_submit=False):
+        start = st.date_input(
+            "Start", 
+            value=st.session_state.period_start, 
+            key="period_start_input",
+            min_value=date(2020, 1, 1),
+            max_value=date(2030, 12, 31),
+            help="Selecteer de startdatum van de analyseperiode"
+        )
+        end = st.date_input(
+            "Einde", 
+            value=st.session_state.period_end, 
+            key="period_end_input",
+            min_value=date(2020, 1, 1),
+            max_value=date(2030, 12, 31),
+            help="Selecteer de einddatum van de analyseperiode"
+        )
+        submitted = st.form_submit_button("📅 Toepassen Periode")
 
-    # Lees huidige state (forceer naar date)
-    start_d, end_d = st.session_state["dashboard_date_range"]
-    if isinstance(start_d, datetime):
-        start_d = start_d.date()
-    if isinstance(end_d, datetime):
-        end_d = end_d.date()
+    if submitted:
+        # Commit in één keer
+        st.session_state.period_start = start
+        st.session_state.period_end = end
+        st.success(f"Periode ingesteld: {start} → {end}")
 
-    # Grenzen ook als 'date'
-    min_allowed_d = date(2020, 1, 1)
-    max_allowed_d = date(2030, 12, 31)  # Allow future dates
-
-    # Clamp
-    start_d = max(start_d, min_allowed_d)
-    end_d = min(end_d, max_allowed_d)
-
-    # De widget: geef 'date's en een vaste key
-    date_range = st.date_input(
-        "📅 Analyseperiode",
-        value=(start_d, end_d),
-        min_value=min_allowed_d,
-        max_value=max_allowed_d,
-        help="Selecteer de periode die u wilt analyseren.",
-        key="dashboard_date_input"
-    )
-
-    # Normaliseer output (kan single of range zijn)
-    if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
-        start_d, end_d = date_range
-    else:
-        start_d = end_d = cast(date, date_range)
-
-    # Schrijf terug als 'date' (geen datetime!) zodat de widget consistent blijft
-    st.session_state["dashboard_date_range"] = (start_d, end_d)
-
-    # Pas HIER naar datetime voor je queries (inclusief hele einddag)
-    start_datetime = datetime.combine(start_d, datetime.min.time())
-    end_datetime = datetime.combine(end_d, datetime.max.time())
-
-    st.session_state["dashboard_start_date"] = start_datetime
-    st.session_state["dashboard_end_date"] = end_datetime
+    # Gebruik altijd de gecommitte waarden hieronder
+    start_datetime = datetime.combine(st.session_state.period_start, datetime.min.time())
+    end_datetime = datetime.combine(st.session_state.period_end, datetime.max.time())
+    
+    st.caption(f"Actieve filter: {st.session_state.period_start} → {st.session_state.period_end}")
 
     # Strings voor SQL
     start_date_str = start_datetime.strftime('%Y-%m-%d')
