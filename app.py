@@ -69,6 +69,12 @@ if st.button("🔄 Database Verversen", type="primary", use_container_width=True
     with st.spinner("Database wordt ververst... Dit kan enkele minuten duren."):
         run_gripp_api()
 
+# Cache clear knop
+if st.button("🗑️ Clear Cache", type="secondary", use_container_width=True):
+    st.cache_data.clear()
+    st.success("Cache cleared!")
+    st.rerun()
+
 st.markdown("---")
 
 # --- FILTERING KNOPPEN VOOR BEDRIJVEN ---
@@ -167,6 +173,7 @@ with st.container():
         (min_date_default, max_date),
         min_value=datetime(2020, 1, 1),
         max_value=max_date,
+        key="app_date_range",
         help="Selecteer de periode die u wilt analyseren."
     )
     
@@ -204,6 +211,9 @@ engine = get_engine()
 
 @st.cache_data(ttl=300)
 def load_filtered_invoices(start_date_str, end_date_str, bedrijf_ids):
+    # Convert bedrijf_ids to tuple for hashing
+    bedrijf_ids_tuple = tuple(sorted(bedrijf_ids)) if bedrijf_ids else ()
+    
     invoices_query = f"""
     SELECT id, company_id, fase, totalpayed, status_searchname, number, date_date, reportdate_date, subject
     FROM invoices 
