@@ -160,64 +160,23 @@ elif filter_optie == "Alle bedrijven":
 with st.container():
     st.markdown('<div class="filter-box"><h4>📅 Periode Filter</h4>', unsafe_allow_html=True)
     
-    max_date = date.today()
-    
-    # Initialize session state only if not already set
-    if "dashboard_start_date" not in st.session_state:
-        st.session_state["dashboard_start_date"] = None
-    if "dashboard_end_date" not in st.session_state:
-        st.session_state["dashboard_end_date"] = None
-
-    # Direct date input without form - updates immediately
-    filter_col1, filter_col2 = st.columns([1, 2])
-    with filter_col1:
-        date_range = st.date_input(
-            "📅 Analyseperiode",
-            value=(),  # Empty tuple for range selection
-            min_value=date(2020, 1, 1),
-            max_value=max_date,
-            help="Selecteer de periode die u wilt analyseren.",
-            key="dashboard_analyseperiode",
-        )
-
-    with filter_col2:
-        st.write("")
-        if st.button("📅 Alles", help="Selecteer alle beschikbare data", use_container_width=True):
-            # Set to earliest possible date to today
-            st.session_state["dashboard_start_date"] = date(2020, 1, 1)
-            st.session_state["dashboard_end_date"] = max_date
-            st.rerun()
-
-    # Update session state immediately when date_range changes
+    max_date = datetime.today()
+    min_date_default = max_date - timedelta(days=30)
+    date_range = st.date_input(
+        "📅 Analyseperiode",
+        (min_date_default, max_date),
+        min_value=datetime(2020, 1, 1),
+        max_value=max_date,
+        help="Selecteer de periode die u wilt analyseren."
+    )
     if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
-        st.session_state["dashboard_start_date"], st.session_state["dashboard_end_date"] = date_range
+        start_date, end_date = date_range
+    else:
+        start_date, end_date = min_date_default, max_date
     
-    # Use date objects directly like werkverdeling.py
-    # Convert to datetime objects only for pandas filtering
-    start_date = st.session_state["dashboard_start_date"]
-    end_date = st.session_state["dashboard_end_date"]
-    
-    # Check if dates are selected
-    if start_date is None or end_date is None:
-        st.warning("⚠️ Selecteer eerst een periode om de analyse te starten.")
-        st.stop()
-    
+    # Convert to datetime objects for pandas filtering
     start_date_dt = pd.to_datetime(start_date)
     end_date_dt = pd.to_datetime(end_date)
-    
-    # Validate date range
-    if start_date > end_date:
-        st.error("⚠️ Start datum moet voor eind datum liggen!")
-        st.stop()
-    
-    # Display selected period
-    months = [
-        "Januari", "Februari", "Maart", "April", "Mei", "Juni",
-        "Juli", "Augustus", "September", "Oktober", "November", "December"
-    ]
-    start_month_name = months[start_date.month - 1]
-    end_month_name = months[end_date.month - 1]
-    st.info(f"📊 Geselecteerde periode: {start_month_name} {start_date.year} tot {end_month_name} {end_date.year}")
 
 st.markdown('</div>', unsafe_allow_html=True)
 
