@@ -178,6 +178,10 @@ with st.container():
     # Convert to datetime objects for pandas filtering
     start_date_dt = pd.to_datetime(start_date)
     end_date_dt = pd.to_datetime(end_date)
+    
+    # Also create string versions for SQL queries (like werkverdeling.py)
+    start_date_str = start_date.strftime('%Y-%m-%d')
+    end_date_str = end_date.strftime('%Y-%m-%d')
 
 st.markdown('</div>', unsafe_allow_html=True)
 
@@ -194,38 +198,22 @@ if not isinstance(df_employees, pd.DataFrame):
 df_projectlines = load_data_df("projectlines_per_company", columns=["id", "bedrijf_id", "offerprojectbase_id", "amount", "amountwritten", "sellingprice", "unit_searchname", "createdon_date"])
 if not isinstance(df_projectlines, pd.DataFrame):
     df_projectlines = pd.concat(list(df_projectlines), ignore_index=True)
-df_invoices = load_data_df("invoices", columns=["id", "company_id", "fase", "totalpayed", "status_searchname", "number", "date_date", "reportdate_date", "subject"])
-if not isinstance(df_invoices, pd.DataFrame):
-    df_invoices = pd.concat(list(df_invoices), ignore_index=True)
+# Load invoices with date filtering in SQL (like werkverdeling.py)
+from utils.data_loaders import get_engine
+engine = get_engine()
+
+invoices_query = f"""
+SELECT id, company_id, fase, totalpayed, status_searchname, number, date_date, reportdate_date, subject
+FROM invoices 
+WHERE reportdate_date BETWEEN '{start_date_str}' AND '{end_date_str}'
+"""
+df_invoices = pd.read_sql(invoices_query, engine)
 
 # --- Filter projectlines en invoices op bedrijf_ids ---
 df_projectlines = df_projectlines[df_projectlines["bedrijf_id"].isin(bedrijf_ids)]
 df_invoices = df_invoices[df_invoices["company_id"].isin(bedrijf_ids)]
 
-# --- Filter invoices op geselecteerde periode ---
-if 'reportdate_date' in df_invoices.columns:
-    # Debug: Toon voorbeelden van reportdate_date voordat conversie
-    st.write(f"🔍 DEBUG: Voorbeelden reportdate_date (voor conversie):")
-    sample_dates = df_invoices['reportdate_date'].head(5).tolist()
-    st.write(sample_dates)
-    
-    df_invoices['reportdate_date'] = pd.to_datetime(df_invoices['reportdate_date'], errors='coerce')
-    
-    # Debug: Toon voorbeelden na conversie
-    st.write(f"🔍 DEBUG: Voorbeelden reportdate_date (na conversie):")
-    sample_dates_after = df_invoices['reportdate_date'].head(5).tolist()
-    st.write(sample_dates_after)
-    
-    # Debug: Toon hoeveel null values
-    null_count = df_invoices['reportdate_date'].isna().sum()
-    st.write(f"🔍 DEBUG: Null values na conversie: {null_count}")
-    
-    df_invoices = df_invoices[
-        (df_invoices['reportdate_date'] >= start_date_dt) &
-        (df_invoices['reportdate_date'] <= end_date_dt)
-    ]
-    
-    st.write(f"🔍 DEBUG: Invoices na datum filtering: {len(df_invoices)}")
+# Date filtering is now done in SQL query above
 
 
 # --- DATA PREP ---
