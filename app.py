@@ -173,63 +173,58 @@ elif filter_optie == "Alle bedrijven":
         (df_companies["tag_names"].str.strip() != "")
     ]
 
-# --- PERIODE FILTER ---
+# --- 📅 Periode Filter (robuste versie) ---
 with st.container():
     st.markdown('<div class="filter-box"><h4>📅 Periode Filter</h4>', unsafe_allow_html=True)
-    
-    max_date = datetime.today()
-    min_date_default = max_date - timedelta(days=30)
 
+    # 1) Defaults als pure 'date' objecten
+    today = date.today()
+    default_end_date = today
+    default_start_date = today - timedelta(days=30)
+
+    # 2) Init alleen als het nog niet bestaat
     if "dashboard_date_range" not in st.session_state:
-        st.session_state["dashboard_date_range"] = (min_date_default, max_date)
+        st.session_state["dashboard_date_range"] = (default_start_date, default_end_date)
 
-    default_start, default_end = st.session_state["dashboard_date_range"]
-    if isinstance(default_start, date) and not isinstance(default_start, datetime):
-        default_start = datetime.combine(default_start, datetime.min.time())
-    if isinstance(default_end, date) and not isinstance(default_end, datetime):
-        default_end = datetime.combine(default_end, datetime.min.time())
-
-    min_allowed = datetime(2020, 1, 1)
-    default_start = max(default_start, min_allowed)
-    default_end = min(default_end, max_date)
+    # 3) Widget met vaste key + date types
+    start_default, end_default = st.session_state["dashboard_date_range"]
+    # begrenzing (optioneel)
+    min_allowed = date(2020, 1, 1)
+    max_allowed = today
 
     date_range = st.date_input(
         "📅 Analyseperiode",
-        value=(default_start, default_end),
+        value=(start_default, end_default),
         min_value=min_allowed,
-        max_value=max_date,
-        help="Selecteer de periode die u wilt analyseren."
+        max_value=max_allowed,
+        help="Selecteer de periode die u wilt analyseren.",
+        key="dashboard_date_input"  # <<< vaste key
     )
 
+    # 4) Sla de actuele widgetwaarde terug in session_state (altijd tuple van 'date')
     if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
-        start_raw, end_raw = date_range
-        # Update session state with the selected range
-        st.session_state["dashboard_date_range"] = (start_raw, end_raw)
+        start_d, end_d = date_range
     else:
-        # Fallback to session state if single date selected
-        start_raw, end_raw = st.session_state["dashboard_date_range"]
+        # Single date fallback
+        start_d = date_range
+        end_d = date_range
 
-    def _ensure_datetime(value: date | datetime) -> datetime:
-        if isinstance(value, datetime):
-            return value
-        return datetime.combine(value, datetime.min.time())
+    # Clampen voor de zekerheid
+    start_d = max(start_d, min_allowed)
+    end_d = min(end_d, max_allowed)
 
-    start_datetime = _ensure_datetime(start_raw)
-    end_datetime = _ensure_datetime(end_raw)
+    st.session_state["dashboard_date_range"] = (start_d, end_d)
+
+    # 5) Converteer pas hier naar datetime voor pandas/SQL (inclusief einde-dag)
+    start_datetime = datetime.combine(start_d, datetime.min.time())
+    end_datetime = datetime.combine(end_d, datetime.max.time())
 
     st.session_state["dashboard_start_date"] = start_datetime
     st.session_state["dashboard_end_date"] = end_datetime
 
-    start_date = start_datetime.date()
-    end_date = end_datetime.date()
-
-    # Convert to datetime objects for pandas filtering
-    start_date_dt = pd.to_datetime(start_datetime)
-    end_date_dt = pd.to_datetime(end_datetime)
-
-    # Create string versions for SQL queries
-    start_date_str = start_date_dt.strftime('%Y-%m-%d')
-    end_date_str = end_date_dt.strftime('%Y-%m-%d')
+    # Strings voor SQL
+    start_date_str = start_datetime.strftime('%Y-%m-%d')
+    end_date_str = end_datetime.strftime('%Y-%m-%d')
 
 st.markdown('</div>', unsafe_allow_html=True)
 
