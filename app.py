@@ -141,15 +141,21 @@ engine = create_engine(POSTGRES_URL)
 # Streamlit-extras is optioneel en wordt niet gebruikt in deze app
 
 # --- LOAD DATA ---
-df_projects_raw = load_data_df("projects", columns=["id", "company_id", "archived", "totalinclvat", "name"])
-if not isinstance(df_projects_raw, pd.DataFrame):
-    df_projects_raw = pd.concat(list(df_projects_raw), ignore_index=True)
-df_projects_raw["totalinclvat"] = pd.to_numeric(df_projects_raw["totalinclvat"], errors="coerce").fillna(0)
+@st.cache_data(ttl=3600)
+def load_base_data():
+    """Load base data that doesn't change often"""
+    df_projects_raw = load_data_df("projects", columns=["id", "company_id", "archived", "totalinclvat", "name"])
+    if not isinstance(df_projects_raw, pd.DataFrame):
+        df_projects_raw = pd.concat(list(df_projects_raw), ignore_index=True)
+    df_projects_raw["totalinclvat"] = pd.to_numeric(df_projects_raw["totalinclvat"], errors="coerce").fillna(0)
+    
+    df_companies = load_data_df("companies", columns=["id", "companyname", "tag_names"])
+    if not isinstance(df_companies, pd.DataFrame):
+        df_companies = pd.concat(list(df_companies), ignore_index=True)
+    
+    return df_projects_raw, df_companies
 
-# Filterbare companies dataset: voeg tag_names toe en filter indien nodig
-df_companies = load_data_df("companies", columns=["id", "companyname", "tag_names"])
-if not isinstance(df_companies, pd.DataFrame):
-    df_companies = pd.concat(list(df_companies), ignore_index=True)
+df_projects_raw, df_companies = load_base_data()
 
 # Helperfunctie voor exacte tag match (alleen primaire tag)
 def bedrijf_heeft_tag(tag_string, filter_primary_tag):
@@ -171,40 +177,19 @@ elif filter_optie == "Alle bedrijven":
 with st.container():
     st.markdown('<div class="filter-box"><h4>📅 Periode Filter</h4>', unsafe_allow_html=True)
     
-    # Initialize session state for dates
-    if "app_start_date" not in st.session_state:
-        st.session_state["app_start_date"] = datetime.today() - timedelta(days=30)
-    if "app_end_date" not in st.session_state:
-        st.session_state["app_end_date"] = datetime.today()
-    
-    # Date inputs with session state
-    col1, col2 = st.columns(2)
-    with col1:
-        start_date = st.date_input(
-            "Start datum",
-            value=st.session_state["app_start_date"].date(),
-            min_value=date(2020, 1, 1),
-            max_value=date.today(),
-            key="app_start_date_input"
-        )
-    with col2:
-        end_date = st.date_input(
-            "Eind datum", 
-            value=st.session_state["app_end_date"].date(),
-            min_value=date(2020, 1, 1),
-            max_value=date.today(),
-            key="app_end_date_input"
-        )
-    
-    # Update session state when dates change
-    if start_date != st.session_state["app_start_date"].date():
-        st.session_state["app_start_date"] = datetime.combine(start_date, datetime.min.time())
-    if end_date != st.session_state["app_end_date"].date():
-        st.session_state["app_end_date"] = datetime.combine(end_date, datetime.min.time())
-    
-    # Use session state dates
-    start_date = st.session_state["app_start_date"].date()
-    end_date = st.session_state["app_end_date"].date()
+    max_date = datetime.today()
+    min_date_default = max_date - timedelta(days=30)
+    date_range = st.date_input(
+        "📅 Dashboard Periode",
+        (min_date_default, max_date),
+        min_value=datetime(2020, 1, 1),
+        max_value=max_date,
+        help="Selecteer de periode die u wilt analyseren."
+    )
+    if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
+        start_date, end_date = date_range
+    else:
+        start_date, end_date = min_date_default, max_date
     
     # Convert to datetime objects for pandas filtering
     start_date_dt = pd.to_datetime(start_date)
@@ -223,12 +208,20 @@ if len(bedrijf_ids) == 0:
     st.warning("Geen bedrijven gevonden voor deze filterkeuze.")
     st.stop()
 
-df_employees = load_data_df("employees", columns=["id", "firstname", "lastname"])
-if not isinstance(df_employees, pd.DataFrame):
-    df_employees = pd.concat(list(df_employees), ignore_index=True)
-df_projectlines = load_data_df("projectlines_per_company", columns=["id", "bedrijf_id", "offerprojectbase_id", "amount", "amountwritten", "sellingprice", "unit_searchname", "createdon_date"])
-if not isinstance(df_projectlines, pd.DataFrame):
-    df_projectlines = pd.concat(list(df_projectlines), ignore_index=True)
+@st.cache_data(ttl=3600)
+def load_employees_and_projectlines():
+    """Load employees and projectlines data"""
+    df_employees = load_data_df("employees", columns=["id", "firstname", "lastname"])
+    if not isinstance(df_employees, pd.DataFrame):
+        df_employees = pd.concat(list(df_employees), ignore_index=True)
+    
+    df_projectlines = load_data_df("projectlines_per_company", columns=["id", "bedrijf_id", "offerprojectbase_id", "amount", "amountwritten", "sellingprice", "unit_searchname", "createdon_date"])
+    if not isinstance(df_projectlines, pd.DataFrame):
+        df_projectlines = pd.concat(list(df_projectlines), ignore_index=True)
+    
+    return df_employees, df_projectlines
+
+df_employees, df_projectlines = load_employees_and_projectlines()
 # Load invoices with date filtering in SQL (like werkverdeling.py)
 from utils.data_loaders import get_engine
 engine = get_engine()
@@ -247,10 +240,43 @@ def load_filtered_invoices(start_date_str, end_date_str, bedrijf_ids):
     df_invoices = df_invoices[df_invoices["company_id"].isin(bedrijf_ids)]
     return df_invoices
 
-df_invoices = load_filtered_invoices(start_date_str, end_date_str, bedrijf_ids)
+@st.cache_data(ttl=300)
+def load_filtered_projectlines(start_date_str, end_date_str, bedrijf_ids):
+    """Load and filter projectlines based on date and company"""
+    # Convert bedrijf_ids to tuple for hashable cache key
+    bedrijf_ids_tuple = tuple(sorted(bedrijf_ids)) if bedrijf_ids else ()
+    
+    # Filter projectlines op unit "uur" en bedrijf_ids
+    df_projectlines_uren = df_projectlines[
+        (df_projectlines["unit_searchname"] == "uur") &
+        (df_projectlines["bedrijf_id"].isin(bedrijf_ids))
+    ].copy()
+    
+    # Filter projectlines op geselecteerde periode (als createdon_date beschikbaar is)
+    if 'createdon_date' in df_projectlines_uren.columns:
+        # Convert createdon_date to datetime
+        df_projectlines_uren['createdon_date'] = pd.to_datetime(df_projectlines_uren['createdon_date'], errors='coerce')
+        
+        # Filter only records with createdon_date in the selected period
+        df_projectlines_with_date = df_projectlines_uren[
+            (df_projectlines_uren['createdon_date'].notna()) &
+            (df_projectlines_uren['createdon_date'] >= pd.to_datetime(start_date_str)) &
+            (df_projectlines_uren['createdon_date'] <= pd.to_datetime(end_date_str))
+        ]
+        
+        # Include records without createdon_date (no date filtering for these)
+        df_projectlines_without_date = df_projectlines_uren[df_projectlines_uren['createdon_date'].isna()]
+        
+        # Combine both
+        df_projectlines_filtered = pd.concat([df_projectlines_with_date, df_projectlines_without_date], ignore_index=True)
+    else:
+        # No createdon_date column, use all projectlines
+        df_projectlines_filtered = df_projectlines_uren
+    
+    return df_projectlines_filtered
 
-# --- Filter projectlines op bedrijf_ids ---
-df_projectlines = df_projectlines[df_projectlines["bedrijf_id"].isin(bedrijf_ids)]
+df_invoices = load_filtered_invoices(start_date_str, end_date_str, bedrijf_ids)
+df_projectlines_filtered = load_filtered_projectlines(start_date_str, end_date_str, bedrijf_ids)
 
 # Date filtering is now done in SQL query above
 
