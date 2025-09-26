@@ -170,7 +170,8 @@ with st.container():
         help="Selecteer de periode die u wilt analyseren."
     )
     
-    if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
+    # Force gebruik van geselecteerde datums (zoals werkverdeling.py)
+    if hasattr(date_range, '__len__') and len(date_range) == 2:
         start_date, end_date = date_range
     else:
         start_date, end_date = min_date_default, max_date
