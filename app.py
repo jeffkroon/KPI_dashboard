@@ -160,18 +160,17 @@ elif filter_optie == "Alle bedrijven":
 with st.container():
     st.markdown('<div class="filter-box"><h4>📅 Periode Filter</h4>', unsafe_allow_html=True)
     
-    max_date = date.today()
+    max_date = datetime.today()
     min_date_default = max_date - timedelta(days=30)
     date_range = st.date_input(
         "📅 Dashboard Periode",
         (min_date_default, max_date),
-        min_value=date(2020, 1, 1),
+        min_value=datetime(2020, 1, 1),
         max_value=max_date,
         help="Selecteer de periode die u wilt analyseren."
     )
     
-    # Force gebruik van geselecteerde datums (zoals werkverdeling.py)
-    if hasattr(date_range, '__len__') and len(date_range) == 2:
+    if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
         start_date, end_date = date_range
     else:
         start_date, end_date = min_date_default, max_date
