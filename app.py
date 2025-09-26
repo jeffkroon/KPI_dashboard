@@ -180,30 +180,22 @@ with st.container():
     max_date = date.today()
     min_date_default = max_date - timedelta(days=30)
 
-    if "dashboard_start_date" not in st.session_state:
-        st.session_state["dashboard_start_date"] = min_date_default
-    if "dashboard_end_date" not in st.session_state:
-        st.session_state["dashboard_end_date"] = max_date
+    start_default = st.session_state.get("dashboard_start_date", min_date_default)
+    end_default = st.session_state.get("dashboard_end_date", max_date)
 
-    start_col, end_col = st.columns(2)
-    with start_col:
-        start_date = st.date_input(
-            "📅 Startdatum",
-            st.session_state["dashboard_start_date"],
-            min_value=date(2020, 1, 1),
-            max_value=max_date,
-            key="app_dashboard_start_date",
-            help="Selecteer de begindatum voor de analyseperiode."
-        )
-    with end_col:
-        end_date = st.date_input(
-            "📅 Einddatum",
-            st.session_state["dashboard_end_date"],
-            min_value=start_date,
-            max_value=max_date,
-            key="app_dashboard_end_date",
-            help="Selecteer de einddatum voor de analyseperiode."
-        )
+    date_range = st.date_input(
+        "📅 Analyseperiode",
+        (start_default, end_default),
+        min_value=date(2020, 1, 1),
+        max_value=max_date,
+        key="app_dashboard_date_range",
+        help="Selecteer de periode die u wilt analyseren."
+    )
+
+    if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
+        start_date, end_date = date_range
+    else:
+        start_date, end_date = start_default, end_default
 
     st.session_state["dashboard_start_date"] = start_date
     st.session_state["dashboard_end_date"] = end_date
