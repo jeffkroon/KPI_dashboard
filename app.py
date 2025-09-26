@@ -313,7 +313,21 @@ df_projectlines_uren = df_projectlines[
 
 # Filter projectlines op geselecteerde periode (als createdon_date beschikbaar is)
 if 'createdon_date' in df_projectlines_uren.columns:
+    # Debug: Toon voorbeelden van createdon_date voordat conversie
+    st.write(f"🔍 DEBUG: Voorbeelden createdon_date (voor conversie):")
+    sample_dates = df_projectlines_uren['createdon_date'].head(5).tolist()
+    st.write(sample_dates)
+    
     df_projectlines_uren['createdon_date'] = pd.to_datetime(df_projectlines_uren['createdon_date'], errors='coerce')
+    
+    # Debug: Toon voorbeelden na conversie
+    st.write(f"🔍 DEBUG: Voorbeelden createdon_date (na conversie):")
+    sample_dates_after = df_projectlines_uren['createdon_date'].head(5).tolist()
+    st.write(sample_dates_after)
+    
+    # Debug: Toon hoeveel null values
+    null_count = df_projectlines_uren['createdon_date'].isna().sum()
+    st.write(f"🔍 DEBUG: Null values na conversie: {null_count}")
     
     # Alleen records met createdon_date filteren op periode
     df_projectlines_with_date = df_projectlines_uren[
@@ -326,9 +340,13 @@ if 'createdon_date' in df_projectlines_uren.columns:
     # Combineer beide
     df_projectlines_filtered = pd.concat([df_projectlines_with_date, df_projectlines_without_date], ignore_index=True)
     
+    st.write(f"🔍 DEBUG: Projectlines met datum in periode: {len(df_projectlines_with_date)}")
+    st.write(f"🔍 DEBUG: Projectlines zonder datum: {len(df_projectlines_without_date)}")
+    st.write(f"🔍 DEBUG: Totaal projectlines na filtering: {len(df_projectlines_filtered)}")
 else:
     # Geen createdon_date kolom, gebruik alle projectlines
     df_projectlines_filtered = df_projectlines_uren
+    st.write(f"🔍 DEBUG: Geen createdon_date kolom, gebruik alle {len(df_projectlines_filtered)} projectlines")
 
 # Bereken totaal uren per bedrijf
 df_projectlines_filtered["amountwritten"] = pd.to_numeric(df_projectlines_filtered["amountwritten"], errors="coerce")
@@ -392,6 +410,11 @@ with st.expander("🔍 Debug: Data Filtering Info"):
 
 # Bereken totaal gefactureerd per bedrijf uit gefilterde data
 # Gebruik de gefilterde invoices (df_invoices) in plaats van alle invoices
+st.write(f"🔍 DEBUG: df_invoices voor factuurbedrag berekening: {len(df_invoices)} records")
+if len(df_invoices) > 0:
+    st.write(f"🔍 DEBUG: df_invoices kolommen: {df_invoices.columns.tolist()}")
+    st.write(f"🔍 DEBUG: df_invoices company_id unieke waarden: {df_invoices['company_id'].nunique()}")
+    st.write(f"🔍 DEBUG: df_invoices totalpayed sample: {df_invoices['totalpayed'].head(5).tolist()}")
 
 factuurbedrag_per_bedrijf = df_invoices.groupby("company_id")["totalpayed"].sum().reset_index()
 factuurbedrag_per_bedrijf.rename(columns={"company_id": "bedrijf_id", "totalpayed": "totalpayed"}, inplace=True)
@@ -399,6 +422,9 @@ factuurbedrag_per_bedrijf.rename(columns={"company_id": "bedrijf_id", "totalpaye
 # Ensure totalpayed is numeric
 factuurbedrag_per_bedrijf["totalpayed"] = pd.to_numeric(factuurbedrag_per_bedrijf["totalpayed"], errors="coerce").fillna(0)
 
+st.write(f"🔍 DEBUG: factuurbedrag_per_bedrijf: {len(factuurbedrag_per_bedrijf)} records")
+if len(factuurbedrag_per_bedrijf) > 0:
+    st.write(f"🔍 DEBUG: factuurbedrag_per_bedrijf sample: {factuurbedrag_per_bedrijf.head(5).to_dict('records')}")
 
 # Bereken geplande omzet per bedrijf (op basis van offertes/projecten)
 geplande_omzet_per_bedrijf = df_projects_raw.groupby("company_id")["totalinclvat"].sum().reset_index()
@@ -415,6 +441,8 @@ uren_per_bedrijf = uren_per_bedrijf[uren_per_bedrijf["bedrijf_id"].isin(bedrijf_
 factuurbedrag_per_bedrijf = factuurbedrag_per_bedrijf[factuurbedrag_per_bedrijf["bedrijf_id"].isin(bedrijf_ids)]
 
 # Combineer stats per bedrijf
+st.write(f"🔍 DEBUG: uren_per_bedrijf: {len(uren_per_bedrijf)} records")
+st.write(f"🔍 DEBUG: factuurbedrag_per_bedrijf: {len(factuurbedrag_per_bedrijf)} records")
 
 bedrijfsstats = uren_per_bedrijf.merge(factuurbedrag_per_bedrijf, on="bedrijf_id", how="outer")
 bedrijfsstats = bedrijfsstats.merge(df_companies[["id", "companyname"]], left_on="bedrijf_id", right_on="id", how="left")
@@ -422,6 +450,11 @@ bedrijfsstats = bedrijfsstats.drop(columns=[col for col in ['id'] if col in bedr
 bedrijfsstats["totaal_uren"] = pd.to_numeric(bedrijfsstats["totaal_uren"], errors="coerce").fillna(0)
 bedrijfsstats["totalpayed"] = pd.to_numeric(bedrijfsstats["totalpayed"], errors="coerce").fillna(0)
 
+st.write(f"🔍 DEBUG: bedrijfsstats na merge: {len(bedrijfsstats)} records")
+if len(bedrijfsstats) > 0:
+    st.write(f"🔍 DEBUG: bedrijfsstats kolommen: {bedrijfsstats.columns.tolist()}")
+    st.write(f"🔍 DEBUG: bedrijfsstats totalpayed sample: {bedrijfsstats['totalpayed'].head(5).tolist()}")
+    st.write(f"🔍 DEBUG: bedrijfsstats totalpayed sum: {bedrijfsstats['totalpayed'].sum()}")
 
 # Voeg geplande omzet toe aan bedrijfsstats VOORDAT tarief_per_uur wordt berekend
 bedrijfsstats = bedrijfsstats.merge(geplande_omzet_per_bedrijf, on="bedrijf_id", how="left")
@@ -449,9 +482,14 @@ with col2:
 with col3:
     if omzet_optie == "Werkelijke omzet (facturen)":
         omzet = pd.to_numeric(bedrijfsstats["totalpayed"], errors="coerce").sum()
+        st.write(f"🔍 DEBUG: KPI berekening - omzet_optie: {omzet_optie}")
+        st.write(f"🔍 DEBUG: KPI berekening - bedrijfsstats totalpayed sum: {omzet}")
+        st.write(f"🔍 DEBUG: KPI berekening - bedrijfsstats records: {len(bedrijfsstats)}")
         st.metric("💶 Totale Werkelijke Omzet", f"€ {omzet:,.0f}")
     else:
         omzet = pd.to_numeric(bedrijfsstats["geplande_omzet"], errors="coerce").sum()
+        st.write(f"🔍 DEBUG: KPI berekening - omzet_optie: {omzet_optie}")
+        st.write(f"🔍 DEBUG: KPI berekening - bedrijfsstats geplande_omzet sum: {omzet}")
         st.metric("💶 Totale Geplande Omzet", f"€ {omzet:,.0f}")
 with col4:
     # Filter projectlines op basis van gefilterde projecten
@@ -555,8 +593,19 @@ bedrijf_naam_selectie = st.selectbox("Kies een bedrijf:", bedrijf_opties)
 bedrijf_id_selectie = bedrijfsstats.loc[bedrijfsstats["companyname"] == bedrijf_naam_selectie, "bedrijf_id"].iloc[0] if bedrijf_naam_selectie else None
 
 if bedrijf_naam_selectie:
+    st.write(f"🔍 DEBUG: Geselecteerd bedrijf: {bedrijf_naam_selectie}")
+    st.write(f"🔍 DEBUG: bedrijf_id_selectie: {bedrijf_id_selectie}")
+    
+    # Debug: toon alle bedrijfsstats voor dit bedrijf
+    bedrijf_stats = bedrijfsstats[bedrijfsstats["companyname"] == bedrijf_naam_selectie]
+    st.write(f"🔍 DEBUG: bedrijf_stats records: {len(bedrijf_stats)}")
+    if len(bedrijf_stats) > 0:
+        st.write(f"🔍 DEBUG: bedrijf_stats data: {bedrijf_stats.to_dict('records')}")
+    
     display_df = bedrijfsstats[bedrijfsstats["companyname"] == bedrijf_naam_selectie][["bedrijf_id", "companyname", "totalpayed", "totaal_uren", "tarief_per_uur"]].copy()
     assert isinstance(display_df, pd.DataFrame), "display_df moet een DataFrame zijn"
+    
+    st.write(f"🔍 DEBUG: display_df voor formatting: {display_df.to_dict('records')}")
     
     display_df = display_df.rename(columns={
         "bedrijf_id": "Bedrijf ID",
