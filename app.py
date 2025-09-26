@@ -373,8 +373,8 @@ uren_per_bedrijf.columns = ["bedrijf_id", "totaal_uren"]
 
 # Debug informatie - ALTIJD TONEN om te zien wat er gebeurt
 with st.expander("🔍 Debug: Data Filtering Info"):
-    st.write(f"**Start datum:** {start_date.strftime('%Y-%m-%d')}")
-    st.write(f"**Eind datum:** {end_date.strftime('%Y-%m-%d')}")
+    st.write(f"**Start datum:** {start_d.strftime('%Y-%m-%d')}")
+    st.write(f"**Eind datum:** {end_d.strftime('%Y-%m-%d')}")
     st.write(f"**Bedrijf IDs na filtering:** {len(bedrijf_ids)} bedrijven")
     
     # Debug na data loading
