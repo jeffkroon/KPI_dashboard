@@ -169,10 +169,17 @@ with st.container():
         max_value=max_date,
         help="Selecteer de periode die u wilt analyseren."
     )
+    
+    # Debug: Toon wat er gebeurt
+    st.write(f"🔍 DEBUG: date_range = {date_range}")
+    st.write(f"🔍 DEBUG: type(date_range) = {type(date_range)}")
+    
     if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
         start_date, end_date = date_range
+        st.write(f"🔍 DEBUG: Gebruikt geselecteerde datums: {start_date} tot {end_date}")
     else:
         start_date, end_date = min_date_default, max_date
+        st.write(f"🔍 DEBUG: Gebruikt default datums: {start_date} tot {end_date}")
     
     # Convert to datetime objects for pandas filtering
     start_date_dt = pd.to_datetime(start_date)
@@ -203,11 +210,28 @@ df_invoices = df_invoices[df_invoices["company_id"].isin(bedrijf_ids)]
 
 # --- Filter invoices op geselecteerde periode ---
 if 'reportdate_date' in df_invoices.columns:
+    # Debug: Toon voorbeelden van reportdate_date voordat conversie
+    st.write(f"🔍 DEBUG: Voorbeelden reportdate_date (voor conversie):")
+    sample_dates = df_invoices['reportdate_date'].head(5).tolist()
+    st.write(sample_dates)
+    
     df_invoices['reportdate_date'] = pd.to_datetime(df_invoices['reportdate_date'], errors='coerce')
+    
+    # Debug: Toon voorbeelden na conversie
+    st.write(f"🔍 DEBUG: Voorbeelden reportdate_date (na conversie):")
+    sample_dates_after = df_invoices['reportdate_date'].head(5).tolist()
+    st.write(sample_dates_after)
+    
+    # Debug: Toon hoeveel null values
+    null_count = df_invoices['reportdate_date'].isna().sum()
+    st.write(f"🔍 DEBUG: Null values na conversie: {null_count}")
+    
     df_invoices = df_invoices[
         (df_invoices['reportdate_date'] >= start_date_dt) &
         (df_invoices['reportdate_date'] <= end_date_dt)
     ]
+    
+    st.write(f"🔍 DEBUG: Invoices na datum filtering: {len(df_invoices)}")
 
 
 # --- DATA PREP ---
@@ -229,7 +253,22 @@ df_projectlines_uren = df_projectlines[
 
 # Filter projectlines op geselecteerde periode (als createdon_date beschikbaar is)
 if 'createdon_date' in df_projectlines_uren.columns:
+    # Debug: Toon voorbeelden van createdon_date voordat conversie
+    st.write(f"🔍 DEBUG: Voorbeelden createdon_date (voor conversie):")
+    sample_dates = df_projectlines_uren['createdon_date'].head(5).tolist()
+    st.write(sample_dates)
+    
     df_projectlines_uren['createdon_date'] = pd.to_datetime(df_projectlines_uren['createdon_date'], errors='coerce')
+    
+    # Debug: Toon voorbeelden na conversie
+    st.write(f"🔍 DEBUG: Voorbeelden createdon_date (na conversie):")
+    sample_dates_after = df_projectlines_uren['createdon_date'].head(5).tolist()
+    st.write(sample_dates_after)
+    
+    # Debug: Toon hoeveel null values
+    null_count = df_projectlines_uren['createdon_date'].isna().sum()
+    st.write(f"🔍 DEBUG: Null values na conversie: {null_count}")
+    
     # Alleen records met createdon_date filteren op periode
     df_projectlines_with_date = df_projectlines_uren[
         (df_projectlines_uren['createdon_date'].notna()) &
@@ -240,9 +279,14 @@ if 'createdon_date' in df_projectlines_uren.columns:
     df_projectlines_without_date = df_projectlines_uren[df_projectlines_uren['createdon_date'].isna()]
     # Combineer beide
     df_projectlines_filtered = pd.concat([df_projectlines_with_date, df_projectlines_without_date], ignore_index=True)
+    
+    st.write(f"🔍 DEBUG: Projectlines met datum in periode: {len(df_projectlines_with_date)}")
+    st.write(f"🔍 DEBUG: Projectlines zonder datum: {len(df_projectlines_without_date)}")
+    st.write(f"🔍 DEBUG: Totaal projectlines na filtering: {len(df_projectlines_filtered)}")
 else:
     # Geen createdon_date kolom, gebruik alle projectlines
     df_projectlines_filtered = df_projectlines_uren
+    st.write(f"🔍 DEBUG: Geen createdon_date kolom, gebruik alle {len(df_projectlines_filtered)} projectlines")
 
 # Bereken totaal uren per bedrijf
 df_projectlines_filtered["amountwritten"] = pd.to_numeric(df_projectlines_filtered["amountwritten"], errors="coerce")
