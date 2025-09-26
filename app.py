@@ -177,52 +177,58 @@ elif filter_optie == "Alle bedrijven":
 with st.container():
     st.markdown('<div class="filter-box"><h4>📅 Periode Filter</h4>', unsafe_allow_html=True)
     
-    max_date = date.today()
+    max_date = datetime.today()
     min_date_default = max_date - timedelta(days=30)
 
-    if "app_dashboard_date_range" not in st.session_state:
-        st.session_state["app_dashboard_date_range"] = (min_date_default, max_date)
+    if "dashboard_date_range" not in st.session_state:
+        st.session_state["dashboard_date_range"] = (min_date_default, max_date)
 
-    default_start, default_end = st.session_state["app_dashboard_date_range"]
-    if isinstance(default_start, datetime):
-        default_start = default_start.date()
-    if isinstance(default_end, datetime):
-        default_end = default_end.date()
+    default_start, default_end = st.session_state["dashboard_date_range"]
+    if isinstance(default_start, date) and not isinstance(default_start, datetime):
+        default_start = datetime.combine(default_start, datetime.min.time())
+    if isinstance(default_end, date) and not isinstance(default_end, datetime):
+        default_end = datetime.combine(default_end, datetime.min.time())
 
-    default_start = max(default_start, date(2020, 1, 1))
+    min_allowed = datetime(2020, 1, 1)
+    default_start = max(default_start, min_allowed)
     default_end = min(default_end, max_date)
+    st.session_state["dashboard_date_range"] = (default_start, default_end)
 
-    # Store the sanitized defaults back before rendering the widget
-    st.session_state["app_dashboard_date_range"] = (default_start, default_end)
-
-    st.date_input(
+    date_range = st.date_input(
         "📅 Analyseperiode",
-        value=st.session_state["app_dashboard_date_range"],
-        min_value=date(2020, 1, 1),
+        value=st.session_state["dashboard_date_range"],
+        min_value=min_allowed,
         max_value=max_date,
-        key="app_dashboard_date_range",
+        key="dashboard_date_range",
         help="Selecteer de periode die u wilt analyseren."
     )
 
-    date_range = st.session_state["app_dashboard_date_range"]
     if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
-        start_date_raw, end_date_raw = date_range
+        start_raw, end_raw = date_range
     else:
-        start_date_raw, end_date_raw = default_start, default_end
+        start_raw, end_raw = st.session_state["dashboard_date_range"]
 
-    start_date = start_date_raw.date() if isinstance(start_date_raw, datetime) else start_date_raw
-    end_date = end_date_raw.date() if isinstance(end_date_raw, datetime) else end_date_raw
+    def _ensure_datetime(value: date | datetime) -> datetime:
+        if isinstance(value, datetime):
+            return value
+        return datetime.combine(value, datetime.min.time())
 
-    st.session_state["dashboard_start_date"] = start_date
-    st.session_state["dashboard_end_date"] = end_date
+    start_datetime = _ensure_datetime(start_raw)
+    end_datetime = _ensure_datetime(end_raw)
+
+    st.session_state["dashboard_start_date"] = start_datetime
+    st.session_state["dashboard_end_date"] = end_datetime
+
+    start_date = start_datetime.date()
+    end_date = end_datetime.date()
 
     # Convert to datetime objects for pandas filtering
-    start_date_dt = pd.to_datetime(start_date)
-    end_date_dt = pd.to_datetime(end_date)
+    start_date_dt = pd.to_datetime(start_datetime)
+    end_date_dt = pd.to_datetime(end_datetime)
 
     # Create string versions for SQL queries
-    start_date_str = start_date.strftime('%Y-%m-%d')
-    end_date_str = end_date.strftime('%Y-%m-%d')
+    start_date_str = start_date_dt.strftime('%Y-%m-%d')
+    end_date_str = end_date_dt.strftime('%Y-%m-%d')
 
 st.markdown('</div>', unsafe_allow_html=True)
 

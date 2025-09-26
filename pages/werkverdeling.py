@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 import plotly.express as px
 from utils.auth import require_login, require_email_whitelist
 from utils.allowed_emails import ALLOWED_EMAILS
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import ast
 
 # --- 1. PAGE CONFIG & AUTHENTICATION ---
@@ -147,18 +147,21 @@ with st.container(border=True):
     with filter_col1:
         max_date = datetime.today()
         min_date_default = max_date - timedelta(days=30)
-        date_range = st.date_input(
-            "📅 Analyseperiode",
-            (min_date_default, max_date),
-            min_value=datetime(2020, 1, 1),
-            max_value=max_date,
-            key="werkverdeling_date_range",
-            help="Selecteer de periode die u wilt analyseren."
+
+        start_default = st.session_state.get("dashboard_start_date", min_date_default)
+        end_default = st.session_state.get("dashboard_end_date", max_date)
+
+        if isinstance(start_default, date) and not isinstance(start_default, datetime):
+            start_default = datetime.combine(start_default, datetime.min.time())
+        if isinstance(end_default, date) and not isinstance(end_default, datetime):
+            end_default = datetime.combine(end_default, datetime.min.time())
+
+        start_date, end_date = start_default, end_default
+
+        st.markdown(
+            f"**📅 Analyseperiode**: {start_date.strftime('%d-%m-%Y')} t/m {end_date.strftime('%d-%m-%Y')}"
         )
-        if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
-            start_date, end_date = date_range
-        else:
-            start_date, end_date = min_date_default, max_date
+        st.caption("Periode aanpassen via het hoofd-dashboard.")
 
     with filter_col2:
         project_options = pd.read_sql("SELECT id, name FROM projects WHERE archived = FALSE", engine).sort_values('name').to_dict('records')
