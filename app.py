@@ -162,23 +162,14 @@ with st.container():
     
     max_date = datetime.today()
     min_date_default = max_date - timedelta(days=30)
-    
-    # Initialize session state for date range
-    if "dashboard_date_range" not in st.session_state:
-        st.session_state["dashboard_date_range"] = (min_date_default, max_date)
-    
     date_range = st.date_input(
-        "📅 Analyseperiode",
-        value=st.session_state["dashboard_date_range"],
+        "📅 Dashboard Periode",
+        (min_date_default, max_date),
         min_value=datetime(2020, 1, 1),
         max_value=max_date,
         help="Selecteer de periode die u wilt analyseren.",
-        key="dashboard_date_input"
+        key="dashboard_period_selector"
     )
-    
-    # Update session state when date range changes
-    if date_range != st.session_state["dashboard_date_range"]:
-        st.session_state["dashboard_date_range"] = date_range
     
     # Debug: Toon wat er gebeurt
     st.write(f"🔍 DEBUG: date_range = {date_range}")
