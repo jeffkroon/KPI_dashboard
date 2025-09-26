@@ -75,6 +75,11 @@ if st.button("🗑️ Clear Cache", type="secondary", use_container_width=True):
     st.success("Cache cleared!")
     st.rerun()
 
+# Also add a cache clearing option in sidebar for debugging
+if st.sidebar.button("🗑️ Clear Cache (Debug)"):
+    st.cache_data.clear()
+    st.rerun()
+
 st.markdown("---")
 
 # --- FILTERING KNOPPEN VOOR BEDRIJVEN ---
@@ -168,25 +173,38 @@ with st.container():
     
     max_date = datetime.today()
     min_date_default = max_date - timedelta(days=30)
+    
+    # Use a unique key to prevent conflicts with werkverdeling.py
     date_range = st.date_input(
         "📅 Dashboard Periode",
         (min_date_default, max_date),
         min_value=datetime(2020, 1, 1),
         max_value=max_date,
-        key="app_date_range",
+        key="app_dashboard_date_range",  # Unique key different from werkverdeling
         help="Selecteer de periode die u wilt analyseren."
     )
     
+    # Handle date range properly
     if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
         start_date, end_date = date_range
+    elif isinstance(date_range, datetime.date):
+        # Single date selected, use it as both start and end
+        start_date = end_date = date_range
     else:
-        start_date, end_date = min_date_default, max_date
+        # Fallback to default
+        start_date, end_date = min_date_default.date(), max_date.date()
+    
+    # Ensure we have date objects, not datetime objects
+    if hasattr(start_date, 'date'):
+        start_date = start_date.date()
+    if hasattr(end_date, 'date'):
+        end_date = end_date.date()
     
     # Convert to datetime objects for pandas filtering
     start_date_dt = pd.to_datetime(start_date)
     end_date_dt = pd.to_datetime(end_date)
     
-    # Also create string versions for SQL queries (like werkverdeling.py)
+    # Create string versions for SQL queries
     start_date_str = start_date.strftime('%Y-%m-%d')
     end_date_str = end_date.strftime('%Y-%m-%d')
 
@@ -211,7 +229,7 @@ engine = get_engine()
 
 @st.cache_data(ttl=300)
 def load_filtered_invoices(start_date_str, end_date_str, bedrijf_ids):
-    # Convert bedrijf_ids to tuple for hashing
+    # Convert bedrijf_ids to tuple for hashable cache key
     bedrijf_ids_tuple = tuple(sorted(bedrijf_ids)) if bedrijf_ids else ()
     
     invoices_query = f"""
