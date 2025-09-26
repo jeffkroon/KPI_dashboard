@@ -183,38 +183,35 @@ with st.container():
     if "app_dashboard_date_range" not in st.session_state:
         st.session_state["app_dashboard_date_range"] = (min_date_default, max_date)
 
-    start_default, end_default = st.session_state["app_dashboard_date_range"]
-    if isinstance(start_default, datetime):
-        start_default = start_default.date()
-    if isinstance(end_default, datetime):
-        end_default = end_default.date()
+    default_start, default_end = st.session_state["app_dashboard_date_range"]
+    if isinstance(default_start, datetime):
+        default_start = default_start.date()
+    if isinstance(default_end, datetime):
+        default_end = default_end.date()
 
-    # Clamp defaults to allowed range
-    start_default = max(start_default, date(2020, 1, 1))
-    end_default = min(end_default, max_date)
+    default_start = max(default_start, date(2020, 1, 1))
+    default_end = min(default_end, max_date)
 
-    st.session_state["app_dashboard_date_range"] = (start_default, end_default)
+    # Store the sanitized defaults back before rendering the widget
+    st.session_state["app_dashboard_date_range"] = (default_start, default_end)
 
     st.date_input(
         "📅 Analyseperiode",
+        value=st.session_state["app_dashboard_date_range"],
         min_value=date(2020, 1, 1),
         max_value=max_date,
         key="app_dashboard_date_range",
         help="Selecteer de periode die u wilt analyseren."
     )
 
-    date_range = st.session_state.get("app_dashboard_date_range", (start_default, end_default))
+    date_range = st.session_state["app_dashboard_date_range"]
     if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
-        start_date, end_date = date_range
+        start_date_raw, end_date_raw = date_range
     else:
-        start_date, end_date = start_default, end_default
+        start_date_raw, end_date_raw = default_start, default_end
 
-    if isinstance(start_date, datetime):
-        start_date = start_date.date()
-    if isinstance(end_date, datetime):
-        end_date = end_date.date()
-
-    st.session_state["app_dashboard_date_range"] = (start_date, end_date)
+    start_date = start_date_raw.date() if isinstance(start_date_raw, datetime) else start_date_raw
+    end_date = end_date_raw.date() if isinstance(end_date_raw, datetime) else end_date_raw
 
     st.session_state["dashboard_start_date"] = start_date
     st.session_state["dashboard_end_date"] = end_date
