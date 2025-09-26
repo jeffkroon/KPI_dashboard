@@ -167,46 +167,17 @@ with st.container():
         (min_date_default, max_date),
         min_value=date(2020, 1, 1),
         max_value=max_date,
-        help="Selecteer de periode die u wilt analyseren.",
-        key="dashboard_period_selector"
+        help="Selecteer de periode die u wilt analyseren."
     )
-    
-    # Debug: Toon wat er gebeurt
-    st.write(f"🔍 DEBUG: min_date_default = {min_date_default}")
-    st.write(f"🔍 DEBUG: max_date = {max_date}")
-    st.write(f"🔍 DEBUG: date_range = {date_range}")
-    st.write(f"🔍 DEBUG: type(date_range) = {type(date_range)}")
-    st.write(f"🔍 DEBUG: datetime.today() = {datetime.today()}")
-    st.write(f"🔍 DEBUG: len(date_range) = {len(date_range) if hasattr(date_range, '__len__') else 'N/A'}")
-    
-    # Extra debug: Check of date_range een tuple is
-    if hasattr(date_range, '__iter__'):
-        st.write(f"🔍 DEBUG: date_range is iterable")
-        try:
-            for i, item in enumerate(date_range):
-                st.write(f"🔍 DEBUG: date_range[{i}] = {item} (type: {type(item)})")
-        except Exception as e:
-            st.write(f"🔍 DEBUG: Error iterating date_range: {e}")
-    else:
-        st.write(f"🔍 DEBUG: date_range is NOT iterable")
     
     if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
         start_date, end_date = date_range
-        st.write(f"🔍 DEBUG: Gebruikt geselecteerde datums: {start_date} tot {end_date}")
     else:
         start_date, end_date = min_date_default, max_date
-        st.write(f"🔍 DEBUG: Gebruikt default datums: {start_date} tot {end_date}")
-        st.write(f"🔍 DEBUG: isinstance check failed - date_range is {type(date_range)}")
     
     # Convert to datetime objects for pandas filtering
     start_date_dt = pd.to_datetime(start_date)
     end_date_dt = pd.to_datetime(end_date)
-    
-    # Debug: Toon de datetime objecten
-    st.write(f"🔍 DEBUG: start_date_dt = {start_date_dt}")
-    st.write(f"🔍 DEBUG: end_date_dt = {end_date_dt}")
-    st.write(f"🔍 DEBUG: type(start_date_dt) = {type(start_date_dt)}")
-    st.write(f"🔍 DEBUG: type(end_date_dt) = {type(end_date_dt)}")
 
 st.markdown('</div>', unsafe_allow_html=True)
 
