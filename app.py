@@ -202,16 +202,21 @@ if not isinstance(df_projectlines, pd.DataFrame):
 from utils.data_loaders import get_engine
 engine = get_engine()
 
-invoices_query = f"""
-SELECT id, company_id, fase, totalpayed, status_searchname, number, date_date, reportdate_date, subject
-FROM invoices 
-WHERE reportdate_date BETWEEN '{start_date_str}' AND '{end_date_str}'
-"""
-df_invoices = pd.read_sql(invoices_query, engine)
+@st.cache_data(ttl=300)
+def load_filtered_invoices(start_date_str, end_date_str, bedrijf_ids):
+    invoices_query = f"""
+    SELECT id, company_id, fase, totalpayed, status_searchname, number, date_date, reportdate_date, subject
+    FROM invoices 
+    WHERE reportdate_date BETWEEN '{start_date_str}' AND '{end_date_str}'
+    """
+    df_invoices = pd.read_sql(invoices_query, engine)
+    df_invoices = df_invoices[df_invoices["company_id"].isin(bedrijf_ids)]
+    return df_invoices
 
-# --- Filter projectlines en invoices op bedrijf_ids ---
+df_invoices = load_filtered_invoices(start_date_str, end_date_str, bedrijf_ids)
+
+# --- Filter projectlines op bedrijf_ids ---
 df_projectlines = df_projectlines[df_projectlines["bedrijf_id"].isin(bedrijf_ids)]
-df_invoices = df_invoices[df_invoices["company_id"].isin(bedrijf_ids)]
 
 # Date filtering is now done in SQL query above
 
