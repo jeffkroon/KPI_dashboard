@@ -192,11 +192,10 @@ with st.container():
     min_allowed = datetime(2020, 1, 1)
     default_start = max(default_start, min_allowed)
     default_end = min(default_end, max_date)
-    st.session_state["dashboard_date_range"] = (default_start, default_end)
 
     date_range = st.date_input(
         "📅 Analyseperiode",
-        value=st.session_state["dashboard_date_range"],
+        value=(default_start, default_end),
         min_value=min_allowed,
         max_value=max_date,
         help="Selecteer de periode die u wilt analyseren."
@@ -204,7 +203,10 @@ with st.container():
 
     if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
         start_raw, end_raw = date_range
+        # Update session state with the selected range
+        st.session_state["dashboard_date_range"] = (start_raw, end_raw)
     else:
+        # Fallback to session state if single date selected
         start_raw, end_raw = st.session_state["dashboard_date_range"]
 
     def _ensure_datetime(value: date | datetime) -> datetime:
